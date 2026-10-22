@@ -51,6 +51,8 @@ data class Settings(
     val textSize: Int = 1,
     val bold: Boolean = false,
     val checkOnLeft: Boolean = true,
+    val setupDismissed: Boolean = false,
+    val tileAdded: Boolean = false,
 )
 
 object Day {

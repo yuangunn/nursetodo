@@ -155,6 +155,8 @@ object TaskStore {
         put("textSize", textSize)
         put("bold", bold)
         put("checkOnLeft", checkOnLeft)
+        put("setupDismissed", setupDismissed)
+        put("tileAdded", tileAdded)
     }
 
     private fun JSONObject.toSettings() = Settings().let { d ->
@@ -169,6 +171,8 @@ object TaskStore {
             textSize = optInt("textSize", d.textSize),
             bold = optBoolean("bold", d.bold),
             checkOnLeft = optBoolean("checkOnLeft", d.checkOnLeft),
+            setupDismissed = optBoolean("setupDismissed", d.setupDismissed),
+            tileAdded = optBoolean("tileAdded", d.tileAdded),
         )
     }
 }

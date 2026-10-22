@@ -1,8 +1,6 @@
 package com.ttaak.app.ui
 
 import android.app.DatePickerDialog
-import android.content.Intent
-import android.provider.Settings as AndroidSettings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,19 +97,7 @@ fun SettingsScreen() {
                 modifier = Modifier.padding(start = 12.dp),
             ) { Text("D-day 지우기") }
         }
-        Hint(
-            "카드가 안 보이면: 휴대폰 설정 → 알림 → 잠금화면 알림에서 '내용 표시'(삼성: 알림 스타일 '상세히')를 켜 주세요. " +
-                "상단바에서 '딱 추가' 타일을 추가하면 잠금 상태에서도 바로 적을 수 있어요.",
-        )
-        TextButton(
-            onClick = {
-                context.startActivity(
-                    Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName),
-                )
-            },
-            modifier = Modifier.padding(start = 12.dp),
-        ) { Text("알림 설정 열기") }
+        SetupGuide(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
         Section("목록")
         ChoiceRow("새 할 일 위치", listOf("맨 아래", "맨 위"), if (s.newOnTop) 1 else 0) { i ->
