@@ -1,0 +1,215 @@
+package com.ttaak.app.ui
+
+import android.app.DatePickerDialog
+import android.content.Intent
+import android.provider.Settings as AndroidSettings
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ttaak.app.data.Day
+import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.TaskStore
+import java.time.LocalDate
+
+@Composable
+fun SettingsScreen() {
+    val s by TaskStore.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 32.dp),
+    ) {
+        Text(
+            "설정",
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp),
+        )
+
+        Section("잠금화면 카드")
+        SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
+        SwitchRow("완료한 일은 카드에서 숨기기", s.lockHideDone) { v -> TaskStore.updateSettings { it.copy(lockHideDone = v) } }
+        OutlinedTextField(
+            value = s.lockText,
+            onValueChange = { v -> TaskStore.updateSettings { it.copy(lockText = v.take(40)) } },
+            label = { Text("카드 문구 (예: 오늘도 딱 해내자)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
+        )
+        Row(
+            Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = s.ddayLabel,
+                onValueChange = { v -> TaskStore.updateSettings { it.copy(ddayLabel = v.take(20)) } },
+                label = { Text("D-day 이름") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = {
+                val d = LocalDate.ofEpochDay(s.ddayDate ?: Day.today())
+                DatePickerDialog(context, { _, y, m, dd ->
+                    TaskStore.updateSettings { it.copy(ddayDate = LocalDate.of(y, m + 1, dd).toEpochDay()) }
+                }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+            }) {
+                Text(s.ddayDate?.let { "${Fmt.date(it)} · ${Fmt.dday(it)}" } ?: "날짜 선택")
+            }
+        }
+        if (s.ddayDate != null) {
+            TextButton(
+                onClick = { TaskStore.updateSettings { it.copy(ddayDate = null, ddayLabel = "") } },
+                modifier = Modifier.padding(start = 12.dp),
+            ) { Text("D-day 지우기") }
+        }
+        Hint(
+            "카드가 안 보이면: 휴대폰 설정 → 알림 → 잠금화면 알림에서 '내용 표시'(삼성: 알림 스타일 '상세히')를 켜 주세요. " +
+                "상단바에서 '딱 추가' 타일을 추가하면 잠금 상태에서도 바로 적을 수 있어요.",
+        )
+        TextButton(
+            onClick = {
+                context.startActivity(
+                    Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            },
+            modifier = Modifier.padding(start = 12.dp),
+        ) { Text("알림 설정 열기") }
+
+        Section("목록")
+        ChoiceRow("새 할 일 위치", listOf("맨 아래", "맨 위"), if (s.newOnTop) 1 else 0) { i ->
+            TaskStore.updateSettings { it.copy(newOnTop = i == 1) }
+        }
+
+        Section("디자인")
+        Text("테마 색", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Accents.forEachIndexed { i, color ->
+                Box(
+                    Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                        .then(
+                            if (s.accent == i) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            else Modifier,
+                        )
+                        .clickable { TaskStore.updateSettings { it.copy(accent = i) } },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (s.accent == i) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+        ChoiceRow("글자 크기", TextSizes.map { it.first }, s.textSize) { i -> TaskStore.updateSettings { it.copy(textSize = i) } }
+        ChoiceRow("글자 굵기", listOf("보통", "굵게"), if (s.bold) 1 else 0) { i -> TaskStore.updateSettings { it.copy(bold = i == 1) } }
+        ChoiceRow("체크 위치", listOf("왼쪽", "오른쪽"), if (s.checkOnLeft) 0 else 1) { i ->
+            TaskStore.updateSettings { it.copy(checkOnLeft = i == 0) }
+        }
+
+        Section("데이터")
+        TextButton(
+            onClick = {
+                val n = TaskStore.clearOldDone()
+                Toast.makeText(context, if (n > 0) "${n}개 정리했어요" else "정리할 항목이 없어요", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.padding(start = 12.dp),
+        ) { Text("지난 완료 항목 정리") }
+        Hint("모든 데이터는 이 기기 안에만 저장됩니다. 인터넷 권한이 없어 외부로 전송되지 않아요.")
+    }
+}
+
+@Composable
+private fun Section(title: String) {
+    HorizontalDivider(Modifier.padding(top = 20.dp))
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onChange(!checked) }
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEachIndexed { i, o ->
+                FilterChip(selected = i == selected, onClick = { onSelect(i) }, label = { Text(o) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}
