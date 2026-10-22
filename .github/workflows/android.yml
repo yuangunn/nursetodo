@@ -18,6 +18,9 @@ jobs:
       - name: Test & build
         run: ./gradlew testDebugUnitTest lintDebug assembleRelease
       - uses: actions/upload-artifact@v4
+        # 계정의 아티팩트 저장 용량이 차면 업로드만 실패하므로 빌드 결과에는 영향 주지 않음
+        continue-on-error: true
         with:
+          retention-days: 7
           name: ttaak-apk
           path: app/build/outputs/apk/release/app-release.apk
