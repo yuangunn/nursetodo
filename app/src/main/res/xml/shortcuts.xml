@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="add"
+        android:shortcutShortLabel="@string/add">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.ttaak.app.lock.QuickAddActivity"
+            android:targetPackage="com.ttaak.app" />
+    </shortcut>
+</shortcuts>
