@@ -1,8 +1,14 @@
 package com.ttaak.app.ui
 
+import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,8 +40,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,8 +57,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.data.CardTextSizes
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.Settings
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.lock.AlarmRingService
+import com.ttaak.app.lock.AlarmSound
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.time.LocalDate
 
 @Composable
@@ -123,6 +139,9 @@ fun SettingsScreen() {
         }
         SetupGuide(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
+        Section("알람")
+        AlarmSettings(s)
+
         Section("목록")
         ChoiceRow("새 할 일 위치", listOf("맨 아래", "맨 위"), if (s.newOnTop) 1 else 0) { i ->
             TaskStore.updateSettings { it.copy(newOnTop = i == 1) }
@@ -164,6 +183,99 @@ fun SettingsScreen() {
         ) { Text("지난 완료 항목 정리") }
         Hint("모든 데이터는 이 기기 안에만 저장됩니다. 인터넷 권한이 없어 외부로 전송되지 않아요.")
     }
+}
+
+/** 딱 화면의 '알람'이 울리는 방식: 알람음, 크기, 소리/진동, 무음 모드에서도 소리. */
+@Composable
+private fun AlarmSettings(s: Settings) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val ringing by AlarmRingService.ringing.collectAsStateWithLifecycle()
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        @Suppress("DEPRECATION")
+        val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            ?: return@rememberLauncherForActivityResult
+        val isDefault = uri == AlarmSound.defaultUri() || uri == android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI
+        TaskStore.updateSettings { it.copy(alarmSound = if (isDefault) null else uri.toString()) }
+    }
+    val soundName = remember(s.alarmSound) {
+        s.alarmSound?.let { runCatching { RingtoneManager.getRingtone(context, Uri.parse(it))?.getTitle(context) }.getOrNull() }
+            ?: "기본 알람음"
+    }
+    var preview by remember { mutableStateOf<Job?>(null) }
+    // 미리 듣기 중에 진짜 알람이 울리기 시작했으면 그 소리는 끄지 않습니다.
+    val stopPreview = { if (AlarmRingService.ringing.value == null) AlarmSound.stop(context) }
+    DisposableEffect(Unit) {
+        onDispose { if (preview?.isActive == true) stopPreview() }
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable {
+                pick.launch(
+                    Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "알람음")
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI)
+                        .putExtra(
+                            RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                            s.alarmSound?.let(Uri::parse) ?: android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI,
+                        ),
+                )
+            }
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("알람음", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(soundName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+    }
+
+    var volume by remember(s.alarmVolume) { mutableFloatStateOf(s.alarmVolume.toFloat()) }
+    Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("크기", style = MaterialTheme.typography.bodyLarge)
+        Slider(
+            value = volume,
+            onValueChange = { volume = it },
+            onValueChangeFinished = { TaskStore.updateSettings { it.copy(alarmVolume = volume.roundToInt()) } },
+            valueRange = 1f..10f,
+            steps = 8,
+            enabled = s.alarmMode != 2,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        )
+        Text("${volume.roundToInt()}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(24.dp))
+    }
+    ChoiceRow("방식", listOf("소리+진동", "소리만", "진동만"), s.alarmMode) { i ->
+        TaskStore.updateSettings { it.copy(alarmMode = i) }
+    }
+    SwitchRow("무음·진동 모드여도 소리로 울리기", s.alarmAlwaysSound) { v ->
+        TaskStore.updateSettings { it.copy(alarmAlwaysSound = v) }
+    }
+    TextButton(
+        onClick = {
+            preview?.cancel()
+            preview = scope.launch {
+                AlarmSound.start(context, TaskStore.settings.value)
+                try {
+                    delay(3_000)
+                } finally {
+                    stopPreview()
+                }
+            }
+        },
+        // 진짜 알람이 울리는 중엔 미리 듣기가 그 소리를 끄지 않게
+        enabled = ringing == null,
+        modifier = Modifier.padding(start = 12.dp),
+    ) { Text("들어 보기 (3초)") }
+    Hint(
+        "딱 화면의 '알람' 버튼으로 몇 분 뒤에 울릴지 맞춰요. 화면이 꺼져 있어도 정시에 울리고, 끄기를 누를 때까지" +
+            "(최대 10분) 울려요. 울리는 동안만 폰의 알람 음량을 위 크기로 맞췄다가 되돌려요.",
+    )
 }
 
 /**

@@ -20,6 +20,13 @@ class StoreJsonTest {
     }
 
     @Test
+    fun alarmRoundTrips() = with(TaskStore) {
+        val a = Alarm(1_761_000_000_000, 1_761_001_800_000, "항암 끝")
+        assertEquals(a, a.toJson().toAlarm())
+        assertEquals(30L, a.minutes)
+    }
+
+    @Test
     fun doneAtRoundTrips() = with(TaskStore) {
         val t = Task(5, "채혈", createdDay = 20000, doneOn = 20010, doneAt = 1_761_000_000_000)
         assertEquals(t, t.toJson().toTask())

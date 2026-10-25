@@ -60,6 +60,11 @@ data class Task(
     }
 }
 
+/** [at](ms)에 울릴 'N분 뒤' 알람. [id] 는 맞춘 순간의 시각(ms)이라 몇 분짜리였는지도 알 수 있습니다. */
+data class Alarm(val id: Long, val at: Long, val label: String = "") {
+    val minutes: Long get() = (at - id + 30_000) / 60_000
+}
+
 /** 화면/잠금화면 설정. */
 data class Settings(
     val newOnTop: Boolean = false,
@@ -81,6 +86,14 @@ data class Settings(
     val lockLive: Boolean = Build.VERSION.SDK_INT >= 36,
     /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService) — 시험 기능. */
     val lockPage: Boolean = false,
+    /** 알람음(content:// URI). null 이면 폰의 기본 알람음. */
+    val alarmSound: String? = null,
+    /** 알람 크기 1~10. 울리는 동안만 폰의 알람 음량을 이만큼으로 맞췄다가 끄면 되돌립니다. */
+    val alarmVolume: Int = 7,
+    /** 울리는 방식: 0 소리+진동, 1 소리만, 2 진동만. */
+    val alarmMode: Int = 0,
+    /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
+    val alarmAlwaysSound: Boolean = true,
 )
 
 /** 잠금화면 카드·위젯 글자 크기(sp). 기본 '크게' 수준이 1.1 의 14sp 보다 큽니다. */

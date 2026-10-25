@@ -84,6 +84,14 @@ class TaskTest {
     }
 
     @Test
+    fun countdownFormat() {
+        assertEquals("30:00", Fmt.countdown(30 * 60_000L))
+        assertEquals("4:05", Fmt.countdown(4 * 60_000L + 4_200)) // 남은 초는 올림
+        assertEquals("1:02:03", Fmt.countdown((3600 + 123) * 1000L))
+        assertEquals("0:00", Fmt.countdown(-5_000))
+    }
+
+    @Test
     fun formatting() {
         assertEquals("D-3", Fmt.dday(today + 3, today))
         assertEquals("D-DAY", Fmt.dday(today, today))

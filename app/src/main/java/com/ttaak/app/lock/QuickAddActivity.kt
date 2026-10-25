@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +36,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,7 +48,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,16 +77,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ttaak.app.R
+import com.ttaak.app.data.Alarm
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Task
@@ -98,7 +106,8 @@ import java.time.format.DateTimeFormatter
 /**
  * 잠금화면 위에 바로 뜨는 딱 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
  * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 딱 화면 먼저 보기'(LockPageService)에서 열립니다.
- * 줄을 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
+ * 동그라미를 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
+ * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
  */
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,15 +128,20 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(adding, onClose = { finish() }, onOpenApp = ::openApp)
+                LockPage(
+                    adding,
+                    onClose = { finish() },
+                    onOpenApp = { openApp(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
+                    onCalc = { openApp(MainActivity.calcIntent(this)) },
+                )
             }
         }
     }
 
-    /** 잠금을 풀고 앱으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
-    private fun openApp() {
+    /** 잠금을 풀고 앱(의 [target] 화면)으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
+    private fun openApp(target: Intent) {
         val go = {
-            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(target)
             finish()
         }
         val km = getSystemService(KeyguardManager::class.java)
@@ -145,12 +159,14 @@ class QuickAddActivity : ComponentActivity() {
     }
 }
 
-private val Glass = Color.Black.copy(alpha = 0.32f)
-private val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+internal val Glass = Color.Black.copy(alpha = 0.32f)
+internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () -> Unit) {
+private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () -> Unit, onCalc: () -> Unit) {
+    val context = LocalContext.current
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
+    val alarms by TaskStore.alarms.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val today = Day.today()
     // 끝낸 일은 사라지고 앱의 '완료된 할 일'에서만 보입니다.
@@ -160,7 +176,11 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(startAdding) }
     var editingId by remember { mutableStateOf<Long?>(null) }
+    var askingAlarm by remember { mutableStateOf(false) }
     BackHandler(enabled = editingId != null) { editingId = null }
+    BackHandler(enabled = askingAlarm) { askingAlarm = false }
+    // 키보드를 쓰는 동안엔 시계와 아래 버튼을 접어 자리를 만듭니다.
+    val typing = adding || editingId != null || askingAlarm
     var drag by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -190,11 +210,14 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, bottom = if (adding) 12.dp else 48.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = if (typing) 12.dp else 128.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 입력·수정 중엔 키보드 자리를 만들려고 시계를 접습니다.
-            if (adding || editingId != null) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
+            if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
+            if (alarms.isNotEmpty()) {
+                Timers(alarms) { Alarms.cancel(context, it) }
+                Spacer(Modifier.height(12.dp))
+            }
 
             Surface(
                 color = Glass,
@@ -229,24 +252,210 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
             }
 
             Spacer(Modifier.height(12.dp))
-            AddField(
-                adding = adding,
-                onAdding = { adding = it },
-                onAdded = { added ->
-                    val index = TaskStore.tasksFor(today, today).indexOfFirst { it.id == added.id }
-                    if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
-                },
-            )
+            if (askingAlarm) {
+                AlarmAsk(
+                    onStart = { minutes, label ->
+                        Alarms.add(context, minutes, label)
+                        askingAlarm = false
+                    },
+                    onCancel = { askingAlarm = false },
+                )
+            } else {
+                AddField(
+                    adding = adding,
+                    onAdding = { adding = it },
+                    onAdded = { added ->
+                        val index = TaskStore.tasksFor(today, today).indexOfFirst { it.id == added.id }
+                        if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                    },
+                )
+            }
         }
-        if (!adding) {
-            Text(
-                "위로 밀어서 닫기",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White.copy(alpha = 0.55f),
-                modifier = Modifier
+        if (!typing) {
+            Column(
+                Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 16.dp),
-            )
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlassButton(R.drawable.ic_calc, "계산기", onCalc)
+                    GlassButton(R.drawable.ic_alarm, "알람") { askingAlarm = true }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "위로 밀어서 닫기",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.55f),
+                )
+            }
+        }
+    }
+}
+
+/** 아래쪽 반투명 버튼 (계산기·알람). */
+@Composable
+private fun GlassButton(icon: Int, label: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, color = Glass, contentColor = Color.White, shape = RoundedCornerShape(50), border = GlassEdge) {
+        Row(Modifier.padding(horizontal = 22.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(icon), contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
+        }
+    }
+}
+
+/** 맞춰 둔 알람마다 남은 시간을 초 단위로. ✕ 로 취소. */
+@Composable
+private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(1_000 - value % 1_000)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        alarms.forEach { alarm ->
+            Surface(
+                color = Glass,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(50),
+                border = GlassEdge,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(start = 20.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painterResource(R.drawable.ic_alarm),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        Fmt.countdown(alarm.at - now),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Medium,
+                        style = TextStyle(fontFeatureSettings = "tnum"), // 숫자 폭을 같게 해서 초가 바뀌어도 안 흔들림
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        alarm.label.ifEmpty { "${alarm.minutes}분 알람" },
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onCancel(alarm.id) }) {
+                        Icon(Icons.Default.Close, contentDescription = "알람 취소", tint = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** '몇 분 뒤?' — 숫자만 받습니다. 이름은 '+ 이름 붙이기'를 눌렀을 때만 적습니다. */
+@Composable
+private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
+    var minutes by remember { mutableStateOf("") }
+    var label by remember { mutableStateOf("") }
+    var withLabel by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val labelFocus = remember { FocusRequester() }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
+    LaunchedEffect(withLabel) { if (withLabel) labelFocus.requestFocus() }
+    val ready = (minutes.toIntOrNull() ?: 0) > 0
+    val start = { if (ready) onStart(minutes.toInt(), label) }
+    val accent = MaterialTheme.colorScheme.primary
+
+    Surface(
+        color = Glass,
+        contentColor = Color.White,
+        shape = RoundedCornerShape(28.dp),
+        border = GlassEdge,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("몇 분 뒤?", fontSize = 17.sp, color = Color.White.copy(alpha = 0.8f))
+            Row(verticalAlignment = Alignment.Bottom) {
+                BasicTextField(
+                    value = minutes,
+                    onValueChange = { minutes = it.filter(Char::isDigit).take(3) },
+                    singleLine = true,
+                    textStyle = TextStyle(color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Medium),
+                    cursorBrush = SolidColor(accent),
+                    // 숫자 자판만 뜨게 (NumberPassword 자판에는 점·쉼표·부호가 없음. 글자는 가리지 않음)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { start() }),
+                    decorationBox = { inner ->
+                        Box {
+                            if (minutes.isEmpty()) Text("0", fontSize = 44.sp, color = Color.White.copy(alpha = 0.3f))
+                            inner()
+                        }
+                    },
+                    // 숫자 길이만큼만 차지해서 '분'이 바로 옆에 붙습니다.
+                    modifier = Modifier
+                        .width(IntrinsicSize.Min)
+                        .widthIn(min = 28.dp)
+                        .focusRequester(focus),
+                )
+                Text("분", fontSize = 22.sp, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(start = 6.dp, bottom = 10.dp))
+            }
+            if (withLabel) {
+                BasicTextField(
+                    value = label,
+                    onValueChange = { label = it.take(30) },
+                    singleLine = true,
+                    textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
+                    cursorBrush = SolidColor(accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { start() }),
+                    decorationBox = { inner ->
+                        Box {
+                            if (label.isEmpty()) Text("이름 (예: 항암 끝)", fontSize = 18.sp, color = Color.White.copy(alpha = 0.4f))
+                            inner()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                        .focusRequester(labelFocus),
+                )
+            } else {
+                Text(
+                    "+ 이름 붙이기",
+                    fontSize = 15.sp,
+                    color = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { withLabel = true }
+                        .padding(vertical = 6.dp, horizontal = 2.dp),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    onClick = onCancel,
+                    color = Color.White.copy(alpha = 0.12f),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                ) { Box(contentAlignment = Alignment.Center) { Text("취소", fontSize = 17.sp) } }
+                Surface(
+                    onClick = start,
+                    enabled = ready,
+                    color = if (ready) accent else accent.copy(alpha = 0.35f),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                ) { Box(contentAlignment = Alignment.Center) { Text("시작", fontSize = 17.sp, fontWeight = FontWeight.Bold) } }
+            }
         }
     }
 }

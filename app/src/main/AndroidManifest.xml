@@ -10,6 +10,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- '몇 분 뒤' 알람: 시계 앱처럼 정시에 울리고(정확한 알람), 잠금 위에 알람 화면, 진동 -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 알람이 울리는 동안 알람음을 직접 재생하는 서비스 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:name=".TtaakApp"
@@ -45,6 +54,26 @@
             android:theme="@style/Theme.Ttaak.QuickAdd"
             android:turnScreenOn="true"
             android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- 알람이 울릴 때 잠금 위에 뜨는 화면 -->
+        <activity
+            android:name=".lock.AlarmActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity="com.ttaak.app.alarm"
+            android:theme="@style/Theme.Ttaak.QuickAdd"
+            android:turnScreenOn="true" />
+
+        <receiver
+            android:name=".lock.Alarms$AlarmReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".lock.AlarmRingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <receiver
             android:name=".lock.LockActionReceiver"

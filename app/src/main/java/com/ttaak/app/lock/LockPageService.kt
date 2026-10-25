@@ -24,7 +24,8 @@ class LockPageService : Service() {
     private val screenOn = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
-            if (!locked || !Settings.canDrawOverlays(context)) return
+            // 알람이 울려 화면이 켜진 경우엔 알람 화면을 가리지 않습니다.
+            if (!locked || !Settings.canDrawOverlays(context) || Alarms.ringing()) return
             startActivity(
                 Intent(context, QuickAddActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
