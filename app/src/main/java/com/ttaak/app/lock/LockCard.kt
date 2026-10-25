@@ -33,6 +33,19 @@ object LockCard {
     const val CHANNEL_ID = "lock_card"
     const val NOTIFICATION_ID = 1
 
+    /**
+     * 딱 화면(A안) 상시 서비스용 조용한 알림. 안드로이드가 상시 서비스 알림을 MIN 으로 못 두게 해서(LOW 로 올림)
+     * 상태바에 아이콘이 남습니다. 사용자가 이 알림 종류를 끄면 아이콘·알림은 사라지고 서비스는 그대로 돕니다(실기기·에뮬 확인).
+     */
+    const val PAGE_CHANNEL_ID = "lock_page"
+
+    /**
+     * 화면을 켜면 딱 화면이 뜨는 상태(A안)인지. 이때는 잠금화면 카드·라이브 알림이 겹치므로 띄우지 않고,
+     * 서비스가 꼭 가져야 하는 알림만 조용히 둡니다.
+     */
+    fun pageMode(context: Context): Boolean =
+        TaskStore.settings.value.lockPage && android.provider.Settings.canDrawOverlays(context)
+
     fun createChannel(context: Context) {
         val channel = NotificationChannel(
             CHANNEL_ID,
@@ -46,7 +59,12 @@ object LockCard {
             enableLights(false)
             setShowBadge(false)
         }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val page = NotificationChannel(PAGE_CHANNEL_ID, "딱 화면 유지", NotificationManager.IMPORTANCE_MIN).apply {
+            description = "화면을 켜면 딱 화면을 띄우려고 늘 켜 두는 알림. 꺼도 딱 화면은 그대로 동작해요."
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
+            setShowBadge(false)
+        }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, page))
     }
 
     fun update(context: Context) {
@@ -65,6 +83,7 @@ object LockCard {
     }
 
     internal fun build(context: Context): Notification {
+        if (pageMode(context)) return buildPage(context)
         val today = Day.today()
         val settings = TaskStore.settings.value
         val all = TaskStore.tasksFor(today, today)
@@ -153,6 +172,19 @@ object LockCard {
             .setSortKey("0")
             .build()
     }
+
+    private fun buildPage(context: Context): Notification =
+        NotificationCompat.Builder(context, PAGE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_check)
+            .setContentTitle("딱 화면 켜짐")
+            .setContentText("화면을 켜면 오늘 할 일이 먼저 보여요")
+            .setContentIntent(pageIntent(context))
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .build()
 
     /**
      * 라이브 알림 (안드로이드 16+ Live Updates). 시스템이 잠금화면 맨 위에 늘 펼쳐 보여 주는 대신 커스텀 화면을

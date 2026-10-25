@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -93,6 +94,7 @@ import com.ttaak.app.R
 import com.ttaak.app.data.Alarm
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.data.cardTextSp
@@ -128,12 +130,7 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(
-                    adding,
-                    onClose = { finish() },
-                    onOpenApp = { openApp(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
-                    onCalc = { openApp(MainActivity.calcIntent(this)) },
-                )
+                LockPage(adding, onClose = { finish() }, onOpen = ::openApp)
             }
         }
     }
@@ -163,8 +160,9 @@ internal val Glass = Color.Black.copy(alpha = 0.32f)
 internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () -> Unit, onCalc: () -> Unit) {
+private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent) -> Unit) {
     val context = LocalContext.current
+    val onOpenApp = { onOpen(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val alarms by TaskStore.alarms.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
@@ -181,6 +179,17 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
     BackHandler(enabled = askingAlarm) { askingAlarm = false }
     // 키보드를 쓰는 동안엔 시계와 아래 버튼을 접어 자리를 만듭니다.
     val typing = adding || editingId != null || askingAlarm
+    // 지워진 앱은 빼고 3×3 까지
+    val shortcuts = remember(settings.shortcuts) {
+        settings.shortcuts.filter { Shortcuts.defaultName(context, it) != null }.take(Shortcut.MAX)
+    }
+    val onShortcut: (Shortcut) -> Unit = { sc ->
+        when (sc.id) {
+            Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
+            Shortcut.ALARM -> askingAlarm = true
+            else -> Shortcuts.launchIntent(sc)?.let(onOpen)
+        }
+    }
     var drag by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -210,77 +219,78 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, bottom = if (typing) 12.dp else 128.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
-            if (alarms.isNotEmpty()) {
-                Timers(alarms) { Alarms.cancel(context, it) }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            Surface(
-                color = Glass,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(28.dp),
-                border = GlassEdge,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false),
+            // 위(시계·타이머·할 일·입력)는 아래 바로가기가 차지하고 남은 자리를 씁니다.
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (tasks.isEmpty()) {
-                    Text(
-                        if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
-                        fontSize = settings.cardTextSp().sp,
-                        color = Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
-                    )
-                } else {
-                    LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
-                        items(tasks, key = { it.id }) {
-                            Box(Modifier.animateItem()) {
-                                LockRow(
-                                    it, today, settings.cardTextSp(), settings.checkOnLeft,
-                                    editing = it.id == editingId,
-                                    onEditing = { on -> editingId = if (on) it.id else null },
-                                    onOpenApp = onOpenApp,
-                                )
+                if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
+                if (alarms.isNotEmpty()) {
+                    Timers(alarms) { Alarms.cancel(context, it) }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                Surface(
+                    color = Glass,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(28.dp),
+                    border = GlassEdge,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                ) {
+                    if (tasks.isEmpty()) {
+                        Text(
+                            if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
+                            fontSize = settings.cardTextSp().sp,
+                            color = Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
+                        )
+                    } else {
+                        LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
+                            items(tasks, key = { it.id }) {
+                                Box(Modifier.animateItem()) {
+                                    LockRow(
+                                        it, today, settings.cardTextSp(), settings.checkOnLeft,
+                                        editing = it.id == editingId,
+                                        onEditing = { on -> editingId = if (on) it.id else null },
+                                        onOpenApp = onOpenApp,
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(12.dp))
-            if (askingAlarm) {
-                AlarmAsk(
-                    onStart = { minutes, label ->
-                        Alarms.add(context, minutes, label)
-                        askingAlarm = false
-                    },
-                    onCancel = { askingAlarm = false },
-                )
-            } else {
-                AddField(
-                    adding = adding,
-                    onAdding = { adding = it },
-                    onAdded = { added ->
-                        val index = TaskStore.tasksFor(today, today).indexOfFirst { it.id == added.id }
-                        if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
-                    },
-                )
+                Spacer(Modifier.height(12.dp))
+                if (askingAlarm) {
+                    AlarmAsk(
+                        onStart = { minutes, label ->
+                            Alarms.add(context, minutes, label)
+                            askingAlarm = false
+                        },
+                        onCancel = { askingAlarm = false },
+                    )
+                } else {
+                    AddField(
+                        adding = adding,
+                        onAdding = { adding = it },
+                        onAdded = { added ->
+                            val index = TaskStore.tasksFor(today, today).indexOfFirst { it.id == added.id }
+                            if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                        },
+                    )
+                }
             }
-        }
-        if (!typing) {
-            Column(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    GlassButton(R.drawable.ic_calc, "계산기", onCalc)
-                    GlassButton(R.drawable.ic_alarm, "알람") { askingAlarm = true }
+            if (!typing) {
+                if (shortcuts.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    ShortcutGrid(shortcuts, onShortcut)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
@@ -293,14 +303,47 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () ->
     }
 }
 
-/** 아래쪽 반투명 버튼 (계산기·알람). */
+/** 아래쪽 바로가기 (3×3 까지): 계산기·알람·고른 앱. 반투명 타일에 아이콘과 이름. */
 @Composable
-private fun GlassButton(icon: Int, label: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, color = Glass, contentColor = Color.White, shape = RoundedCornerShape(50), border = GlassEdge) {
-        Row(Modifier.padding(horizontal = 22.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(icon), contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(label, fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
+private fun ShortcutGrid(items: List<Shortcut>, onTap: (Shortcut) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { sc -> ShortcutTile(sc, Modifier.weight(1f)) { onTap(sc) } }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShortcutTile(sc: Shortcut, modifier: Modifier, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val name = remember(sc) { Shortcuts.name(context, sc) }
+    val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
+    Surface(
+        onClick = onClick,
+        color = Glass,
+        contentColor = Color.White,
+        shape = RoundedCornerShape(20.dp),
+        border = GlassEdge,
+        modifier = modifier,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 6.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            when {
+                icon != null -> Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+                else -> Icon(
+                    painterResource(if (sc.id == Shortcut.ALARM) R.drawable.ic_alarm else R.drawable.ic_calc),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(name, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

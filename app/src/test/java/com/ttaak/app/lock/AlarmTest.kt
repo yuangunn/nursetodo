@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** '몇 분 뒤' 알람: 시계 앱 방식으로 맞춰지고, 울리면 목록에서 빠지며 서비스가 울리다 끄면 멈추는지. */
+/** '몇 분 뒤' 알람: 정확한 알람으로 맞춰지고, 울리면 목록에서 빠지며 서비스가 울리다 끄면 멈추는지. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AlarmTest {
@@ -33,9 +33,11 @@ class AlarmTest {
         Alarms.add(context, 30, "항암 끝")
         val alarm = TaskStore.alarms.value.single { it.label == "항암 끝" }
         assertEquals(30L, alarm.minutes)
-        val next = context.getSystemService(AlarmManager::class.java).nextAlarmClock
-        assertNotNull("시계 앱 방식(setAlarmClock)으로 맞춰져야 함", next)
-        assertEquals(alarm.at, next.triggerTime)
+        val am = context.getSystemService(AlarmManager::class.java)
+        // 상태바에 ⏰ 가 뜨지 않게 시계 앱 방식이 아닌 정확한 알람으로
+        assertEquals(null, am.nextAlarmClock)
+        val scheduled = shadowOf(am).scheduledAlarms.single { it.triggerAtTime == alarm.at }
+        assertEquals(AlarmManager.RTC_WAKEUP, scheduled.type)
 
         Alarms.ring(context, alarm.id)
         assertTrue(TaskStore.alarms.value.none { it.id == alarm.id })

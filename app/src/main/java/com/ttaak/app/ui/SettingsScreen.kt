@@ -9,6 +9,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,19 +17,27 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -41,6 +50,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,16 +61,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ttaak.app.R
 import com.ttaak.app.data.CardTextSizes
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Settings
+import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.lock.AlarmRingService
 import com.ttaak.app.lock.AlarmSound
+import com.ttaak.app.lock.Setup
+import com.ttaak.app.lock.Shortcuts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,24 +103,47 @@ fun SettingsScreen() {
             modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp),
         )
 
-        Section("잠금화면 카드")
+        Section("잠금화면")
         SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
+        SwitchRow("화면 켜면 딱 화면 먼저 보기", s.lockPage) { v ->
+            TaskStore.updateSettings { it.copy(lockPage = v) }
+            // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
+            if (v) Setup.requestOverlay(context)
+        }
         ChoiceRow("카드·위젯 글자", CardTextSizes.map { it.first }, s.cardTextSize) { i ->
             TaskStore.updateSettings { it.copy(cardTextSize = i) }
         }
-        SwitchRow("화면 켜면 딱 화면 먼저 보기 (시험)", s.lockPage) { v ->
-            TaskStore.updateSettings { it.copy(lockPage = v) }
-            // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
-            if (v && !android.provider.Settings.canDrawOverlays(context)) {
-                context.startActivity(
-                    android.content.Intent(
-                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        android.net.Uri.parse("package:${context.packageName}"),
-                    ),
+        if (s.lockPage) {
+            // 안드로이드가 상시 서비스에 알림 하나를 꼭 요구해서 앱이 아이콘을 직접 지울 수는 없습니다.
+            var tick by remember { mutableIntStateOf(0) }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+            val hidden = remember(tick) { Setup.pageIconHidden(context) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { Setup.openPageChannelSettings(context) }
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("상태바의 딱 아이콘 숨기기", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (hidden) "숨겼어요. 딱 화면은 그대로 동작해요."
+                        else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 딱 화면은 그대로 동작해요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    if (hidden) "숨김" else "열기",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 12.dp),
                 )
             }
         }
-        if (Build.VERSION.SDK_INT >= 36) {
+        // 딱 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.
+        if (Build.VERSION.SDK_INT >= 36 && !s.lockPage) {
             SwitchRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
         }
         SettingField(
@@ -138,6 +179,9 @@ fun SettingsScreen() {
             ) { Text("D-day 지우기") }
         }
         SetupGuide(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+        Section("딱 화면 바로가기")
+        ShortcutSettings(s)
 
         Section("알람")
         AlarmSettings(s)
@@ -182,6 +226,136 @@ fun SettingsScreen() {
             modifier = Modifier.padding(start = 12.dp),
         ) { Text("지난 완료 항목 정리") }
         Hint("모든 데이터는 이 기기 안에만 저장됩니다. 인터넷 권한이 없어 외부로 전송되지 않아요.")
+    }
+}
+
+/** 딱 화면 아래 바로가기(3×3 까지): 앱을 골라 넣고, 눌러서 이름을 바꾸고, ↑ 로 앞으로, ✕ 로 뺍니다. */
+@Composable
+private fun ShortcutSettings(s: Settings) {
+    val context = LocalContext.current
+    var renaming by remember { mutableStateOf<Int?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    val save = { list: List<Shortcut> -> TaskStore.updateSettings { it.copy(shortcuts = list) } }
+
+    s.shortcuts.forEachIndexed { i, sc ->
+        val name = remember(sc) { Shortcuts.name(context, sc) }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { renaming = i }
+                .padding(start = 24.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShortcutIcon(sc)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (sc.name.isNotBlank()) {
+                    Text(
+                        Shortcuts.defaultName(context, sc) ?: "지워진 앱",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (i > 0) {
+                IconButton(onClick = { save(s.shortcuts.toMutableList().apply { add(i - 1, removeAt(i)) }) }) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "앞으로")
+                }
+            }
+            IconButton(onClick = { save(s.shortcuts.filterIndexed { j, _ -> j != i }) }) {
+                Icon(Icons.Default.Close, contentDescription = "빼기")
+            }
+        }
+    }
+    TextButton(
+        onClick = { picking = true },
+        enabled = s.shortcuts.size < Shortcut.MAX,
+        modifier = Modifier.padding(start = 12.dp),
+    ) { Text(if (s.shortcuts.size < Shortcut.MAX) "+ 바로가기 추가 (${s.shortcuts.size}/${Shortcut.MAX})" else "9개가 다 찼어요") }
+    Hint("딱 화면 아래에 3줄×3칸까지 놓여요. 눌러서 버튼 이름을 바꿀 수 있어요(비우면 앱 이름).")
+
+    renaming?.let { i ->
+        val sc = s.shortcuts.getOrNull(i) ?: return@let
+        var text by remember(i) { mutableStateOf(sc.name) }
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text("버튼 이름") },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(12) },
+                    singleLine = true,
+                    placeholder = { Text(Shortcuts.defaultName(context, sc).orEmpty()) },
+                    supportingText = { Text("비우면 앱 이름을 써요") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    save(s.shortcuts.toMutableList().also { it[i] = sc.copy(name = text.trim()) })
+                    renaming = null
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text("취소") } },
+        )
+    }
+
+    if (picking) {
+        val apps = remember { Shortcuts.installedApps(context) }
+        var query by remember { mutableStateOf("") }
+        val present = s.shortcuts.map { it.id }.toSet()
+        val choices = (listOf(Shortcut(Shortcut.CALC) to "계산기", Shortcut(Shortcut.ALARM) to "알람") + apps)
+            .filter { (sc, label) -> sc.id !in present && label.contains(query.trim(), ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("바로가기 추가") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        placeholder = { Text("앱 이름으로 찾기") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                        items(choices, key = { it.first.id }) { (sc, label) ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        save(s.shortcuts + sc)
+                                        picking = false
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ShortcutIcon(sc)
+                                Spacer(Modifier.width(14.dp))
+                                Text(label, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { picking = false }) { Text("닫기") } },
+        )
+    }
+}
+
+@Composable
+private fun ShortcutIcon(sc: Shortcut) {
+    val context = LocalContext.current
+    val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
+    if (icon != null) {
+        Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+    } else {
+        Icon(
+            painterResource(if (sc.id == Shortcut.ALARM) R.drawable.ic_alarm else R.drawable.ic_calc),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }
 
