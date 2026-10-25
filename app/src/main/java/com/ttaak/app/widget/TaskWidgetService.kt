@@ -30,16 +30,20 @@ class TaskWidgetService : RemoteViewsService() {
 
         override fun onDataSetChanged() {
             // TaskStore 는 메인 스레드 전용이므로 메인에서 읽어 옵니다.
-            val latch = CountDownLatch(1)
-            Handler(Looper.getMainLooper()).post {
+            val load = {
                 TaskStore.init(context)
                 today = Day.today()
                 items = TaskStore.tasksFor(today, today)
                 val s = TaskStore.settings.value
                 accent = Accents[s.accent.coerceIn(Accents.indices)].toArgb()
-                latch.countDown()
             }
-            latch.await()
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                load()
+            } else {
+                val latch = CountDownLatch(1)
+                Handler(Looper.getMainLooper()).post { load(); latch.countDown() }
+                latch.await()
+            }
         }
 
         override fun onDestroy() {}

@@ -52,6 +52,10 @@ Pro 결제·iCloud 동기화·Apple Watch 는 인트라넷 용도에 맞지 않�
 
 ### 기기 설정 (MDM 배포 시 정책으로 지정 권장)
 
+앱을 처음 열면 오늘 화면 위에 **"잠금화면에서 쓰려면"** 점검 카드가 뜹니다(설정 탭에도 있음).
+각 단계가 제대로 됐는지 자동으로 확인하고, 버튼 한 번으로 알림 허용 · 카드 다시 띄우기 · 상단바 타일 추가(안드로이드 13+) · 홈 위젯 추가를 할 수 있습니다.
+잠금화면 알림 표시 방식만은 폰 설정이라 직접 바꿔야 합니다:
+
 1. 알림 권한 허용 (안드로이드 13+ 첫 실행 시 요청)
 2. 잠금화면 알림 **내용 표시** 켜기
    - 삼성 One UI: 설정 → 잠금화면 → 알림 → 스타일 **상세히**, "조용한 알림 표시"는 상관없음
@@ -64,7 +68,7 @@ Pro 결제·iCloud 동기화·Apple Watch 는 인트라넷 용도에 맞지 않�
 
 ```bash
 ./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
-./gradlew testDebugUnitTest   # 날짜·루틴 로직 단위 테스트
+./gradlew testDebugUnitTest   # 날짜·루틴 로직 + Robolectric 렌더링/실행 테스트
 ```
 
 - minSdk 26 (Android 8.0), targetSdk 35

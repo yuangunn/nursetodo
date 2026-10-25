@@ -31,8 +31,8 @@ import java.time.ZoneId
  * 알림으로 구현합니다. 각 줄의 체크 버튼은 브로드캐스트라서 잠금을 풀지 않아도 동작합니다.
  */
 object LockCard {
-    private const val CHANNEL_ID = "lock_card"
-    private const val NOTIFICATION_ID = 1
+    const val CHANNEL_ID = "lock_card"
+    const val NOTIFICATION_ID = 1
     private const val MAX_ROWS = 6
 
     fun createChannel(context: Context) {
@@ -66,7 +66,7 @@ object LockCard {
         }
     }
 
-    private fun build(context: Context): Notification {
+    internal fun build(context: Context): Notification {
         val today = Day.today()
         val settings = TaskStore.settings.value
         val all = TaskStore.tasksFor(today, today)
@@ -139,7 +139,6 @@ object LockCard {
             .setDeleteIntent(broadcast(context, LockActionReceiver.ACTION_REPOST, 1))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setSilent(true)
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

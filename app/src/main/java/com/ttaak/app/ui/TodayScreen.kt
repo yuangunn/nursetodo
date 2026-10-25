@@ -74,6 +74,15 @@ fun TodayScreen(onEdit: (Task) -> Unit) {
                         }
                     }
                 }
+                if (!settings.setupDismissed) {
+                    item(key = "setup") {
+                        SetupGuide(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            hideDone = true,
+                            onClose = { TaskStore.updateSettings { it.copy(setupDismissed = true) } },
+                        )
+                    }
+                }
             },
         )
         AddBar(today)

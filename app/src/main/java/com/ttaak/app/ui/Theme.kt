@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -44,6 +45,9 @@ fun TtaakTheme(settings: Settings, content: @Composable () -> Unit) {
             surfaceContainerLow = Color(0xFF1C1C1E),
             surfaceContainerHigh = Color(0xFF2C2C2E),
             onSurfaceVariant = Color(0xFF8E8E93),
+            surfaceContainerHighest = Color(0xFF2C2C2E),
+            secondaryContainer = lerp(Color(0xFF1C1C1E), accent, 0.3f),
+            onSecondaryContainer = Color.White,
         )
     } else {
         lightColorScheme(
@@ -56,6 +60,9 @@ fun TtaakTheme(settings: Settings, content: @Composable () -> Unit) {
             surfaceContainerLow = Color(0xFFF7F7FA),
             surfaceContainerHigh = Color(0xFFEDEDF2),
             onSurfaceVariant = Color(0xFF8E8E93),
+            surfaceContainerHighest = Color(0xFFE5E5EA),
+            secondaryContainer = lerp(Color.White, accent, 0.16f),
+            onSecondaryContainer = Color(0xFF1C1C1E),
         )
     }
     val taskText = TextStyle(
