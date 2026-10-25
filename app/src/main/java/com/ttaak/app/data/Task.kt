@@ -84,8 +84,8 @@ data class Settings(
     val cardTextSize: Int = 1,
     /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시해 늘 펼쳐 보이게 합니다. 16+ 에서 기본. */
     val lockLive: Boolean = Build.VERSION.SDK_INT >= 36,
-    /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService) — 시험 기능. */
-    val lockPage: Boolean = false,
+    /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService). 기본 방식. */
+    val lockPage: Boolean = true,
     /** 알람음(content:// URI). null 이면 폰의 기본 알람음. */
     val alarmSound: String? = null,
     /** 알람 크기 1~10. 울리는 동안만 폰의 알람 음량을 이만큼으로 맞췄다가 끄면 되돌립니다. */
@@ -94,7 +94,22 @@ data class Settings(
     val alarmMode: Int = 0,
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
+    /** 딱 화면 아래 바로가기 (최대 [Shortcut.MAX]개, 3×3). */
+    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM)),
 )
+
+/**
+ * 딱 화면 아래 바로가기 하나. [id] 는 [CALC]·[ALARM] 이거나 "app:패키지/액티비티".
+ * [name] 이 비어 있으면 앱 이름(또는 '계산기'·'알람')을 씁니다.
+ */
+data class Shortcut(val id: String, val name: String = "") {
+    companion object {
+        const val CALC = "calc"
+        const val ALARM = "alarm"
+        const val MAX = 9
+        fun app(component: String) = Shortcut("app:$component")
+    }
+}
 
 /** 잠금화면 카드·위젯 글자 크기(sp). 기본 '크게' 수준이 1.1 의 14sp 보다 큽니다. */
 val CardTextSizes = listOf("보통" to 16f, "크게" to 19f, "아주 크게" to 23f)

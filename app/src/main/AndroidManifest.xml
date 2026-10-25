@@ -20,6 +20,14 @@
     <!-- 알람이 울리는 동안 알람음을 직접 재생하는 서비스 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- 딱 화면 바로가기로 고를 수 있게 런처에 보이는 앱 목록을 읽습니다 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".TtaakApp"
         android:allowBackup="false"

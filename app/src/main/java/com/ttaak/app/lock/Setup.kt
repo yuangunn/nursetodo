@@ -97,6 +97,30 @@ object Setup {
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
     )
 
+    /** 딱 화면 상시 알림('딱 화면 유지')을 꺼 두었는지. 끄면 상태바 아이콘이 사라지고 딱 화면은 그대로입니다. */
+    fun pageIconHidden(context: Context): Boolean =
+        context.getSystemService(NotificationManager::class.java)
+            .getNotificationChannel(LockCard.PAGE_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
+
+    fun openPageChannelSettings(context: Context) = open(
+        context,
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, LockCard.PAGE_CHANNEL_ID),
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+    )
+
+    /** '다른 앱 위에 표시' 허용 화면. 화면을 켤 때 잠금 위에 딱 화면을 띄우는 데 필요합니다. 이미 허용됐으면 그냥 넘어감. */
+    fun requestOverlay(context: Context) {
+        if (Settings.canDrawOverlays(context)) return
+        open(
+            context,
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+        )
+    }
+
     /** 삼성 One UI: 설정 → 알림 → 잠금화면 → 알림 스타일 (0 카드, 1 아이콘, 2 동그란 점). */
     private const val SAMSUNG_LOCK_STYLE = "lockscreen_minimizing_notification"
 

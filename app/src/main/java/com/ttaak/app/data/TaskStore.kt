@@ -186,7 +186,7 @@ object TaskStore {
 
     internal fun JSONObject.toAlarm() = Alarm(id = getLong("id"), at = getLong("at"), label = optString("label"))
 
-    private fun Settings.toJson() = JSONObject().apply {
+    internal fun Settings.toJson() = JSONObject().apply {
         put("newOnTop", newOnTop)
         put("lockEnabled", lockEnabled)
         put("lockText", lockText)
@@ -206,9 +206,10 @@ object TaskStore {
         put("alarmVolume", alarmVolume)
         put("alarmMode", alarmMode)
         put("alarmAlwaysSound", alarmAlwaysSound)
+        put("shortcuts", JSONArray().apply { shortcuts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)) } })
     }
 
-    private fun JSONObject.toSettings() = Settings().let { d ->
+    internal fun JSONObject.toSettings() = Settings().let { d ->
         Settings(
             newOnTop = optBoolean("newOnTop", d.newOnTop),
             lockEnabled = optBoolean("lockEnabled", d.lockEnabled),
@@ -229,6 +230,9 @@ object TaskStore {
             alarmVolume = optInt("alarmVolume", d.alarmVolume).coerceIn(1, 10),
             alarmMode = optInt("alarmMode", d.alarmMode).coerceIn(0, 2),
             alarmAlwaysSound = optBoolean("alarmAlwaysSound", d.alarmAlwaysSound),
+            shortcuts = optJSONArray("shortcuts")?.let { a ->
+                (0 until a.length()).map { a.getJSONObject(it) }.map { Shortcut(it.getString("id"), it.optString("name")) }
+            } ?: d.shortcuts,
         )
     }
 }

@@ -13,7 +13,8 @@ import com.ttaak.app.data.Alarm
 import com.ttaak.app.data.TaskStore
 
 /**
- * 'N분 뒤' 알람 (병동 타이머). 시계 앱처럼 [AlarmManager.setAlarmClock] 으로 맞춰서 잠자기 중에도 정시에 울립니다.
+ * 'N분 뒤' 알람 (병동 타이머). 정확한 알람([AlarmManager.setExactAndAllowWhileIdle])으로 맞춰서 잠자기 중에도 울립니다.
+ * 시계 앱 방식(setAlarmClock)은 상태바에 ⏰ 가 늘 떠서 쓰지 않습니다 — 대신 깊은 절전 중 연달아 울릴 땐 몇 분 늦을 수 있습니다.
  * 울리면 [AlarmRingService] 가 설정한 알람음·크기·방식으로 울리고 잠금 위에 알람 화면([AlarmActivity])을 띄웁니다.
  * 부팅·업데이트 뒤에는 [scheduleAll] 이 다시 맞춥니다.
  */
@@ -68,16 +69,8 @@ object Alarms {
 
     private fun schedule(context: Context, alarm: Alarm) {
         val am = context.getSystemService(AlarmManager::class.java)
-        // 상태바 알람 아이콘을 누르면 딱 화면으로
-        val show = PendingIntent.getActivity(
-            context, 4,
-            Intent(context, QuickAddActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(QuickAddActivity.EXTRA_LOOK_FIRST, true),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         try {
-            am.setAlarmClock(AlarmManager.AlarmClockInfo(alarm.at, show), fireIntent(context, alarm.id))
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.at, fireIntent(context, alarm.id))
         } catch (_: SecurityException) {
             // 정확한 알람 권한이 없으면(안드로이드 12) 조금 늦을 수 있는 방식으로라도
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.at, fireIntent(context, alarm.id))
