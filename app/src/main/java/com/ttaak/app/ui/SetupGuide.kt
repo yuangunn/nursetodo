@@ -6,6 +6,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -27,7 +30,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,9 +50,15 @@ import com.ttaak.app.lock.Setup
 
 private enum class State { Done, Todo, Manual }
 
+/** 선택 단계(상단바 타일, 홈 위젯)의 순번. 오늘 탭에서는 세지도 보여 주지도 않습니다. */
+private val OPTIONAL_STEPS = setOf(3, 4)
+
 /**
  * 잠금화면 카드 · 위젯 · 타일을 단계별로 점검하고 버튼 한 번으로 고치는 카드.
  * 설정 화면에서 돌아올 때마다(onResume) 상태를 다시 확인합니다.
+ *
+ * 오늘 탭([hideDone])에서는 처음 설정용으로만: 한 줄로 접혀 있고 꼭 필요한 단계 중 남은 것만 보이며,
+ * 다 끝나면 저절로 사라집니다. 상단바 타일·홈 위젯 같은 선택 단계는 설정 화면에만 둡니다.
  */
 @Composable
 fun SetupGuide(
@@ -88,8 +99,11 @@ fun SetupGuide(
         if (widget) State.Done else State.Todo,
         if (!live) null else if (promoted && !hiddenOnSamsung) State.Done else State.Todo,
     )
-    // 다 끝났으면 빈 카드를 남기지 않습니다.
-    if (hideDone && states.all { it == State.Done }) return
+    // 다 끝났으면 빈 카드를 남기지 않습니다. 앱이 확인할 수 없는 단계(Manual)는 설정 화면에서만 안내합니다.
+    val left = states.filterIndexed { i, st -> st == State.Todo && i !in OPTIONAL_STEPS }.size
+    if (hideDone && left == 0) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    val expanded = !hideDone || open
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -98,15 +112,26 @@ fun SetupGuide(
         modifier = modifier,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.then(if (hideDone) Modifier.clickable { open = !open } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "잠금화면에서 쓰려면",
+                    if (hideDone) "잠금화면 설정 ${left}개 남음" else "잠금화면에서 쓰려면",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
+                if (hideDone) {
+                    Icon(
+                        if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (open) "접기" else "펼치기",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (onClose != null) TextButton(onClick = onClose) { Text("닫기") }
             }
+            if (!expanded) return@Column
 
             Step(
                 hideDone = hideDone,
@@ -163,7 +188,7 @@ fun SetupGuide(
                 action = "설정 열기".takeIf { style != 0 },
             ) { Setup.openLockScreenSettings(context) }
 
-            Step(
+            if (!hideDone) Step(
                 hideDone = hideDone,
                 n = 4,
                 state = states[3],
@@ -174,7 +199,7 @@ fun SetupGuide(
                 action = "추가하기".takeIf { Setup.canRequestTile && !settings.tileAdded },
             ) { (context as? Activity)?.let { Setup.requestTile(it) } }
 
-            Step(
+            if (!hideDone) Step(
                 hideDone = hideDone,
                 n = 5,
                 state = states[4],
@@ -220,7 +245,7 @@ private fun Step(
     action: String?,
     onAction: () -> Unit,
 ) {
-    if (hideDone && state == State.Done) return
+    if (hideDone && state != State.Todo) return
     val (icon: ImageVector, tint: Color) = when (state) {
         State.Done -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
         State.Todo -> Icons.Default.Warning to Color(0xFFFF9F0A)
