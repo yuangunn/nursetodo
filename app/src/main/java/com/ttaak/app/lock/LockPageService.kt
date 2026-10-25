@@ -28,7 +28,7 @@ class LockPageService : Service() {
             startActivity(
                 Intent(context, QuickAddActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(QuickAddActivity.EXTRA_FROM_SCREEN_ON, true),
+                    .putExtra(QuickAddActivity.EXTRA_LOOK_FIRST, true),
             )
         }
     }

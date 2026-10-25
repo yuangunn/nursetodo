@@ -1,5 +1,6 @@
 package com.ttaak.app.data
 
+import android.os.Build
 import java.time.LocalDate
 
 /**
@@ -67,8 +68,8 @@ data class Settings(
     val calcHours: Boolean = false,
     /** 잠금화면 카드·홈 위젯 글자 크기 ([CardTextSizes] 의 순번). 앱 목록 글자([textSize])와 따로 둡니다. */
     val cardTextSize: Int = 1,
-    /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시 — 시험 기능. */
-    val lockLive: Boolean = false,
+    /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시해 늘 펼쳐 보이게 합니다. 16+ 에서 기본. */
+    val lockLive: Boolean = Build.VERSION.SDK_INT >= 36,
     /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService) — 시험 기능. */
     val lockPage: Boolean = false,
 )

@@ -62,7 +62,7 @@ class RenderTest {
         // 라이브 알림(Live Updates)은 커스텀 화면이 있으면 시스템이 올려 주지 않습니다.
         assertEquals(null, n.contentView)
         assertTrue(n.extras.getBoolean("android.requestPromotedOngoing"))
-        assertEquals(1, n.actions.size)
+        assertEquals(3, n.actions.size) // 남은 할 일 위에서 3개까지 완료 버튼 (시스템 한도)
         TaskStore.updateSettings { it.copy(lockLive = false) }
     }
 

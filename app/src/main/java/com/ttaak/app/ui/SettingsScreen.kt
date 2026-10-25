@@ -88,7 +88,7 @@ fun SettingsScreen() {
             }
         }
         if (Build.VERSION.SDK_INT >= 36) {
-            SwitchRow("라이브 알림으로 크게 표시 (시험)", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
+            SwitchRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
         }
         SettingField(
             value = s.lockText,

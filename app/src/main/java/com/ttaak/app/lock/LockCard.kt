@@ -79,7 +79,7 @@ object LockCard {
         val progress = if (all.isEmpty()) "" else "$doneCount/${all.size}"
         val headline = Fmt.headline(settings, today)
         val remaining = all.filterNot { it.isDone(today) }
-        if (settings.lockLive) return buildLive(context, title, progress, headline, all, remaining, accent)
+        if (settings.lockLive) return buildLive(context, progress, headline, all, remaining, accent)
 
         // 펼친 카드 높이는 시스템이 약 256dp 로 자르므로 글자가 클수록 줄 수를 줄입니다.
         val sp = settings.cardTextSp()
@@ -145,7 +145,7 @@ object LockCard {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
-            .setContentIntent(addIntent(context))
+            .setContentIntent(pageIntent(context))
             .setDeleteIntent(broadcast(context, LockActionReceiver.ACTION_REPOST, 1))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -158,32 +158,33 @@ object LockCard {
     }
 
     /**
-     * 라이브 알림 (안드로이드 16+ Live Updates, 삼성은 Now Bar). 시스템이 잠금화면 위쪽에 크게 보여 주는 대신
-     * 커스텀 화면을 못 써서 줄마다 체크는 안 되고, '다음 할 일 완료' 버튼 하나만 둡니다. 시험 기능.
+     * 라이브 알림 (안드로이드 16+ Live Updates). 시스템이 잠금화면 맨 위에 늘 펼쳐 보여 주는 대신 커스텀 화면을
+     * 못 써서(넣으면 시스템이 라이브로 올려 주지 않음) 줄마다 체크는 안 됩니다. 버튼은 시스템이 3개까지만 받아서
+     * 남은 할 일 위에서 3개까지 완료 버튼을 둡니다. 그 아래는 카드를 눌러 딱 화면에서 체크합니다.
+     * 앱 아이콘·이름 줄은 시스템이 강제로 붙입니다.
      */
     private fun buildLive(
         context: Context,
-        title: String,
         progress: String,
         headline: String,
         all: List<Task>,
         remaining: List<Task>,
         accent: Int,
     ): Notification {
-        val first = remaining.firstOrNull()
         val empty = context.getString(if (all.isEmpty()) R.string.lock_empty else R.string.lock_all_done)
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
             .setColor(accent)
-            .setContentTitle(listOf(title, progress).filter { it.isNotEmpty() }.joinToString("  "))
-            .setContentText(first?.title ?: empty)
+            // 제목은 시스템이 꼭 요구해서 날짜 대신 진행률만 둡니다.
+            .setContentTitle(if (remaining.isEmpty()) empty else progress)
+            .setContentText(remaining.firstOrNull()?.title)
             .setSubText(headline.ifEmpty { null })
             .setStyle(
-                NotificationCompat.BigTextStyle()
-                    .bigText(remaining.joinToString("\n") { "○  ${it.title}" }.ifEmpty { empty }),
+                if (remaining.isEmpty()) null
+                else NotificationCompat.BigTextStyle().bigText(remaining.joinToString("\n") { "○  ${it.title}" }),
             )
-            .apply { if (first != null) addAction(0, "✓ ${first.title}", toggleIntent(context, first.id)) }
-            .setContentIntent(addIntent(context))
+            .apply { remaining.take(3).forEach { addAction(0, "✓ ${it.title}", toggleIntent(context, it.id)) } }
+            .setContentIntent(pageIntent(context))
             .setDeleteIntent(broadcast(context, LockActionReceiver.ACTION_REPOST, 1))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -230,6 +231,15 @@ object LockCard {
     fun addIntent(context: Context): PendingIntent = PendingIntent.getActivity(
         context, 1,
         Intent(context, QuickAddActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** 카드를 누르면 딱 화면을 목록부터 (키보드 없이). 추가는 화면 안의 '할 일 추가'로. */
+    private fun pageIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+        context, 3,
+        Intent(context, QuickAddActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(QuickAddActivity.EXTRA_LOOK_FIRST, true),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 

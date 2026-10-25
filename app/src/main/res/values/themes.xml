@@ -6,11 +6,11 @@
         <item name="android:windowBackground">@android:color/white</item>
     </style>
 
-    <style name="Theme.Ttaak.QuickAdd" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
+    <!-- 딱 화면: 잠금화면 대신 폰 배경화면이 뒤에 보이게 (뿌연 막 없이) -->
+    <style name="Theme.Ttaak.QuickAdd" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowShowWallpaper">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:backgroundDimEnabled">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
