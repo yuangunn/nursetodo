@@ -28,7 +28,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.TaskStore
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 @Composable
@@ -63,25 +70,23 @@ fun SettingsScreen() {
         Section("잠금화면 카드")
         SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
         SwitchRow("완료한 일은 카드에서 숨기기", s.lockHideDone) { v -> TaskStore.updateSettings { it.copy(lockHideDone = v) } }
-        OutlinedTextField(
+        SettingField(
             value = s.lockText,
-            onValueChange = { v -> TaskStore.updateSettings { it.copy(lockText = v.take(40)) } },
-            label = { Text("카드 문구 (예: 오늘도 딱 해내자)") },
-            singleLine = true,
+            max = 40,
+            label = "카드 문구 (예: 오늘도 딱 해내자)",
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
-        )
+        ) { v -> TaskStore.updateSettings { it.copy(lockText = v) } }
         Row(
             Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedTextField(
+            SettingField(
                 value = s.ddayLabel,
-                onValueChange = { v -> TaskStore.updateSettings { it.copy(ddayLabel = v.take(20)) } },
-                label = { Text("D-day 이름") },
-                singleLine = true,
+                max = 20,
+                label = "D-day 이름",
                 modifier = Modifier.weight(1f),
-            )
+            ) { v -> TaskStore.updateSettings { it.copy(ddayLabel = v) } }
             TextButton(onClick = {
                 val d = LocalDate.ofEpochDay(s.ddayDate ?: Day.today())
                 DatePickerDialog(context, { _, y, m, dd ->
@@ -140,6 +145,34 @@ fun SettingsScreen() {
         ) { Text("지난 완료 항목 정리") }
         Hint("모든 데이터는 이 기기 안에만 저장됩니다. 인터넷 권한이 없어 외부로 전송되지 않아요.")
     }
+}
+
+/**
+ * 글자는 화면 상태로 바로 받고, 저장(잠금화면 카드 다시 그리기 포함)은 입력이 멈춘 뒤 한 번만 합니다.
+ * 저장소 값을 그대로 입력칸에 물리면 한글 조합이 깨지고, 글자마다 알림을 갱신하다 시스템 제한에 걸립니다.
+ */
+@Composable
+private fun SettingField(value: String, max: Int, label: String, modifier: Modifier, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(value) }
+    var saved by remember { mutableStateOf(value) }
+    // 바깥에서 바뀐 값(D-day 지우기 등)만 입력칸에 반영합니다. 방금 저장한 값이 돌아온 것으로
+    // 입력칸을 덮으면 그 사이에 친 글자가 사라집니다.
+    LaunchedEffect(value) { if (value != saved) { saved = value; text = value } }
+    LaunchedEffect(text) {
+        if (text == saved) return@LaunchedEffect
+        delay(500)
+        saved = text
+        onSave(text)
+    }
+    val latest by rememberUpdatedState(text)
+    DisposableEffect(Unit) { onDispose { if (latest != saved) onSave(latest) } }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it.take(max) },
+        label = { Text(label) },
+        singleLine = true,
+        modifier = modifier,
+    )
 }
 
 @Composable

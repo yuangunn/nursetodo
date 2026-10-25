@@ -39,13 +39,32 @@ class TaskTest {
     @Test
     fun routineRepeatsOnSelectedWeekdaysAndResetsDaily() {
         val thursdayBit = 1 shl 3
-        val t = Task(1, "운동", createdDay = today, repeatMask = thursdayBit, doneOn = today)
+        val t = Task(1, "운동", createdDay = today, repeatMask = thursdayBit, doneDays = setOf(today))
         assertTrue(t.visibleOn(today, today))
         assertTrue(t.isDone(today))
         assertFalse(t.visibleOn(today + 1, today))
         assertTrue(t.visibleOn(today + 7, today))
         assertFalse(t.isDone(today + 7))
         assertFalse(t.visibleOn(today - 7, today)) // 만들기 전에는 안 보임
+    }
+
+    @Test
+    fun routineKeepsEachDaySeparately() {
+        // 어제 체크한 것이 오늘 체크를 지우면 안 됨 (1.1 까지는 doneOn 하나라 덮어썼음)
+        val t = Task(1, "물 마시기", createdDay = today - 7, repeatMask = Task.EVERY_DAY)
+            .toggled(today).toggled(today - 1)
+        assertTrue(t.isDone(today))
+        assertTrue(t.isDone(today - 1))
+        assertFalse(t.isDone(today - 2))
+        assertFalse(t.toggled(today).isDone(today))
+        assertTrue(t.toggled(today).isDone(today - 1))
+    }
+
+    @Test
+    fun plainTaskToggle() {
+        val t = Task(1, "a", createdDay = today).toggled(today)
+        assertEquals(today, t.doneOn)
+        assertEquals(null, t.toggled(today).doneOn)
     }
 
     @Test

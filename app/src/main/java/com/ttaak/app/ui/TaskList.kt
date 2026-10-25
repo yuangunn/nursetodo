@@ -72,8 +72,10 @@ fun TaskList(
     day: Long,
     tasks: List<Task>,
     onEdit: (Task) -> Unit,
+    onDelete: (Task) -> Unit,
     modifier: Modifier = Modifier,
     header: LazyListScope.() -> Unit = {},
+    footer: LazyListScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
@@ -151,19 +153,20 @@ fun TaskList(
                         )
                     },
             ) {
-                SwipeRow(task, day, onEdit)
+                SwipeRow(task, day, onEdit, onDelete)
             }
         }
+        footer()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
+private fun SwipeRow(task: Task, day: Long, onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
     val state = rememberSwipeToDismissBoxState(
         confirmValueChange = {
             if (it == SwipeToDismissBoxValue.EndToStart) {
-                TaskStore.delete(task.id)
+                onDelete(task)
                 true
             } else false
         },

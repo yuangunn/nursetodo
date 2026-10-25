@@ -20,7 +20,6 @@ import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.ui.Accents
-import com.ttaak.app.ui.MainActivity
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -98,7 +97,6 @@ object LockCard {
             } else {
                 setViewVisibility(R.id.check, android.view.View.GONE)
             }
-            setOnClickPendingIntent(R.id.add, addIntent(context))
             setInt(R.id.add, "setColorFilter", accent)
         }
 
@@ -117,16 +115,12 @@ object LockCard {
                 R.id.empty,
                 context.getString(if (all.isEmpty()) R.string.lock_empty else R.string.lock_all_done),
             )
-            setOnClickPendingIntent(R.id.add, addIntent(context))
             setTextColor(R.id.add, accent)
         }
 
-        val open = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
+        // `＋ 추가` 에 PendingIntent 를 따로 걸면 시스템이 잠금 해제(PIN)부터 요구합니다.
+        // 카드 전체 탭(contentIntent)은 showWhenLocked 화면이면 잠금 위에 바로 열어 주므로,
+        // `＋ 추가` 는 클릭을 받지 않고 카드 탭으로 넘깁니다.
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
             .setColor(accent)
@@ -135,7 +129,7 @@ object LockCard {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(collapsed)
             .setCustomBigContentView(expanded)
-            .setContentIntent(open)
+            .setContentIntent(addIntent(context))
             .setDeleteIntent(broadcast(context, LockActionReceiver.ACTION_REPOST, 1))
             .setOngoing(true)
             .setOnlyAlertOnce(true)

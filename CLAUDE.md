@@ -13,6 +13,8 @@
 - **INTERNET 권한을 추가하지 않는다.** 데이터는 앱 내부 JSON 파일(`TaskStore`)에만 저장한다.
 - 잠금화면 카드는 공개(PUBLIC) + 고정(ongoing) 알림의 커스텀 RemoteViews다 (`lock/LockCard.kt`).
 - 앱을 고칠 때는 `app/build.gradle.kts`의 `versionCode`/`versionName`을 올려 기존 설치 위에 덮어 설치되게 한다.
+- 잠금화면 카드 안 버튼에는 **화면을 여는 PendingIntent를 걸지 않는다.** 시스템이 무조건 PIN부터 요구한다. 잠금 위에서 열어야 하는 화면은 카드 전체 탭(contentIntent) + `showWhenLocked` 액티비티로 연다. 체크처럼 화면이 없는 동작은 브로드캐스트로 한다.
+- 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).
 
 ## 빌드·검증
 
