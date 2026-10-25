@@ -75,6 +75,18 @@ fun SettingsScreen() {
         ChoiceRow("카드·위젯 글자", CardTextSizes.map { it.first }, s.cardTextSize) { i ->
             TaskStore.updateSettings { it.copy(cardTextSize = i) }
         }
+        SwitchRow("화면 켜면 딱 화면 먼저 보기 (시험)", s.lockPage) { v ->
+            TaskStore.updateSettings { it.copy(lockPage = v) }
+            // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
+            if (v && !android.provider.Settings.canDrawOverlays(context)) {
+                context.startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:${context.packageName}"),
+                    ),
+                )
+            }
+        }
         if (Build.VERSION.SDK_INT >= 36) {
             SwitchRow("라이브 알림으로 크게 표시 (시험)", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
         }

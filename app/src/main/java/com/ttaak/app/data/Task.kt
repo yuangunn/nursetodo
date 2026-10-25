@@ -69,6 +69,8 @@ data class Settings(
     val cardTextSize: Int = 1,
     /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시 — 시험 기능. */
     val lockLive: Boolean = false,
+    /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService) — 시험 기능. */
+    val lockPage: Boolean = false,
 )
 
 /** 잠금화면 카드·위젯 글자 크기(sp). 기본 '크게' 수준이 1.1 의 14sp 보다 큽니다. */

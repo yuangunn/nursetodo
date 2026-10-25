@@ -1,7 +1,5 @@
 package com.ttaak.app.lock
 
-import android.app.KeyguardManager
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -32,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,21 +42,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.data.Day
-import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.TaskStore
-import com.ttaak.app.ui.MainActivity
+import com.ttaak.app.data.cardTextSp
+import com.ttaak.app.ui.LocalTaskText
 import com.ttaak.app.ui.TaskRow
 import com.ttaak.app.ui.TtaakTheme
 import kotlinx.coroutines.launch
 
 /**
- * 잠금화면 위에 바로 뜨는 창 (showWhenLocked). 잠금화면 카드·타일·위젯 `+` 에서 열립니다.
- * 오늘 할 일을 전부 보고 체크하고, 적고 엔터 치면 추가. 앱 열기만 잠금 해제를 요구합니다.
+ * 잠금화면 위에 바로 뜨는 딱 화면 (showWhenLocked). 잠금화면 카드·타일·위젯 `+`, 그리고
+ * '화면 켜면 딱 화면 먼저 보기'(LockPageService)에서 열립니다. 오늘 할 일을 보고 체크하고, 적고 엔터 치면 추가.
  */
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,29 +71,23 @@ class QuickAddActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         }
         TaskStore.init(this)
+        // 화면 켤 때마다 뜨는 경우엔 키보드를 자동으로 올리지 않습니다 (보고 체크가 먼저).
+        val autoFocus = !intent.getBooleanExtra(EXTRA_FROM_SCREEN_ON, false)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                QuickAdd(onClose = { finish() }, onOpenApp = ::openApp)
+                QuickAdd(autoFocus, onClose = { finish() })
             }
         }
     }
 
-    private fun openApp() {
-        val open = {
-            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            finish()
-        }
-        val keyguard = getSystemService(KeyguardManager::class.java)
-        if (!keyguard.isKeyguardLocked) return open()
-        keyguard.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
-            override fun onDismissSucceeded() = open()
-        })
+    companion object {
+        const val EXTRA_FROM_SCREEN_ON = "fromScreenOn"
     }
 }
 
 @Composable
-private fun QuickAdd(onClose: () -> Unit, onOpenApp: () -> Unit) {
+private fun QuickAdd(autoFocus: Boolean, onClose: () -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val today = Day.today()
     val tasks = remember(all, today) { TaskStore.tasksFor(today, today) }
@@ -100,7 +97,7 @@ private fun QuickAdd(onClose: () -> Unit, onOpenApp: () -> Unit) {
     val scope = rememberCoroutineScope()
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     // 잠금화면 위에서는 창이 포커스를 받은 뒤에야 키보드가 뜹니다.
-    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
+    LaunchedEffect(windowFocused) { if (windowFocused && autoFocus) focus.requestFocus() }
 
     Box(
         Modifier
@@ -118,19 +115,25 @@ private fun QuickAdd(onClose: () -> Unit, onOpenApp: () -> Unit) {
                 .imePadding()
                 .navigationBarsPadding(),
         ) {
-            Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(Modifier.padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // 군더더기 없이: 진행률과 닫기만. 할 일 글씨는 '카드·위젯 글자' 설정을 따릅니다.
+                Row(Modifier.padding(start = 24.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val done = tasks.count { it.isDone(today) }
                     Text(
-                        "${Fmt.date(today)}  " + if (tasks.isEmpty()) "" else "$done/${tasks.size}",
-                        style = MaterialTheme.typography.titleMedium,
+                        if (tasks.isEmpty()) "" else "$done/${tasks.size}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onOpenApp) { Text("앱 열기") }
-                    TextButton(onClick = onClose) { Text("완료") }
+                    TextButton(onClick = onClose) { Text("닫기", style = MaterialTheme.typography.titleMedium) }
                 }
-                LazyColumn(state = listState, modifier = Modifier.heightIn(max = 300.dp)) {
-                    items(tasks, key = { it.id }) { TaskRow(it, today, onEdit = {}) }
+                val settings by TaskStore.settings.collectAsStateWithLifecycle()
+                val maxList = (LocalConfiguration.current.screenHeightDp * 0.6f).dp
+                CompositionLocalProvider(LocalTaskText provides TextStyle(fontSize = settings.cardTextSp().sp)) {
+                    LazyColumn(state = listState, modifier = Modifier.heightIn(max = maxList)) {
+                        items(tasks, key = { it.id }) { TaskRow(it, today, onEdit = {}) }
+                    }
                 }
                 OutlinedTextField(
                     value = text,

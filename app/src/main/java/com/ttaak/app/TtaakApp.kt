@@ -3,6 +3,7 @@ package com.ttaak.app
 import android.app.Application
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.lock.LockCard
+import com.ttaak.app.lock.LockPageService
 import com.ttaak.app.widget.TaskWidgetProvider
 
 class TtaakApp : Application() {
@@ -19,5 +20,6 @@ class TtaakApp : Application() {
         LockCard.update(this)
         TaskWidgetProvider.refresh(this)
         LockCard.scheduleMidnight(this)
+        LockPageService.sync(this)
     }
 }
