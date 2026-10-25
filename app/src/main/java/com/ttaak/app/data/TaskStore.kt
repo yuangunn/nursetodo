@@ -16,8 +16,12 @@ object TaskStore {
     private lateinit var file: File
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     private val _settings = MutableStateFlow(Settings())
+    private val _alarms = MutableStateFlow<List<Alarm>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
     val settings: StateFlow<Settings> = _settings.asStateFlow()
+
+    /** 맞춰 둔 'N분 뒤' 알람 (울릴 시각 순). 울리게 맞추는 건 [com.ttaak.app.lock.Alarms] 가 합니다. */
+    val alarms: StateFlow<List<Alarm>> = _alarms.asStateFlow()
 
     /** 데이터가 바뀔 때마다 호출 — 잠금화면 카드와 위젯을 갱신합니다. */
     var onChanged: (() -> Unit)? = null
@@ -57,11 +61,7 @@ object TaskStore {
     }
 
     fun toggle(id: Long, day: Long = Day.today()) {
-        commit(_tasks.value.map {
-            if (it.id != id) it
-            else if (it.isDone(day)) it.copy(doneOn = null)
-            else it.copy(doneOn = day)
-        })
+        commit(_tasks.value.map { if (it.id == id) it.toggled(day) else it })
     }
 
     fun update(task: Task) {
@@ -70,6 +70,11 @@ object TaskStore {
 
     fun delete(id: Long) {
         commit(_tasks.value.filterNot { it.id == id })
+    }
+
+    /** 지운 할 일을 되돌립니다 (순서·완료 기록 그대로). */
+    fun restore(task: Task) {
+        if (get(task.id) == null) commit(_tasks.value + task)
     }
 
     /** 지난 날 완료한 일반 할 일을 지웁니다. 루틴은 남겨 둡니다. */
@@ -90,6 +95,19 @@ object TaskStore {
         commit(_tasks.value.map { t -> newOrder[t.id]?.let { t.copy(order = it) } ?: t })
     }
 
+    fun addAlarm(minutes: Int, label: String): Alarm {
+        val now = System.currentTimeMillis().coerceAtLeast((_alarms.value.maxOfOrNull { it.id } ?: 0) + 1)
+        val alarm = Alarm(id = now, at = now + minutes * 60_000L, label = label.trim())
+        _alarms.value = (_alarms.value + alarm).sortedBy { it.at }
+        save()
+        return alarm
+    }
+
+    fun removeAlarm(id: Long) {
+        _alarms.value = _alarms.value.filterNot { it.id == id }
+        save()
+    }
+
     fun updateSettings(transform: (Settings) -> Settings) {
         _settings.value = transform(_settings.value)
         save()
@@ -106,6 +124,7 @@ object TaskStore {
         val root = JSONObject()
         root.put("tasks", JSONArray().apply { _tasks.value.forEach { put(it.toJson()) } })
         root.put("settings", _settings.value.toJson())
+        root.put("alarms", JSONArray().apply { _alarms.value.forEach { put(it.toJson()) } })
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(root.toString())
         if (!tmp.renameTo(file)) {
@@ -121,10 +140,15 @@ object TaskStore {
             val arr = root.optJSONArray("tasks") ?: JSONArray()
             _tasks.value = (0 until arr.length()).map { arr.getJSONObject(it).toTask() }
             root.optJSONObject("settings")?.let { _settings.value = it.toSettings() }
+            val alarms = root.optJSONArray("alarms") ?: JSONArray()
+            _alarms.value = (0 until alarms.length()).map { alarms.getJSONObject(it).toAlarm() }.sortedBy { it.at }
+        }.onFailure {
+            // 읽지 못한 파일을 다음 저장 때 덮어쓰지 않도록 옆에 따로 남겨 둡니다.
+            file.renameTo(File(file.parentFile, "ttaak.broken-${System.currentTimeMillis()}.json"))
         }
     }
 
-    private fun Task.toJson() = JSONObject().apply {
+    internal fun Task.toJson() = JSONObject().apply {
         put("id", id)
         put("title", title)
         put("created", createdDay)
@@ -132,22 +156,39 @@ object TaskStore {
         put("repeat", repeatMask)
         doneOn?.let { put("doneOn", it) }
         put("order", order)
+        if (doneDays.isNotEmpty()) put("doneDays", JSONArray(doneDays.sorted()))
+        doneAt?.let { put("doneAt", it) }
     }
 
-    private fun JSONObject.toTask() = Task(
-        id = getLong("id"),
-        title = getString("title"),
-        createdDay = getLong("created"),
-        date = if (has("date")) getLong("date") else null,
-        repeatMask = optInt("repeat"),
-        doneOn = if (has("doneOn")) getLong("doneOn") else null,
-        order = optLong("order"),
-    )
+    internal fun JSONObject.toTask(): Task {
+        val repeat = optInt("repeat")
+        val doneOn = if (has("doneOn")) getLong("doneOn") else null
+        val doneDays = optJSONArray("doneDays")?.let { a -> (0 until a.length()).map { a.getLong(it) }.toSet() }
+        return Task(
+            id = getLong("id"),
+            title = getString("title"),
+            createdDay = getLong("created"),
+            date = if (has("date")) getLong("date") else null,
+            repeatMask = repeat,
+            // 1.1 이하는 루틴 완료도 doneOn 하나에 저장했습니다.
+            doneOn = doneOn.takeIf { repeat == 0 },
+            order = optLong("order"),
+            doneDays = doneDays ?: if (repeat != 0 && doneOn != null) setOf(doneOn) else emptySet(),
+            doneAt = if (has("doneAt")) getLong("doneAt") else null,
+        )
+    }
+
+    internal fun Alarm.toJson() = JSONObject().apply {
+        put("id", id)
+        put("at", at)
+        put("label", label)
+    }
+
+    internal fun JSONObject.toAlarm() = Alarm(id = getLong("id"), at = getLong("at"), label = optString("label"))
 
     private fun Settings.toJson() = JSONObject().apply {
         put("newOnTop", newOnTop)
         put("lockEnabled", lockEnabled)
-        put("lockHideDone", lockHideDone)
         put("lockText", lockText)
         put("ddayLabel", ddayLabel)
         ddayDate?.let { put("ddayDate", it) }
@@ -157,13 +198,20 @@ object TaskStore {
         put("checkOnLeft", checkOnLeft)
         put("setupDismissed", setupDismissed)
         put("tileAdded", tileAdded)
+        put("calcHours", calcHours)
+        put("cardTextSize", cardTextSize)
+        put("lockLive", lockLive)
+        put("lockPage", lockPage)
+        alarmSound?.let { put("alarmSound", it) }
+        put("alarmVolume", alarmVolume)
+        put("alarmMode", alarmMode)
+        put("alarmAlwaysSound", alarmAlwaysSound)
     }
 
     private fun JSONObject.toSettings() = Settings().let { d ->
         Settings(
             newOnTop = optBoolean("newOnTop", d.newOnTop),
             lockEnabled = optBoolean("lockEnabled", d.lockEnabled),
-            lockHideDone = optBoolean("lockHideDone", d.lockHideDone),
             lockText = optString("lockText", d.lockText),
             ddayLabel = optString("ddayLabel", d.ddayLabel),
             ddayDate = if (has("ddayDate")) getLong("ddayDate") else null,
@@ -173,6 +221,14 @@ object TaskStore {
             checkOnLeft = optBoolean("checkOnLeft", d.checkOnLeft),
             setupDismissed = optBoolean("setupDismissed", d.setupDismissed),
             tileAdded = optBoolean("tileAdded", d.tileAdded),
+            calcHours = optBoolean("calcHours", d.calcHours),
+            cardTextSize = optInt("cardTextSize", d.cardTextSize),
+            lockLive = optBoolean("lockLive", d.lockLive),
+            lockPage = optBoolean("lockPage", d.lockPage),
+            alarmSound = if (has("alarmSound")) getString("alarmSound") else null,
+            alarmVolume = optInt("alarmVolume", d.alarmVolume).coerceIn(1, 10),
+            alarmMode = optInt("alarmMode", d.alarmMode).coerceIn(0, 2),
+            alarmAlwaysSound = optBoolean("alarmAlwaysSound", d.alarmAlwaysSound),
         )
     }
 }

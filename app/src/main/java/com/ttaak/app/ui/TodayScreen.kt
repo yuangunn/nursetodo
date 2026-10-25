@@ -22,7 +22,7 @@ import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 
 @Composable
-fun TodayScreen(onEdit: (Task) -> Unit) {
+fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val today = Day.today()
@@ -34,6 +34,7 @@ fun TodayScreen(onEdit: (Task) -> Unit) {
             day = today,
             tasks = tasks,
             onEdit = onEdit,
+            onDelete = onDelete,
             modifier = Modifier.weight(1f),
             header = {
                 item(key = "header") {
@@ -74,10 +75,13 @@ fun TodayScreen(onEdit: (Task) -> Unit) {
                         }
                     }
                 }
+            },
+            // 설정 도우미는 할 일 목록을 가리지 않게 목록 아래에 둡니다.
+            footer = {
                 if (!settings.setupDismissed) {
                     item(key = "setup") {
                         SetupGuide(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                             hideDone = true,
                             onClose = { TaskStore.updateSettings { it.copy(setupDismissed = true) } },
                         )

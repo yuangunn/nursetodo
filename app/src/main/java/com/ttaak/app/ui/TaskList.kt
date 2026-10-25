@@ -23,6 +23,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,22 +67,26 @@ import com.ttaak.app.data.TaskStore
 
 /**
  * 하루치 할 일 목록. 길게 눌러 끌면 순서 변경, 왼쪽으로 밀면 삭제, 제목을 누르면 편집.
- * 완료한 일은 항상 아래로 내려갑니다.
+ * 끝낸 일은 목록에서 사라지고 맨 아래 접히는 '완료된 할 일'에서만 보입니다 (언제 끝냈는지·만들었는지와 함께).
  */
 @Composable
 fun TaskList(
     day: Long,
     tasks: List<Task>,
     onEdit: (Task) -> Unit,
+    onDelete: (Task) -> Unit,
     modifier: Modifier = Modifier,
     header: LazyListScope.() -> Unit = {},
+    footer: LazyListScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
     var dragList by remember { mutableStateOf<List<Task>?>(null) }
     var draggingId by remember { mutableStateOf<Long?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
-    val shown = dragList ?: tasks
+    var showDone by rememberSaveable { mutableStateOf(false) }
+    val done = tasks.filter { it.isDone(day) }
+    val shown = dragList ?: tasks.filterNot { it.isDone(day) }
 
     fun drag(dy: Float) {
         val list = dragList ?: return
@@ -93,7 +99,6 @@ fun TaskList(
             dragOffset < 0 && idx > 0 -> idx - 1
             else -> return
         }
-        if (list[neighbor].isDone(day)) return
         val info = visible.firstOrNull { it.key == list[neighbor].id } ?: return
         if (kotlin.math.abs(dragOffset) > info.size / 2f) {
             dragList = list.toMutableList().apply { add(neighbor, removeAt(idx)) }
@@ -103,7 +108,7 @@ fun TaskList(
     }
 
     fun endDrag() {
-        dragList?.let { list -> TaskStore.reorder(list.filterNot { it.isDone(day) }.map { it.id }) }
+        dragList?.let { list -> TaskStore.reorder(list.map { it.id }) }
         dragList = null
         draggingId = null
         dragOffset = 0f
@@ -111,7 +116,7 @@ fun TaskList(
 
     LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         header()
-        if (shown.isEmpty()) {
+        if (shown.isEmpty() && done.isEmpty()) {
             item(key = "empty") {
                 Text(
                     "아직 할 일이 없어요.\n아래에 딱 적어보세요.",
@@ -135,7 +140,7 @@ fun TaskList(
                                 val current = TaskStore.get(task.id)
                                 if (current != null && !current.isDone(day)) {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    dragList = TaskStore.tasksFor(day)
+                                    dragList = TaskStore.tasksFor(day).filterNot { it.isDone(day) }
                                     draggingId = task.id
                                     dragOffset = 0f
                                 }
@@ -151,19 +156,49 @@ fun TaskList(
                         )
                     },
             ) {
-                SwipeRow(task, day, onEdit)
+                SwipeRow(task, day, onEdit, onDelete)
             }
         }
+        if (done.isNotEmpty()) {
+            item(key = "doneHeader") {
+                Row(
+                    Modifier
+                        .animateItem()
+                        .fillMaxWidth()
+                        .clickable { showDone = !showDone }
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "완료된 할 일 ${done.size}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (showDone) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (showDone) "접기" else "펼치기",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (showDone) {
+                items(done, key = { it.id }) { task ->
+                    Box(Modifier.animateItem()) { SwipeRow(task, day, onEdit, onDelete) }
+                }
+            }
+        }
+        footer()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
+private fun SwipeRow(task: Task, day: Long, onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
     val state = rememberSwipeToDismissBoxState(
         confirmValueChange = {
             if (it == SwipeToDismissBoxValue.EndToStart) {
-                TaskStore.delete(task.id)
+                onDelete(task)
                 true
             } else false
         },
@@ -218,8 +253,7 @@ fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(vertical = 8.dp)
-                    .alpha(if (done) 0.4f else 1f),
+                    .padding(vertical = 8.dp),
             ) {
                 Text(
                     task.title,
@@ -227,8 +261,15 @@ fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
                     textDecoration = if (done) TextDecoration.LineThrough else null,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    // 끝낸 일은 제목만 흐리게, 완료·만든 시각은 읽히게 둡니다.
+                    modifier = Modifier.alpha(if (done) 0.4f else 1f),
                 )
                 val sub = when {
+                    done -> listOfNotNull(
+                        ("↻ " + Fmt.repeat(task.repeatMask)).takeIf { task.isRoutine },
+                        task.doneAtOn(day)?.let { "완료 " + Fmt.stamp(it, today) },
+                        "만듦 " + Fmt.stamp(task.createdAt, today),
+                    ).joinToString(" · ")
                     task.isRoutine -> "↻ " + Fmt.repeat(task.repeatMask)
                     task.date != null && task.date < today && !done -> "${Fmt.relative(task.date, today)}부터 밀림"
                     task.date != null && task.date != day -> Fmt.relative(task.date, today)

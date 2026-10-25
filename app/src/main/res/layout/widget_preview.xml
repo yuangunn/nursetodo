@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯 고르기/추가 창의 미리보기. 실제 위젯(widget_tasks)은 목록 어댑터라 미리보기에서 그려지지 않습니다. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:drawableEnd="@drawable/ic_add"
+        android:drawableTint="@color/brand"
+        android:gravity="center_vertical"
+        android:text="@string/widget_label"
+        android:textColor="@color/widget_text"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:drawablePadding="10dp"
+        android:drawableStart="@drawable/ic_check_on"
+        android:drawableTint="@color/brand"
+        android:gravity="center_vertical"
+        android:text="@string/preview_done"
+        android:textColor="@color/widget_sub"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:drawablePadding="10dp"
+        android:drawableStart="@drawable/ic_check_off"
+        android:drawableTint="@color/widget_sub"
+        android:gravity="center_vertical"
+        android:text="@string/preview_1"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:drawablePadding="10dp"
+        android:drawableStart="@drawable/ic_check_off"
+        android:drawableTint="@color/widget_sub"
+        android:gravity="center_vertical"
+        android:text="@string/preview_2"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+</LinearLayout>

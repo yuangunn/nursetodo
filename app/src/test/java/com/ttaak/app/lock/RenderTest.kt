@@ -51,7 +51,19 @@ class RenderTest {
         inflate(builder.createContentView())
         val big = inflate(builder.createBigContentView())
         val rows = big.findViewById<android.widget.LinearLayout>(R.id.rows)
-        assertEquals(6, rows.childCount)
+        assertEquals(5, rows.childCount) // 기본 글자 '크게'는 5줄까지
+    }
+
+    @Test
+    fun liveModeIsPlainPromotedNotification() {
+        seed()
+        TaskStore.updateSettings { it.copy(lockLive = true) }
+        val n = LockCard.build(context)
+        // 라이브 알림(Live Updates)은 커스텀 화면이 있으면 시스템이 올려 주지 않습니다.
+        assertEquals(null, n.contentView)
+        assertTrue(n.extras.getBoolean("android.requestPromotedOngoing"))
+        assertEquals(3, n.actions.size) // 남은 할 일 위에서 3개까지 완료 버튼 (시스템 한도)
+        TaskStore.updateSettings { it.copy(lockLive = false) }
     }
 
     @Test
@@ -61,7 +73,7 @@ class RenderTest {
             .onGetViewFactory(android.content.Intent())
         factory.onCreate()
         factory.onDataSetChanged()
-        assertEquals(8, factory.count)
+        assertEquals(7, factory.count) // 끝낸 1개는 위젯에서 사라짐
         repeat(factory.count) { inflate(factory.getViewAt(it)) }
         inflate(RemoteViews(context.packageName, R.layout.widget_tasks))
     }

@@ -1,6 +1,8 @@
 package com.ttaak.app.data
 
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -9,6 +11,23 @@ object Fmt {
 
     fun weekday(day: Long): String =
         LocalDate.ofEpochDay(day).dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.KOREAN)
+
+    /** 남은 시간: 4:05 / 1:02:03. 지났으면 0:00 */
+    fun countdown(ms: Long): String {
+        val s = (ms.coerceAtLeast(0) + 999) / 1000
+        return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+    }
+
+    /** 오늘 14:05 / 어제 09:30 / 10월 22일 14:05 */
+    fun stamp(ms: Long, today: Long = Day.today()): String {
+        val t = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
+        val time = "%02d:%02d".format(t.hour, t.minute)
+        return when (t.toLocalDate().toEpochDay() - today) {
+            0L -> "오늘 $time"
+            -1L -> "어제 $time"
+            else -> "${t.monthValue}월 ${t.dayOfMonth}일 $time"
+        }
+    }
 
     /** 10월 22일 (수) */
     fun date(day: Long): String {

@@ -6,6 +6,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -27,7 +30,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,9 +50,15 @@ import com.ttaak.app.lock.Setup
 
 private enum class State { Done, Todo, Manual }
 
+/** 선택 단계(상단바 타일, 홈 위젯)의 순번. 오늘 탭에서는 세지도 보여 주지도 않습니다. */
+private val OPTIONAL_STEPS = setOf(3, 4)
+
 /**
  * 잠금화면 카드 · 위젯 · 타일을 단계별로 점검하고 버튼 한 번으로 고치는 카드.
  * 설정 화면에서 돌아올 때마다(onResume) 상태를 다시 확인합니다.
+ *
+ * 오늘 탭([hideDone])에서는 처음 설정용으로만: 한 줄로 접혀 있고 꼭 필요한 단계 중 남은 것만 보이며,
+ * 다 끝나면 저절로 사라집니다. 상단바 타일·홈 위젯 같은 선택 단계는 설정 화면에만 둡니다.
  */
 @Composable
 fun SetupGuide(
@@ -71,6 +82,28 @@ fun SetupGuide(
     val blocked = remember(tick, settings) { Setup.channelBlocked(context) }
     val showing = remember(tick, settings) { allowed && Setup.cardShowing(context) }
     val widget = remember(tick, settings) { Setup.widgetAdded(context) }
+    val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
+    val live = Build.VERSION.SDK_INT >= 36 && settings.lockLive
+    val promoted = remember(tick, settings) { live && Setup.liveShowing(context) }
+    val hiddenOnSamsung = style != null && style != 0
+
+    val states = listOfNotNull(
+        if (allowed) State.Done else State.Todo,
+        if (showing) State.Done else State.Todo,
+        when (style) {
+            0 -> State.Done
+            null -> State.Manual
+            else -> State.Todo
+        },
+        if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
+        if (widget) State.Done else State.Todo,
+        if (!live) null else if (promoted && !hiddenOnSamsung) State.Done else State.Todo,
+    )
+    // 다 끝났으면 빈 카드를 남기지 않습니다. 앱이 확인할 수 없는 단계(Manual)는 설정 화면에서만 안내합니다.
+    val left = states.filterIndexed { i, st -> st == State.Todo && i !in OPTIONAL_STEPS }.size
+    if (hideDone && left == 0) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    val expanded = !hideDone || open
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -79,20 +112,31 @@ fun SetupGuide(
         modifier = modifier,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.then(if (hideDone) Modifier.clickable { open = !open } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    "잠금화면에서 쓰려면",
+                    if (hideDone) "잠금화면 설정 ${left}개 남음" else "잠금화면에서 쓰려면",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
+                if (hideDone) {
+                    Icon(
+                        if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (open) "접기" else "펼치기",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (onClose != null) TextButton(onClick = onClose) { Text("닫기") }
             }
+            if (!expanded) return@Column
 
             Step(
                 hideDone = hideDone,
                 n = 1,
-                state = if (allowed) State.Done else State.Todo,
+                state = states[0],
                 title = "알림 허용",
                 body = "잠금화면 카드는 알림으로 표시돼요.",
                 action = "허용하기".takeIf { !allowed },
@@ -104,7 +148,7 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 2,
-                state = if (showing) State.Done else State.Todo,
+                state = states[1],
                 title = "잠금화면 카드 켜기",
                 body = when {
                     !allowed -> "1번을 먼저 해 주세요."
@@ -131,28 +175,34 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 3,
-                state = State.Manual,
+                state = states[2],
                 title = "잠금화면에 알림 내용 보이게",
-                body = "폰 설정이라 직접 바꿔야 해요. 화면을 끄고 켜서 카드가 보이는지 확인하세요.\n" +
-                    "· 삼성: 설정 → 잠금화면 및 AOD → 알림 → 스타일 '상세히' + '내용 표시'\n" +
-                    "· 픽셀/기타: 설정 → 알림 → 잠금 화면의 알림 → '모든 알림 표시'",
-                action = "설정 열기",
+                body = when (style) {
+                    0 -> "잠금화면 알림이 '카드'로 보여요."
+                    null -> "폰 설정이라 직접 바꿔야 해요. 화면을 끄고 켜서 카드가 보이는지 확인하세요.\n" +
+                        "· 삼성: 설정 → 알림 → 잠금화면 → 알림 스타일 '카드'\n" +
+                        "· 픽셀/기타: 설정 → 알림 → 잠금 화면의 알림 → '모든 알림 표시'"
+                    else -> "잠금화면 알림이 '${if (style == 1) "아이콘" else "동그란 점"}'이라 딱 카드가 안 보여요. " +
+                        "열리는 화면에서 알림 스타일을 '카드'로 골라 주세요."
+                },
+                action = "설정 열기".takeIf { style != 0 },
             ) { Setup.openLockScreenSettings(context) }
 
-            Step(
+            if (!hideDone) Step(
                 hideDone = hideDone,
                 n = 4,
-                state = if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
+                state = states[3],
                 title = "잠금화면에서 바로 추가 (상단바 버튼)",
-                body = if (Setup.canRequestTile) "상단바를 내려 '딱 추가'를 누르면 잠금을 풀지 않고 적을 수 있어요."
+                body = if (Setup.canRequestTile) "상단바를 내려 '딱 추가'(✓)를 누르면 잠금을 풀지 않고 적을 수 있어요. " +
+                    "삼성은 오른쪽 위에서 내린 빠른 설정창 맨 아래에 있어요."
                 else "상단바를 내려 연필(편집) 버튼 → '딱 추가' 타일을 끌어다 놓으세요.",
                 action = "추가하기".takeIf { Setup.canRequestTile && !settings.tileAdded },
             ) { (context as? Activity)?.let { Setup.requestTile(it) } }
 
-            Step(
+            if (!hideDone) Step(
                 hideDone = hideDone,
                 n = 5,
-                state = if (widget) State.Done else State.Todo,
+                state = states[4],
                 title = "홈 화면 위젯 (선택)",
                 body = if (widget) "위젯이 홈 화면에 있어요." else "홈 화면을 길게 눌러 위젯 → '딱'을 골라도 돼요.",
                 action = "추가하기".takeIf { !widget },
@@ -160,6 +210,26 @@ fun SetupGuide(
                 if (!Setup.requestWidget(context)) {
                     Toast.makeText(context, "홈 화면을 길게 눌러 위젯 → '딱'을 추가해 주세요", Toast.LENGTH_LONG).show()
                 }
+            }
+
+            if (live) {
+                // 삼성 Now Bar(잠금화면 아래 알약)는 삼성이 고른 앱만 들어가서 설정으로도 못 넣습니다 (One UI 8.5 실기기 확인).
+                Step(
+                    hideDone = hideDone,
+                    n = 6,
+                    state = states[5],
+                    title = "라이브 알림 (켠 경우)",
+                    body = when {
+                        !showing -> "2번을 먼저 해 주세요."
+                        // 삼성은 라이브 알림도 알림 스타일이 '카드'여야 잠금화면에 보입니다 (One UI 8.5 실기기 확인).
+                        promoted && hiddenOnSamsung -> "라이브 알림은 켜졌지만 잠금화면에 보이려면 3번을 해 주세요."
+                        promoted -> "잠금화면 맨 위에 펼쳐진 채로 떠 있어요."
+                        // 사용자가 끈 경우와 폰이 지원하지 않는 경우(안드로이드 16 초기판 등)를 앱이 구분할 수 없습니다.
+                        else -> "라이브 알림으로 안 올라가서 일반 알림으로 보여요. 열리는 화면에 '라이브'나 '실시간' 항목이 " +
+                            "있으면 켜 주세요. 없으면 이 폰은 지원하지 않아요."
+                    },
+                    action = "켜러 가기".takeIf { showing && !promoted },
+                ) { Setup.openLiveSettings(context) }
             }
         }
     }
@@ -175,7 +245,7 @@ private fun Step(
     action: String?,
     onAction: () -> Unit,
 ) {
-    if (hideDone && state == State.Done) return
+    if (hideDone && state != State.Todo) return
     val (icon: ImageVector, tint: Color) = when (state) {
         State.Done -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
         State.Todo -> Icons.Default.Warning to Color(0xFFFF9F0A)

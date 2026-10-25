@@ -41,7 +41,7 @@ import com.ttaak.app.data.TaskStore
 import java.time.LocalDate
 
 @Composable
-fun CalendarScreen(onEdit: (Task) -> Unit) {
+fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val today = Day.today()
     var selected by rememberSaveable { mutableLongStateOf(today) }
@@ -55,6 +55,7 @@ fun CalendarScreen(onEdit: (Task) -> Unit) {
             day = selected,
             tasks = tasks,
             onEdit = onEdit,
+            onDelete = onDelete,
             modifier = Modifier.weight(1f),
             header = {
                 item(key = "calendar") {

@@ -40,7 +40,8 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="6dp">
 
         <ListView
@@ -58,4 +59,18 @@
             android:textColor="@color/widget_sub"
             android:textSize="13sp" />
     </FrameLayout>
+
+    <!-- 위젯을 세로로 키웠을 때만 보입니다 (TaskWidgetProvider) -->
+    <TextView
+        android:id="@+id/calc"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_button_bg"
+        android:gravity="center"
+        android:text="@string/widget_calc"
+        android:textColor="@color/brand"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 </LinearLayout>

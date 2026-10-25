@@ -1,7 +1,14 @@
 package com.ttaak.app.ui
 
+import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -23,12 +31,21 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,9 +54,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ttaak.app.data.CardTextSizes
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.Settings
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.lock.AlarmRingService
+import com.ttaak.app.lock.AlarmSound
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.time.LocalDate
 
 @Composable
@@ -62,26 +87,41 @@ fun SettingsScreen() {
 
         Section("잠금화면 카드")
         SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
-        SwitchRow("완료한 일은 카드에서 숨기기", s.lockHideDone) { v -> TaskStore.updateSettings { it.copy(lockHideDone = v) } }
-        OutlinedTextField(
+        ChoiceRow("카드·위젯 글자", CardTextSizes.map { it.first }, s.cardTextSize) { i ->
+            TaskStore.updateSettings { it.copy(cardTextSize = i) }
+        }
+        SwitchRow("화면 켜면 딱 화면 먼저 보기 (시험)", s.lockPage) { v ->
+            TaskStore.updateSettings { it.copy(lockPage = v) }
+            // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
+            if (v && !android.provider.Settings.canDrawOverlays(context)) {
+                context.startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:${context.packageName}"),
+                    ),
+                )
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 36) {
+            SwitchRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
+        }
+        SettingField(
             value = s.lockText,
-            onValueChange = { v -> TaskStore.updateSettings { it.copy(lockText = v.take(40)) } },
-            label = { Text("카드 문구 (예: 오늘도 딱 해내자)") },
-            singleLine = true,
+            max = 40,
+            label = "카드 문구 (예: 오늘도 딱 해내자)",
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
-        )
+        ) { v -> TaskStore.updateSettings { it.copy(lockText = v) } }
         Row(
             Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedTextField(
+            SettingField(
                 value = s.ddayLabel,
-                onValueChange = { v -> TaskStore.updateSettings { it.copy(ddayLabel = v.take(20)) } },
-                label = { Text("D-day 이름") },
-                singleLine = true,
+                max = 20,
+                label = "D-day 이름",
                 modifier = Modifier.weight(1f),
-            )
+            ) { v -> TaskStore.updateSettings { it.copy(ddayLabel = v) } }
             TextButton(onClick = {
                 val d = LocalDate.ofEpochDay(s.ddayDate ?: Day.today())
                 DatePickerDialog(context, { _, y, m, dd ->
@@ -98,6 +138,9 @@ fun SettingsScreen() {
             ) { Text("D-day 지우기") }
         }
         SetupGuide(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+        Section("알람")
+        AlarmSettings(s)
 
         Section("목록")
         ChoiceRow("새 할 일 위치", listOf("맨 아래", "맨 위"), if (s.newOnTop) 1 else 0) { i ->
@@ -140,6 +183,127 @@ fun SettingsScreen() {
         ) { Text("지난 완료 항목 정리") }
         Hint("모든 데이터는 이 기기 안에만 저장됩니다. 인터넷 권한이 없어 외부로 전송되지 않아요.")
     }
+}
+
+/** 딱 화면의 '알람'이 울리는 방식: 알람음, 크기, 소리/진동, 무음 모드에서도 소리. */
+@Composable
+private fun AlarmSettings(s: Settings) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val ringing by AlarmRingService.ringing.collectAsStateWithLifecycle()
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        @Suppress("DEPRECATION")
+        val uri = result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            ?: return@rememberLauncherForActivityResult
+        val isDefault = uri == AlarmSound.defaultUri() || uri == android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI
+        TaskStore.updateSettings { it.copy(alarmSound = if (isDefault) null else uri.toString()) }
+    }
+    val soundName = remember(s.alarmSound) {
+        s.alarmSound?.let { runCatching { RingtoneManager.getRingtone(context, Uri.parse(it))?.getTitle(context) }.getOrNull() }
+            ?: "기본 알람음"
+    }
+    var preview by remember { mutableStateOf<Job?>(null) }
+    // 미리 듣기 중에 진짜 알람이 울리기 시작했으면 그 소리는 끄지 않습니다.
+    val stopPreview = { if (AlarmRingService.ringing.value == null) AlarmSound.stop(context) }
+    DisposableEffect(Unit) {
+        onDispose { if (preview?.isActive == true) stopPreview() }
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable {
+                pick.launch(
+                    Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "알람음")
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI)
+                        .putExtra(
+                            RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                            s.alarmSound?.let(Uri::parse) ?: android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI,
+                        ),
+                )
+            }
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("알람음", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(soundName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+    }
+
+    var volume by remember(s.alarmVolume) { mutableFloatStateOf(s.alarmVolume.toFloat()) }
+    Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("크기", style = MaterialTheme.typography.bodyLarge)
+        Slider(
+            value = volume,
+            onValueChange = { volume = it },
+            onValueChangeFinished = { TaskStore.updateSettings { it.copy(alarmVolume = volume.roundToInt()) } },
+            valueRange = 1f..10f,
+            steps = 8,
+            enabled = s.alarmMode != 2,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        )
+        Text("${volume.roundToInt()}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(24.dp))
+    }
+    ChoiceRow("방식", listOf("소리+진동", "소리만", "진동만"), s.alarmMode) { i ->
+        TaskStore.updateSettings { it.copy(alarmMode = i) }
+    }
+    SwitchRow("무음·진동 모드여도 소리로 울리기", s.alarmAlwaysSound) { v ->
+        TaskStore.updateSettings { it.copy(alarmAlwaysSound = v) }
+    }
+    TextButton(
+        onClick = {
+            preview?.cancel()
+            preview = scope.launch {
+                AlarmSound.start(context, TaskStore.settings.value)
+                try {
+                    delay(3_000)
+                } finally {
+                    stopPreview()
+                }
+            }
+        },
+        // 진짜 알람이 울리는 중엔 미리 듣기가 그 소리를 끄지 않게
+        enabled = ringing == null,
+        modifier = Modifier.padding(start = 12.dp),
+    ) { Text("들어 보기 (3초)") }
+    Hint(
+        "딱 화면의 '알람' 버튼으로 몇 분 뒤에 울릴지 맞춰요. 화면이 꺼져 있어도 정시에 울리고, 끄기를 누를 때까지" +
+            "(최대 10분) 울려요. 울리는 동안만 폰의 알람 음량을 위 크기로 맞췄다가 되돌려요.",
+    )
+}
+
+/**
+ * 글자는 화면 상태로 바로 받고, 저장(잠금화면 카드 다시 그리기 포함)은 입력이 멈춘 뒤 한 번만 합니다.
+ * 저장소 값을 그대로 입력칸에 물리면 한글 조합이 깨지고, 글자마다 알림을 갱신하다 시스템 제한에 걸립니다.
+ */
+@Composable
+private fun SettingField(value: String, max: Int, label: String, modifier: Modifier, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(value) }
+    var saved by remember { mutableStateOf(value) }
+    // 바깥에서 바뀐 값(D-day 지우기 등)만 입력칸에 반영합니다. 방금 저장한 값이 돌아온 것으로
+    // 입력칸을 덮으면 그 사이에 친 글자가 사라집니다.
+    LaunchedEffect(value) { if (value != saved) { saved = value; text = value } }
+    LaunchedEffect(text) {
+        if (text == saved) return@LaunchedEffect
+        delay(500)
+        saved = text
+        onSave(text)
+    }
+    val latest by rememberUpdatedState(text)
+    DisposableEffect(Unit) { onDispose { if (latest != saved) onSave(latest) } }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { text = it.take(max) },
+        label = { Text(label) },
+        singleLine = true,
+        modifier = modifier,
+    )
 }
 
 @Composable

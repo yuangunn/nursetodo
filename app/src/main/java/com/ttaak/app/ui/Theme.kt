@@ -38,6 +38,7 @@ fun TtaakTheme(settings: Settings, content: @Composable () -> Unit) {
         darkColorScheme(
             primary = accent,
             onPrimary = Color.White,
+            inversePrimary = accent,
             background = Color.Black,
             surface = Color.Black,
             surfaceVariant = Color(0xFF1C1C1E),
@@ -53,6 +54,7 @@ fun TtaakTheme(settings: Settings, content: @Composable () -> Unit) {
         lightColorScheme(
             primary = accent,
             onPrimary = Color.White,
+            inversePrimary = accent, // 스낵바 '되돌리기' 색
             background = Color.White,
             surface = Color.White,
             surfaceVariant = Color(0xFFF2F2F7),

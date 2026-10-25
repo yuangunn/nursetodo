@@ -7,12 +7,16 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
+import android.util.TypedValue
+import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
 import com.ttaak.app.R
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.data.cardTextSp
 import com.ttaak.app.lock.LockActionReceiver
 import com.ttaak.app.lock.LockCard
 import com.ttaak.app.ui.Accents
@@ -26,7 +30,16 @@ class TaskWidgetProvider : AppWidgetProvider() {
         manager.notifyAppWidgetViewDataChanged(ids, R.id.list)
     }
 
+    /** 사용자가 위젯 크기를 바꾸면 계산기 버튼을 보이거나 숨깁니다. */
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) {
+        TaskStore.init(context)
+        manager.updateAppWidget(id, build(context, id))
+    }
+
     companion object {
+        /** 이 높이(dp) 이상으로 키우면 아래에 계산기 버튼을 붙입니다. 기본 3x2 보다 한 칸 이상 클 때. */
+        private const val CALC_MIN_HEIGHT_DP = 230
+
         fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java))
@@ -40,9 +53,22 @@ class TaskWidgetProvider : AppWidgetProvider() {
             val settings = TaskStore.settings.value
             val all = TaskStore.tasksFor(today, today)
             val accent = Accents[settings.accent.coerceIn(Accents.indices)].toArgb()
+            val sp = settings.cardTextSp()
+            val height = AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
+                .getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
 
             return RemoteViews(context.packageName, R.layout.widget_tasks).apply {
                 setTextViewText(R.id.title, Fmt.date(today))
+                setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, sp - 1)
+                setTextViewTextSize(R.id.progress, TypedValue.COMPLEX_UNIT_SP, sp - 3)
+                setViewVisibility(R.id.calc, if (height >= CALC_MIN_HEIGHT_DP) View.VISIBLE else View.GONE)
+                setOnClickPendingIntent(
+                    R.id.calc,
+                    PendingIntent.getActivity(
+                        context, 20, MainActivity.calcIntent(context),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    ),
+                )
                 setTextViewText(R.id.progress, if (all.isEmpty()) "" else "${all.count { it.isDone(today) }}/${all.size}")
                 setInt(R.id.add, "setColorFilter", accent)
                 setOnClickPendingIntent(R.id.add, LockCard.addIntent(context))

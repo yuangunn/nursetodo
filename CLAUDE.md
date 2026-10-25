@@ -13,6 +13,18 @@
 - **INTERNET 권한을 추가하지 않는다.** 데이터는 앱 내부 JSON 파일(`TaskStore`)에만 저장한다.
 - 잠금화면 카드는 공개(PUBLIC) + 고정(ongoing) 알림의 커스텀 RemoteViews다 (`lock/LockCard.kt`).
 - 앱을 고칠 때는 `app/build.gradle.kts`의 `versionCode`/`versionName`을 올려 기존 설치 위에 덮어 설치되게 한다.
+- 잠금화면 카드 안 버튼에는 **화면을 여는 PendingIntent를 걸지 않는다.** 시스템이 무조건 PIN부터 요구한다. 잠금 위에서 열어야 하는 화면은 카드 전체 탭(contentIntent) + `showWhenLocked` 액티비티로 연다. 체크처럼 화면이 없는 동작은 브로드캐스트로 한다.
+- 삼성 One UI 잠금화면 알림 스타일은 `Settings.System` 의 `lockscreen_minimizing_notification`(0 카드)이다. 앱은 읽을 수만 있고 쓰기는 안드로이드가 막는다(실기기 확인). 설정 화면은 `com.android.settings/.Settings$LockscreenNotificationActivity` 로 바로 연다.
+- 라이브 알림 모드(`lockLive`)는 커스텀 RemoteViews 없이 BigTextStyle + `android.requestPromotedOngoing` 로 만든다. 커스텀 화면을 넣으면 시스템이 promoted 로 올려 주지 않는다. One UI 9 에서 `PROMOTED_ONGOING` 으로 올라가고 잠금화면에 늘 펼쳐 보임(실기기 확인).
+- 삼성 Now Bar '실시간 정보'는 화이트리스트다. One UI 8.5(SM-A576S)에서 딱은 PROMOTED_ONGOING 인데도 목록에 없음. 앱별 토글은 `Settings.System` `key_now_bar_<패키지 . → _>`, 화면은 액션 `com.samsung.settings.NowBarLiveNotificationSettings`(aodservice). 사용자에게 Now Bar 켜라고 안내하지 말 것.
+- 삼성은 라이브 알림도 `lockscreen_minimizing_notification`=0(카드)이어야 잠금화면에 보인다. 삼성 앱 알림 설정에는 라이브 토글이 없고 `APP_NOTIFICATION_PROMOTION_SETTINGS`는 앱 알림 설정으로 열린다(One UI 8.5).
+- 딱 화면(`QuickAddActivity`)은 툭 잠금화면 모양: 테마 `windowShowWallpaper`(불투명, 배경화면이 비침 → 키가드를 가림) + 시계 + 유리 카드(검정 32%) + `＋ 할 일 추가` 알약, 위로 밀어 닫기. `EXTRA_LOOK_FIRST`면 입력칸을 접은 채로(화면 켜짐·카드 탭), 아니면 바로 입력(타일·위젯 `+`).
+- 딱 화면 줄: 동그라미만 체크(350ms 체크 표시 후 toggle), 글씨 탭 = `requestDismissKeyguard` 후 MainActivity, 길게 = 제자리 이름 고치기. 고치기 저장 뒤 `clearFocus()` 필수 — 안 하면 하드웨어 엔터의 남은 키 입력이 옆 줄 동그라미로 넘어가 체크됨(실기기 adb 로 재현).
+- '몇 분 뒤' 알람(`lock/Alarms.kt`): `TaskStore.alarms`(JSON "alarms") + `setAlarmClock`(USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM). 울리면 목록에서 빼고 `AlarmRingService`(mediaPlayback FGS)가 `AlarmSound` 로 직접 재생(USAGE_ALARM, 울리는 동안 STREAM_ALARM 을 설정 크기로 맞췄다 되돌림) + 진동, 조용한 채널 `alarm_ring` 알림의 fullScreenIntent 로 `AlarmActivity`. 10분 뒤 자동 정지. 채널 소리로는 알람음·크기를 못 바꿔서 이렇게 함. 부팅·업데이트 땐 `refreshSurfaces` → `Alarms.scheduleAll`. 울리는 중(`AlarmRingService.ringing`)엔 `LockPageService` 가 딱 화면을 띄우지 않음 — 채널로 판단하면 시스템 자동 묶음 요약(같은 채널)에 걸려 딱 화면이 영영 안 뜸(실기기 버그).
+- 끝낸 일은 잠금 카드·라이브·위젯·딱 화면에서 빼고, 앱 `TaskList` 맨 아래 접히는 '완료된 할 일'에만. `Task.doneAt`(ms) 저장, 만든 시각은 `createdAt = id`(만든 순간 ms).
+- 툭처럼 보이는 잠금화면은 알림으로는 안 된다(헤더 강제, 라이브 알림은 커스텀 거부). `LockPageService`(specialUse 포그라운드 서비스, SCREEN_ON 수신) + SYSTEM_ALERT_WINDOW 로 화면이 켜질 때 `QuickAddActivity`(showWhenLocked)를 띄운다. 서비스 알림 = 잠금화면 카드(같은 ID 1).
+- 삼성 실기기 검증은 Samsung Remote Test Lab + rdb(크롬에서만 연결됨)로 한다. `locksettings` 같은 명령은 막혀서 연결이 끊기고, 화면 잠금(PIN)은 설정할 수 없다.
+- 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).
 
 ## 빌드·검증
 
