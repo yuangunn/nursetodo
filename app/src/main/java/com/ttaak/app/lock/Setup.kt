@@ -31,6 +31,27 @@ object Setup {
         context.getSystemService(NotificationManager::class.java)
             .activeNotifications.any { it.id == LockCard.NOTIFICATION_ID }
 
+    /** Notification.FLAG_PROMOTED_ONGOING (API 36). compileSdk 35 라 값으로 씁니다. */
+    private const val FLAG_PROMOTED_ONGOING = 0x40000
+
+    /**
+     * 안드로이드 16+: 딱 알림이 실제로 라이브 알림으로 올라가 있는지. 앱이 요청해도 사용자가
+     * 앱 알림 설정의 '라이브 알림'을 끄면 시스템이 이 표시를 지우고 일반 알림으로 보여 줍니다.
+     */
+    fun liveShowing(context: Context): Boolean =
+        context.getSystemService(NotificationManager::class.java).activeNotifications.any {
+            it.id == LockCard.NOTIFICATION_ID && it.notification.flags and FLAG_PROMOTED_ONGOING != 0
+        }
+
+    /** 앱 알림 설정의 '라이브 알림' 토글 (Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS, API 36). */
+    fun openLiveSettings(context: Context) = open(
+        context,
+        Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS")
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+    )
+
     fun widgetAdded(context: Context): Boolean =
         AppWidgetManager.getInstance(context)
             .getAppWidgetIds(ComponentName(context, TaskWidgetProvider::class.java)).isNotEmpty()

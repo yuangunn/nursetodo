@@ -72,8 +72,10 @@ fun SetupGuide(
     val showing = remember(tick, settings) { allowed && Setup.cardShowing(context) }
     val widget = remember(tick, settings) { Setup.widgetAdded(context) }
     val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
+    val live = Build.VERSION.SDK_INT >= 36 && settings.lockLive
+    val promoted = remember(tick, settings) { live && Setup.liveShowing(context) }
 
-    val states = listOf(
+    val states = listOfNotNull(
         if (allowed) State.Done else State.Todo,
         if (showing) State.Done else State.Todo,
         when (style) {
@@ -83,6 +85,7 @@ fun SetupGuide(
         },
         if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
         if (widget) State.Done else State.Todo,
+        if (!live) null else if (promoted) State.Done else State.Todo,
     )
     // 다 끝났으면 빈 카드를 남기지 않습니다.
     if (hideDone && states.all { it == State.Done }) return
@@ -181,6 +184,24 @@ fun SetupGuide(
                 if (!Setup.requestWidget(context)) {
                     Toast.makeText(context, "홈 화면을 길게 눌러 위젯 → '딱'을 추가해 주세요", Toast.LENGTH_LONG).show()
                 }
+            }
+
+            if (live) {
+                // 삼성 Now Bar(잠금화면 아래 알약)는 삼성이 고른 앱만 들어가서 설정으로도 못 넣습니다 (One UI 8.5 실기기 확인).
+                Step(
+                    hideDone = hideDone,
+                    n = 6,
+                    state = states[5],
+                    title = "라이브 알림 (켠 경우)",
+                    body = when {
+                        !showing -> "2번을 먼저 해 주세요."
+                        promoted -> "잠금화면 맨 위에 펼쳐진 채로 떠 있어요."
+                        // 사용자가 끈 경우와 폰이 지원하지 않는 경우(안드로이드 16 초기판 등)를 앱이 구분할 수 없습니다.
+                        else -> "라이브 알림으로 안 올라가서 일반 알림으로 보여요. 열리는 화면에 '라이브'나 '실시간' 항목이 " +
+                            "있으면 켜 주세요. 없으면 이 폰은 지원하지 않아요."
+                    },
+                    action = "켜러 가기".takeIf { showing && !promoted },
+                ) { Setup.openLiveSettings(context) }
             }
         }
     }
