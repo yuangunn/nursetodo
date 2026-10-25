@@ -14,6 +14,8 @@
 - 잠금화면 카드는 공개(PUBLIC) + 고정(ongoing) 알림의 커스텀 RemoteViews다 (`lock/LockCard.kt`).
 - 앱을 고칠 때는 `app/build.gradle.kts`의 `versionCode`/`versionName`을 올려 기존 설치 위에 덮어 설치되게 한다.
 - 잠금화면 카드 안 버튼에는 **화면을 여는 PendingIntent를 걸지 않는다.** 시스템이 무조건 PIN부터 요구한다. 잠금 위에서 열어야 하는 화면은 카드 전체 탭(contentIntent) + `showWhenLocked` 액티비티로 연다. 체크처럼 화면이 없는 동작은 브로드캐스트로 한다.
+- 삼성 One UI 잠금화면 알림 스타일은 `Settings.System` 의 `lockscreen_minimizing_notification`(0 카드)이다. 앱은 읽을 수만 있고 쓰기는 안드로이드가 막는다(실기기 확인). 설정 화면은 `com.android.settings/.Settings$LockscreenNotificationActivity` 로 바로 연다.
+- 삼성 실기기 검증은 Samsung Remote Test Lab + rdb(크롬에서만 연결됨)로 한다. `locksettings` 같은 명령은 막혀서 연결이 끊기고, 화면 잠금(PIN)은 설정할 수 없다.
 - 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).
 
 ## 빌드·검증

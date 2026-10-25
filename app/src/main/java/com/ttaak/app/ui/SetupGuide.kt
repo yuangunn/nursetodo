@@ -71,6 +71,21 @@ fun SetupGuide(
     val blocked = remember(tick, settings) { Setup.channelBlocked(context) }
     val showing = remember(tick, settings) { allowed && Setup.cardShowing(context) }
     val widget = remember(tick, settings) { Setup.widgetAdded(context) }
+    val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
+
+    val states = listOf(
+        if (allowed) State.Done else State.Todo,
+        if (showing) State.Done else State.Todo,
+        when (style) {
+            0 -> State.Done
+            null -> State.Manual
+            else -> State.Todo
+        },
+        if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
+        if (widget) State.Done else State.Todo,
+    )
+    // 다 끝났으면 빈 카드를 남기지 않습니다.
+    if (hideDone && states.all { it == State.Done }) return
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -92,7 +107,7 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 1,
-                state = if (allowed) State.Done else State.Todo,
+                state = states[0],
                 title = "알림 허용",
                 body = "잠금화면 카드는 알림으로 표시돼요.",
                 action = "허용하기".takeIf { !allowed },
@@ -104,7 +119,7 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 2,
-                state = if (showing) State.Done else State.Todo,
+                state = states[1],
                 title = "잠금화면 카드 켜기",
                 body = when {
                     !allowed -> "1번을 먼저 해 주세요."
@@ -131,20 +146,26 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 3,
-                state = State.Manual,
+                state = states[2],
                 title = "잠금화면에 알림 내용 보이게",
-                body = "폰 설정이라 직접 바꿔야 해요. 화면을 끄고 켜서 카드가 보이는지 확인하세요.\n" +
-                    "· 삼성: 설정 → 잠금화면 및 AOD → 알림 → 스타일 '상세히' + '내용 표시'\n" +
-                    "· 픽셀/기타: 설정 → 알림 → 잠금 화면의 알림 → '모든 알림 표시'",
-                action = "설정 열기",
+                body = when (style) {
+                    0 -> "잠금화면 알림이 '카드'로 보여요."
+                    null -> "폰 설정이라 직접 바꿔야 해요. 화면을 끄고 켜서 카드가 보이는지 확인하세요.\n" +
+                        "· 삼성: 설정 → 알림 → 잠금화면 → 알림 스타일 '카드'\n" +
+                        "· 픽셀/기타: 설정 → 알림 → 잠금 화면의 알림 → '모든 알림 표시'"
+                    else -> "잠금화면 알림이 '${if (style == 1) "아이콘" else "동그란 점"}'이라 딱 카드가 안 보여요. " +
+                        "열리는 화면에서 알림 스타일을 '카드'로 골라 주세요."
+                },
+                action = "설정 열기".takeIf { style != 0 },
             ) { Setup.openLockScreenSettings(context) }
 
             Step(
                 hideDone = hideDone,
                 n = 4,
-                state = if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
+                state = states[3],
                 title = "잠금화면에서 바로 추가 (상단바 버튼)",
-                body = if (Setup.canRequestTile) "상단바를 내려 '딱 추가'를 누르면 잠금을 풀지 않고 적을 수 있어요."
+                body = if (Setup.canRequestTile) "상단바를 내려 '딱 추가'(✓)를 누르면 잠금을 풀지 않고 적을 수 있어요. " +
+                    "삼성은 오른쪽 위에서 내린 빠른 설정창 맨 아래에 있어요."
                 else "상단바를 내려 연필(편집) 버튼 → '딱 추가' 타일을 끌어다 놓으세요.",
                 action = "추가하기".takeIf { Setup.canRequestTile && !settings.tileAdded },
             ) { (context as? Activity)?.let { Setup.requestTile(it) } }
@@ -152,7 +173,7 @@ fun SetupGuide(
             Step(
                 hideDone = hideDone,
                 n = 5,
-                state = if (widget) State.Done else State.Todo,
+                state = states[4],
                 title = "홈 화면 위젯 (선택)",
                 body = if (widget) "위젯이 홈 화면에 있어요." else "홈 화면을 길게 눌러 위젯 → '딱'을 골라도 돼요.",
                 action = "추가하기".takeIf { !widget },

@@ -76,9 +76,24 @@ object Setup {
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
     )
 
+    /** 삼성 One UI: 설정 → 알림 → 잠금화면 → 알림 스타일 (0 카드, 1 아이콘, 2 동그란 점). */
+    private const val SAMSUNG_LOCK_STYLE = "lockscreen_minimizing_notification"
+
+    /**
+     * 삼성 폰의 잠금화면 알림 스타일. 카드(0)가 아니면 딱 카드가 잠금화면에 안 보입니다. 삼성이 아니거나 못 읽으면 null.
+     * 앱이 직접 바꾸는 건 안드로이드가 막습니다(시스템 설정 변경 권한이 있어도). 화면을 열어 주는 데까지만 합니다.
+     */
+    fun samsungLockStyle(context: Context): Int? = try {
+        Settings.System.getInt(context.contentResolver, SAMSUNG_LOCK_STYLE)
+    } catch (_: Exception) {
+        null
+    }
+
     /** 잠금화면 알림 설정. 제조사마다 화면이 달라서 되는 것부터 차례로 시도합니다. */
     fun openLockScreenSettings(context: Context) = open(
         context,
+        // 삼성 One UI 7+ 의 '알림 → 잠금화면' 화면 (카드/아이콘 선택이 바로 보임)
+        Intent().setClassName("com.android.settings", "com.android.settings.Settings\$LockscreenNotificationActivity"),
         Intent("android.settings.LOCK_SCREEN_SETTINGS"),
         Intent("android.settings.NOTIFICATION_SETTINGS"),
         Intent(Settings.ACTION_SETTINGS),
