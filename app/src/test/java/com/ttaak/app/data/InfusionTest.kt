@@ -53,6 +53,19 @@ class InfusionTest {
     }
 
     @Test
+    fun primingCanBeLeftOut() {
+        // priming 빼기: 칸이 비어 있거나 이상해도 무시하고 Base + 항암만
+        val r = Infusion.calc("100", "50", "", "60", timeInHours = false, includePriming = false) as Infusion.Rate
+        assertEquals(150.0, r.totalCc, 0.0)
+        assertEquals("150.0", r.ccPerHr.toPlainString())
+        assertEquals("75.0", rate2("100", "50", "abc", "2"))
+    }
+
+    private fun rate2(base: String, chemo: String, priming: String, hours: String) =
+        (Infusion.calc(base, chemo, priming, hours, timeInHours = true, includePriming = false) as Infusion.Rate)
+            .ccPerHr.toPlainString()
+
+    @Test
     fun numberFormatting() {
         assertEquals("170", Infusion.num(170.0))
         assertEquals("12.5", Infusion.num(12.5))

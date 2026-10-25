@@ -170,7 +170,6 @@ object TaskStore {
         put("setupDismissed", setupDismissed)
         put("tileAdded", tileAdded)
         put("calcHours", calcHours)
-        put("calcFluid", calcFluid)
         put("cardTextSize", cardTextSize)
         put("lockLive", lockLive)
     }
@@ -190,7 +189,6 @@ object TaskStore {
             setupDismissed = optBoolean("setupDismissed", d.setupDismissed),
             tileAdded = optBoolean("tileAdded", d.tileAdded),
             calcHours = optBoolean("calcHours", d.calcHours),
-            calcFluid = optInt("calcFluid", d.calcFluid),
             cardTextSize = optInt("cardTextSize", d.cardTextSize),
             lockLive = optBoolean("lockLive", d.lockLive),
         )

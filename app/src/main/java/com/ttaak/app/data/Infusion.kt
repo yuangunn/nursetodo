@@ -8,8 +8,9 @@ import java.math.RoundingMode
  *
  * priming 은 항암제가 아닌 별도 수액으로 line 을 채운 용량이라, 그 용량까지 환자에게 들어갑니다.
  * (항암제로 바로 priming 하면 간호사·환자가 노출될 수 있어서 쓰지 않는 방식)
+ * priming 을 빼고 계산하고 싶을 때는 [calc] 의 includePriming 을 끕니다.
  *
- *   총 주입량(cc)   = Base fluid + 항암 fluid + Priming
+ *   총 주입량(cc)   = Base fluid + 항암 fluid (+ Priming)
  *   주입속도(cc/hr) = 총 주입량 ÷ 투여시간(hr)
  */
 object Infusion {
@@ -21,8 +22,17 @@ object Infusion {
     data class Invalid(val message: String) : Result
 
     /** 화면 입력 글자 그대로 받아서 검증하고 계산합니다. */
-    fun calc(base: String, chemo: String, priming: String, time: String, timeInHours: Boolean): Result {
-        val volumes = listOf("Base fluid" to base, "항암 fluid" to chemo, "Priming" to priming).map { (name, text) ->
+    fun calc(
+        base: String,
+        chemo: String,
+        priming: String,
+        time: String,
+        timeInHours: Boolean,
+        includePriming: Boolean = true,
+    ): Result {
+        val fields = listOf("Base fluid" to base, "항암 fluid" to chemo) +
+            listOfNotNull(("Priming" to priming).takeIf { includePriming })
+        val volumes = fields.map { (name, text) ->
             parse(text) ?: return Invalid(if (text.isBlank()) "$name 용량을 입력하세요" else "$name: 숫자만 입력하세요")
         }
         val t = parse(time) ?: return Invalid(if (time.isBlank()) "투여시간을 입력하세요" else "투여시간: 숫자만 입력하세요")
