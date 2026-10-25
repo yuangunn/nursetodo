@@ -5,6 +5,7 @@ import android.content.Intent
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StrikethroughSpan
+import android.util.TypedValue
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import androidx.compose.ui.graphics.toArgb
@@ -12,6 +13,7 @@ import com.ttaak.app.R
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.data.cardTextSp
 import com.ttaak.app.lock.LockActionReceiver
 import com.ttaak.app.ui.Accents
 import java.util.concurrent.CountDownLatch
@@ -25,6 +27,7 @@ class TaskWidgetService : RemoteViewsService() {
         private var items: List<Task> = emptyList()
         private var today = Day.today()
         private var accent = 0
+        private var sp = 16f
 
         override fun onCreate() {}
 
@@ -36,6 +39,7 @@ class TaskWidgetService : RemoteViewsService() {
                 items = TaskStore.tasksFor(today, today)
                 val s = TaskStore.settings.value
                 accent = Accents[s.accent.coerceIn(Accents.indices)].toArgb()
+                sp = s.cardTextSp()
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 load()
@@ -64,6 +68,7 @@ class TaskWidgetService : RemoteViewsService() {
                     }
                 } else task.title
                 setTextViewText(R.id.text, text)
+                setTextViewTextSize(R.id.text, TypedValue.COMPLEX_UNIT_SP, sp)
                 if (done) setTextColor(R.id.text, 0xFF9E9E9E.toInt())
                 setImageViewResource(R.id.check, if (done) R.drawable.ic_check_on else R.drawable.ic_check_off)
                 setInt(R.id.check, "setColorFilter", if (done) accent else 0xFF9E9E9E.toInt())

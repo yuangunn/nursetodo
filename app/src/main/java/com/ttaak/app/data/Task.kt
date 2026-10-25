@@ -66,7 +66,16 @@ data class Settings(
     /** 계산기: 투여시간 단위(true=시간, false=분)와 Base fluid 종류(0=NS, 1=5DW). 용량은 저장하지 않습니다. */
     val calcHours: Boolean = false,
     val calcFluid: Int = 0,
+    /** 잠금화면 카드·홈 위젯 글자 크기 ([CardTextSizes] 의 순번). 앱 목록 글자([textSize])와 따로 둡니다. */
+    val cardTextSize: Int = 1,
+    /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시 — 시험 기능. */
+    val lockLive: Boolean = false,
 )
+
+/** 잠금화면 카드·위젯 글자 크기(sp). 기본 '크게' 수준이 1.1 의 14sp 보다 큽니다. */
+val CardTextSizes = listOf("보통" to 16f, "크게" to 19f, "아주 크게" to 23f)
+
+fun Settings.cardTextSp(): Float = CardTextSizes[cardTextSize.coerceIn(CardTextSizes.indices)].second
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()

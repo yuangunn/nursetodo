@@ -83,10 +83,14 @@ object Setup {
      * 삼성 폰의 잠금화면 알림 스타일. 카드(0)가 아니면 딱 카드가 잠금화면에 안 보입니다. 삼성이 아니거나 못 읽으면 null.
      * 앱이 직접 바꾸는 건 안드로이드가 막습니다(시스템 설정 변경 권한이 있어도). 화면을 열어 주는 데까지만 합니다.
      */
-    fun samsungLockStyle(context: Context): Int? = try {
-        Settings.System.getInt(context.contentResolver, SAMSUNG_LOCK_STYLE)
-    } catch (_: Exception) {
-        null
+    fun samsungLockStyle(context: Context): Int? {
+        if (!Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return null
+        // 한 번도 안 바꾼 폰은 값이 아예 없고, 그때 잠금화면은 '아이콘'으로 보입니다 (One UI 9 실기기 확인).
+        return try {
+            Settings.System.getInt(context.contentResolver, SAMSUNG_LOCK_STYLE, 1)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /** 잠금화면 알림 설정. 제조사마다 화면이 달라서 되는 것부터 차례로 시도합니다. */

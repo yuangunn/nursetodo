@@ -1,6 +1,7 @@
 package com.ttaak.app.ui
 
 import android.app.DatePickerDialog
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ttaak.app.data.CardTextSizes
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.TaskStore
@@ -70,6 +72,12 @@ fun SettingsScreen() {
         Section("잠금화면 카드")
         SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
         SwitchRow("완료한 일은 카드에서 숨기기", s.lockHideDone) { v -> TaskStore.updateSettings { it.copy(lockHideDone = v) } }
+        ChoiceRow("카드·위젯 글자", CardTextSizes.map { it.first }, s.cardTextSize) { i ->
+            TaskStore.updateSettings { it.copy(cardTextSize = i) }
+        }
+        if (Build.VERSION.SDK_INT >= 36) {
+            SwitchRow("라이브 알림으로 크게 표시 (시험)", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
+        }
         SettingField(
             value = s.lockText,
             max = 40,

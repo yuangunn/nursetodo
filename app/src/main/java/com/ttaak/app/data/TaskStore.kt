@@ -171,6 +171,8 @@ object TaskStore {
         put("tileAdded", tileAdded)
         put("calcHours", calcHours)
         put("calcFluid", calcFluid)
+        put("cardTextSize", cardTextSize)
+        put("lockLive", lockLive)
     }
 
     private fun JSONObject.toSettings() = Settings().let { d ->
@@ -189,6 +191,8 @@ object TaskStore {
             tileAdded = optBoolean("tileAdded", d.tileAdded),
             calcHours = optBoolean("calcHours", d.calcHours),
             calcFluid = optInt("calcFluid", d.calcFluid),
+            cardTextSize = optInt("cardTextSize", d.cardTextSize),
+            lockLive = optBoolean("lockLive", d.lockLive),
         )
     }
 }

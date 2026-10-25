@@ -10,6 +10,8 @@ import android.content.Intent
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StrikethroughSpan
+import android.os.Bundle
+import android.util.TypedValue
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
@@ -19,6 +21,7 @@ import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.data.cardTextSp
 import com.ttaak.app.ui.Accents
 import java.time.LocalDate
 import java.time.ZoneId
@@ -32,7 +35,6 @@ import java.time.ZoneId
 object LockCard {
     const val CHANNEL_ID = "lock_card"
     const val NOTIFICATION_ID = 1
-    private const val MAX_ROWS = 6
 
     fun createChannel(context: Context) {
         val channel = NotificationChannel(
@@ -77,10 +79,21 @@ object LockCard {
         val progress = if (all.isEmpty()) "" else "$doneCount/${all.size}"
         val headline = Fmt.headline(settings, today)
         val remaining = all.filterNot { it.isDone(today) }
+        if (settings.lockLive) return buildLive(context, title, progress, headline, all, remaining, accent)
+
+        // 펼친 카드 높이는 시스템이 약 256dp 로 자르므로 글자가 클수록 줄 수를 줄입니다.
+        val sp = settings.cardTextSp()
+        val maxRows = when (settings.cardTextSize) {
+            0 -> 6
+            1 -> 5
+            else -> 4
+        }
 
         val collapsed = RemoteViews(context.packageName, R.layout.lock_card_small).apply {
             setTextViewText(R.id.title, title)
+            setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, sp - 2)
             setTextViewText(R.id.progress, progress)
+            setTextViewTextSize(R.id.summary, TypedValue.COMPLEX_UNIT_SP, sp)
             setTextViewText(
                 R.id.summary,
                 when {
@@ -102,12 +115,13 @@ object LockCard {
 
         val expanded = RemoteViews(context.packageName, R.layout.lock_card_big).apply {
             setTextViewText(R.id.title, title)
+            setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, sp)
             setTextViewText(R.id.progress, progress)
             setTextViewText(R.id.headline, headline)
             setViewVisibility(R.id.headline, if (headline.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
             removeAllViews(R.id.rows)
-            shown.take(MAX_ROWS).forEach { addView(R.id.rows, row(context, it, today, accent)) }
-            val more = shown.size - MAX_ROWS
+            shown.take(maxRows).forEach { addView(R.id.rows, row(context, it, today, accent, sp)) }
+            val more = shown.size - maxRows
             setViewVisibility(R.id.more, if (more > 0) android.view.View.VISIBLE else android.view.View.GONE)
             setTextViewText(R.id.more, "+ ${more}개 더")
             setViewVisibility(R.id.empty, if (shown.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE)
@@ -116,6 +130,8 @@ object LockCard {
                 context.getString(if (all.isEmpty()) R.string.lock_empty else R.string.lock_all_done),
             )
             setTextColor(R.id.add, accent)
+            setTextViewTextSize(R.id.add, TypedValue.COMPLEX_UNIT_SP, sp - 2)
+            setTextViewTextSize(R.id.empty, TypedValue.COMPLEX_UNIT_SP, sp)
         }
 
         // `＋ 추가` 에 PendingIntent 를 따로 걸면 시스템이 잠금 해제(PIN)부터 요구합니다.
@@ -141,7 +157,50 @@ object LockCard {
             .build()
     }
 
-    private fun row(context: Context, task: Task, today: Long, accent: Int): RemoteViews {
+    /**
+     * 라이브 알림 (안드로이드 16+ Live Updates, 삼성은 Now Bar). 시스템이 잠금화면 위쪽에 크게 보여 주는 대신
+     * 커스텀 화면을 못 써서 줄마다 체크는 안 되고, '다음 할 일 완료' 버튼 하나만 둡니다. 시험 기능.
+     */
+    private fun buildLive(
+        context: Context,
+        title: String,
+        progress: String,
+        headline: String,
+        all: List<Task>,
+        remaining: List<Task>,
+        accent: Int,
+    ): Notification {
+        val first = remaining.firstOrNull()
+        val empty = context.getString(if (all.isEmpty()) R.string.lock_empty else R.string.lock_all_done)
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_check)
+            .setColor(accent)
+            .setContentTitle(listOf(title, progress).filter { it.isNotEmpty() }.joinToString("  "))
+            .setContentText(first?.title ?: empty)
+            .setSubText(headline.ifEmpty { null })
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(remaining.joinToString("\n") { "○  ${it.title}" }.ifEmpty { empty }),
+            )
+            .apply { if (first != null) addAction(0, "✓ ${first.title}", toggleIntent(context, first.id)) }
+            .setContentIntent(addIntent(context))
+            .setDeleteIntent(broadcast(context, LockActionReceiver.ACTION_REPOST, 1))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .addExtras(
+                Bundle().apply {
+                    // Notification.EXTRA_REQUEST_PROMOTED_ONGOING / EXTRA_SHORT_CRITICAL_TEXT (API 36)
+                    putBoolean("android.requestPromotedOngoing", true)
+                    if (progress.isNotEmpty()) putCharSequence("android.shortCriticalText", progress)
+                },
+            )
+            .build()
+    }
+
+    private fun row(context: Context, task: Task, today: Long, accent: Int, sp: Float): RemoteViews {
         val done = task.isDone(today)
         return RemoteViews(context.packageName, R.layout.lock_card_row).apply {
             val text: CharSequence = if (done) {
@@ -150,6 +209,7 @@ object LockCard {
                 }
             } else task.title
             setTextViewText(R.id.text, text)
+            setTextViewTextSize(R.id.text, TypedValue.COMPLEX_UNIT_SP, sp)
             if (done) setTextColor(R.id.text, 0xFF9E9E9E.toInt())
             setImageViewResource(R.id.check, if (done) R.drawable.ic_check_on else R.drawable.ic_check_off)
             setInt(R.id.check, "setColorFilter", if (done) accent else 0xFF9E9E9E.toInt())

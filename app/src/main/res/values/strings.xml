@@ -11,6 +11,7 @@
     <string name="tile_label">딱 추가</string>
     <string name="widget_label">오늘 할 일</string>
     <string name="widget_desc">오늘 할 일을 보고 바로 체크해요</string>
+    <string name="widget_calc">항암 주입속도 계산기</string>
     <string name="preview_done">약 챙기기</string>
     <string name="preview_1">회의 자료 정리</string>
     <string name="preview_2">퇴근 전 인계</string>

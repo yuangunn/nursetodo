@@ -51,7 +51,19 @@ class RenderTest {
         inflate(builder.createContentView())
         val big = inflate(builder.createBigContentView())
         val rows = big.findViewById<android.widget.LinearLayout>(R.id.rows)
-        assertEquals(6, rows.childCount)
+        assertEquals(5, rows.childCount) // 기본 글자 '크게'는 5줄까지
+    }
+
+    @Test
+    fun liveModeIsPlainPromotedNotification() {
+        seed()
+        TaskStore.updateSettings { it.copy(lockLive = true) }
+        val n = LockCard.build(context)
+        // 라이브 알림(Live Updates)은 커스텀 화면이 있으면 시스템이 올려 주지 않습니다.
+        assertEquals(null, n.contentView)
+        assertTrue(n.extras.getBoolean("android.requestPromotedOngoing"))
+        assertEquals(1, n.actions.size)
+        TaskStore.updateSettings { it.copy(lockLive = false) }
     }
 
     @Test

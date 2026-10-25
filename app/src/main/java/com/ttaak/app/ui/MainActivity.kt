@@ -1,6 +1,8 @@
 package com.ttaak.app.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -25,6 +27,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +48,9 @@ import com.ttaak.app.data.TaskStore
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    /** 위젯 등 바깥에서 열어 달라고 한 탭. 보여 준 뒤 -1 로 돌립니다. */
+    private val requestedTab = mutableIntStateOf(-1)
+
     private val askNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             (application as TtaakApp).refreshSurfaces()
@@ -59,10 +65,24 @@ class MainActivity : ComponentActivity() {
         ) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
-            TtaakTheme(settings) { Root() }
+            TtaakTheme(settings) { Root(requestedTab.intValue) { requestedTab.intValue = -1 } }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
+    }
+
+    companion object {
+        private const val EXTRA_TAB = "tab"
+
+        fun calcIntent(context: Context): Intent = Intent(context, MainActivity::class.java)
+            .putExtra(EXTRA_TAB, 2)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     override fun onResume() {
@@ -73,8 +93,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Root() {
+private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(requestedTab) {
+        if (requestedTab >= 0) {
+            tab = requestedTab
+            onTabShown()
+        }
+    }
     var editing by remember { mutableStateOf<Task?>(null) }
     // 탭을 옮겨 다녀도 각 탭의 입력값·선택한 날짜가 남도록
     val tabState = rememberSaveableStateHolder()

@@ -4,6 +4,8 @@
     <!-- 인트라넷 전용: INTERNET 권한 없음. 모든 데이터는 기기 안에만 저장됩니다. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 안드로이드 16+ 라이브 알림(Live Updates). 설정에서 켤 때만 씁니다. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <application
         android:name=".TtaakApp"
