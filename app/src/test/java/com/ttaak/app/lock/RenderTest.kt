@@ -73,7 +73,7 @@ class RenderTest {
             .onGetViewFactory(android.content.Intent())
         factory.onCreate()
         factory.onDataSetChanged()
-        assertEquals(8, factory.count)
+        assertEquals(7, factory.count) // 끝낸 1개는 위젯에서 사라짐
         repeat(factory.count) { inflate(factory.getViewAt(it)) }
         inflate(RemoteViews(context.packageName, R.layout.widget_tasks))
     }

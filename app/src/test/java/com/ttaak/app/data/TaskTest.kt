@@ -68,6 +68,22 @@ class TaskTest {
     }
 
     @Test
+    fun doneTimeIsRecorded() {
+        val now = java.time.LocalDate.ofEpochDay(today).atTime(14, 5)
+            .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val t = Task(now - 3_600_000, "a", createdDay = today).toggled(today, now)
+        assertEquals(now, t.doneAtOn(today))
+        assertEquals(null, t.toggled(today).doneAt) // 체크 해제하면 지움
+        assertEquals("오늘 14:05", Fmt.stamp(now, today))
+        assertEquals("오늘 13:05", Fmt.stamp(t.createdAt, today))
+        assertEquals("어제 14:05", Fmt.stamp(now, today + 1))
+        // 루틴은 마지막 체크가 그날일 때만 시각을 압니다.
+        val r = Task(1, "r", createdDay = today, repeatMask = Task.EVERY_DAY).toggled(today - 1, now - 86_400_000).toggled(today, now)
+        assertEquals(now, r.doneAtOn(today))
+        assertEquals(null, r.doneAtOn(today - 1))
+    }
+
+    @Test
     fun formatting() {
         assertEquals("D-3", Fmt.dday(today + 3, today))
         assertEquals("D-DAY", Fmt.dday(today, today))

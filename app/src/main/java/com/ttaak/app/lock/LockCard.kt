@@ -7,9 +7,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.StrikethroughSpan
 import android.os.Bundle
 import android.util.TypedValue
 import android.widget.RemoteViews
@@ -72,12 +69,12 @@ object LockCard {
         val settings = TaskStore.settings.value
         val all = TaskStore.tasksFor(today, today)
         val doneCount = all.count { it.isDone(today) }
-        val shown = if (settings.lockHideDone) all.filterNot { it.isDone(today) } else all
         val accent = Accents[settings.accent.coerceIn(Accents.indices)].toArgb()
 
         val title = Fmt.date(today)
         val progress = if (all.isEmpty()) "" else "$doneCount/${all.size}"
         val headline = Fmt.headline(settings, today)
+        // 끝낸 일은 잠금화면에서 사라지고 앱의 '완료된 할 일'에서만 보입니다.
         val remaining = all.filterNot { it.isDone(today) }
         if (settings.lockLive) return buildLive(context, progress, headline, all, remaining, accent)
 
@@ -120,11 +117,11 @@ object LockCard {
             setTextViewText(R.id.headline, headline)
             setViewVisibility(R.id.headline, if (headline.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
             removeAllViews(R.id.rows)
-            shown.take(maxRows).forEach { addView(R.id.rows, row(context, it, today, accent, sp)) }
-            val more = shown.size - maxRows
+            remaining.take(maxRows).forEach { addView(R.id.rows, row(context, it, sp)) }
+            val more = remaining.size - maxRows
             setViewVisibility(R.id.more, if (more > 0) android.view.View.VISIBLE else android.view.View.GONE)
             setTextViewText(R.id.more, "+ ${more}개 더")
-            setViewVisibility(R.id.empty, if (shown.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE)
+            setViewVisibility(R.id.empty, if (remaining.isEmpty()) android.view.View.VISIBLE else android.view.View.GONE)
             setTextViewText(
                 R.id.empty,
                 context.getString(if (all.isEmpty()) R.string.lock_empty else R.string.lock_all_done),
@@ -201,22 +198,14 @@ object LockCard {
             .build()
     }
 
-    private fun row(context: Context, task: Task, today: Long, accent: Int, sp: Float): RemoteViews {
-        val done = task.isDone(today)
-        return RemoteViews(context.packageName, R.layout.lock_card_row).apply {
-            val text: CharSequence = if (done) {
-                SpannableString(task.title).apply {
-                    setSpan(StrikethroughSpan(), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-            } else task.title
-            setTextViewText(R.id.text, text)
+    private fun row(context: Context, task: Task, sp: Float): RemoteViews =
+        RemoteViews(context.packageName, R.layout.lock_card_row).apply {
+            setTextViewText(R.id.text, task.title)
             setTextViewTextSize(R.id.text, TypedValue.COMPLEX_UNIT_SP, sp)
-            if (done) setTextColor(R.id.text, 0xFF9E9E9E.toInt())
-            setImageViewResource(R.id.check, if (done) R.drawable.ic_check_on else R.drawable.ic_check_off)
-            setInt(R.id.check, "setColorFilter", if (done) accent else 0xFF9E9E9E.toInt())
+            setImageViewResource(R.id.check, R.drawable.ic_check_off)
+            setInt(R.id.check, "setColorFilter", 0xFF9E9E9E.toInt())
             setOnClickPendingIntent(R.id.row, toggleIntent(context, task.id))
         }
-    }
 
     private fun toggleIntent(context: Context, id: Long): PendingIntent {
         val intent = Intent(context, LockActionReceiver::class.java)

@@ -1,7 +1,9 @@
 package com.ttaak.app.data
 
 import android.os.Build
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * 할 일 하나.
@@ -11,6 +13,7 @@ import java.time.LocalDate
  * - [repeatMask] 가 0이 아니면 루틴. 월(bit0)~일(bit6) 중 켜진 요일마다 다시 나타납니다.
  * - [doneOn] 은 일반 할 일을 체크한 날(epochDay).
  * - [doneDays] 는 루틴을 체크한 날들. 날마다 따로 기록해서 캘린더에서 지난 날도 맞게 보입니다.
+ * - [doneAt] 은 마지막으로 체크한 시각(ms). 앱의 '완료된 할 일'에 보여 줍니다. 1.2 이전에 체크한 것은 없습니다.
  */
 data class Task(
     val id: Long,
@@ -22,16 +25,23 @@ data class Task(
     val order: Long = 0,
     // ponytail: 매일 루틴이면 1년에 365개씩 쌓임. 수천 개가 돼도 JSON 몇 KB라 정리하지 않음
     val doneDays: Set<Long> = emptySet(),
+    val doneAt: Long? = null,
 ) {
     val isRoutine: Boolean get() = repeatMask != 0
+
+    /** 만든 시각(ms). id 를 만든 순간의 시각으로 정하므로 따로 저장하지 않습니다. */
+    val createdAt: Long get() = id
+
+    /** [day] 에 체크한 시각. 루틴은 마지막 체크가 그날일 때만 압니다. */
+    fun doneAtOn(day: Long): Long? = doneAt?.takeIf { isDone(day) && (!isRoutine || Day.of(it) == day) }
 
     fun isDone(day: Long): Boolean = if (isRoutine) day in doneDays else doneOn != null
 
     /** [day] 에 체크/체크 해제한 결과. */
-    fun toggled(day: Long): Task = when {
-        isRoutine -> copy(doneDays = if (day in doneDays) doneDays - day else doneDays + day)
-        doneOn != null -> copy(doneOn = null)
-        else -> copy(doneOn = day)
+    fun toggled(day: Long, now: Long = System.currentTimeMillis()): Task = when {
+        isRoutine -> if (day in doneDays) copy(doneDays = doneDays - day) else copy(doneDays = doneDays + day, doneAt = now)
+        doneOn != null -> copy(doneOn = null, doneAt = null)
+        else -> copy(doneOn = day, doneAt = now)
     }
 
     fun repeatsOn(day: Long): Boolean = repeatMask and weekdayBit(day) != 0
@@ -54,7 +64,6 @@ data class Task(
 data class Settings(
     val newOnTop: Boolean = false,
     val lockEnabled: Boolean = true,
-    val lockHideDone: Boolean = false,
     val lockText: String = "",
     val ddayLabel: String = "",
     val ddayDate: Long? = null,
@@ -81,4 +90,7 @@ fun Settings.cardTextSp(): Float = CardTextSizes[cardTextSize.coerceIn(CardTextS
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()
+
+    /** 시각(ms)이 속한 날. */
+    fun of(ms: Long): Long = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
 }

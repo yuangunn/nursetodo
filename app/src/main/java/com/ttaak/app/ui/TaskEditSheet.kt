@@ -142,6 +142,15 @@ fun TaskEditSheet(task: Task, onDismiss: () -> Unit, onDelete: (Task) -> Unit) {
                 )
             }
 
+            Text(
+                listOfNotNull(
+                    "만듦 " + Fmt.stamp(task.createdAt),
+                    task.doneAt?.takeIf { task.doneOn != null || task.isRoutine }?.let { "마지막 완료 " + Fmt.stamp(it) },
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = {
                     onDismiss()

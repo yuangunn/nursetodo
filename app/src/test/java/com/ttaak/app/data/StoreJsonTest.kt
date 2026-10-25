@@ -20,6 +20,12 @@ class StoreJsonTest {
     }
 
     @Test
+    fun doneAtRoundTrips() = with(TaskStore) {
+        val t = Task(5, "채혈", createdDay = 20000, doneOn = 20010, doneAt = 1_761_000_000_000)
+        assertEquals(t, t.toJson().toTask())
+    }
+
+    @Test
     fun legacyPlainTaskKeepsDoneOn() = with(TaskStore) {
         val t = JSONObject("""{"id":1,"title":"보고서","created":20000,"repeat":0,"doneOn":20010,"order":3}""").toTask()
         assertEquals(20010L, t.doneOn)

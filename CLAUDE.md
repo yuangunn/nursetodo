@@ -19,6 +19,8 @@
 - 삼성 Now Bar '실시간 정보'는 화이트리스트다. One UI 8.5(SM-A576S)에서 딱은 PROMOTED_ONGOING 인데도 목록에 없음. 앱별 토글은 `Settings.System` `key_now_bar_<패키지 . → _>`, 화면은 액션 `com.samsung.settings.NowBarLiveNotificationSettings`(aodservice). 사용자에게 Now Bar 켜라고 안내하지 말 것.
 - 삼성은 라이브 알림도 `lockscreen_minimizing_notification`=0(카드)이어야 잠금화면에 보인다. 삼성 앱 알림 설정에는 라이브 토글이 없고 `APP_NOTIFICATION_PROMOTION_SETTINGS`는 앱 알림 설정으로 열린다(One UI 8.5).
 - 딱 화면(`QuickAddActivity`)은 툭 잠금화면 모양: 테마 `windowShowWallpaper`(불투명, 배경화면이 비침 → 키가드를 가림) + 시계 + 유리 카드(검정 32%) + `＋ 할 일 추가` 알약, 위로 밀어 닫기. `EXTRA_LOOK_FIRST`면 입력칸을 접은 채로(화면 켜짐·카드 탭), 아니면 바로 입력(타일·위젯 `+`).
+- 딱 화면 줄: 동그라미만 체크(350ms 체크 표시 후 toggle), 글씨 탭 = `requestDismissKeyguard` 후 MainActivity, 길게 = 제자리 이름 고치기. 고치기 저장 뒤 `clearFocus()` 필수 — 안 하면 하드웨어 엔터의 남은 키 입력이 옆 줄 동그라미로 넘어가 체크됨(실기기 adb 로 재현).
+- 끝낸 일은 잠금 카드·라이브·위젯·딱 화면에서 빼고, 앱 `TaskList` 맨 아래 접히는 '완료된 할 일'에만. `Task.doneAt`(ms) 저장, 만든 시각은 `createdAt = id`(만든 순간 ms).
 - 툭처럼 보이는 잠금화면은 알림으로는 안 된다(헤더 강제, 라이브 알림은 커스텀 거부). `LockPageService`(specialUse 포그라운드 서비스, SCREEN_ON 수신) + SYSTEM_ALERT_WINDOW 로 화면이 켜질 때 `QuickAddActivity`(showWhenLocked)를 띄운다. 서비스 알림 = 잠금화면 카드(같은 ID 1).
 - 삼성 실기기 검증은 Samsung Remote Test Lab + rdb(크롬에서만 연결됨)로 한다. `locksettings` 같은 명령은 막혀서 연결이 끊기고, 화면 잠금(PIN)은 설정할 수 없다.
 - 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).

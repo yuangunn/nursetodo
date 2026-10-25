@@ -137,6 +137,7 @@ object TaskStore {
         doneOn?.let { put("doneOn", it) }
         put("order", order)
         if (doneDays.isNotEmpty()) put("doneDays", JSONArray(doneDays.sorted()))
+        doneAt?.let { put("doneAt", it) }
     }
 
     internal fun JSONObject.toTask(): Task {
@@ -153,13 +154,13 @@ object TaskStore {
             doneOn = doneOn.takeIf { repeat == 0 },
             order = optLong("order"),
             doneDays = doneDays ?: if (repeat != 0 && doneOn != null) setOf(doneOn) else emptySet(),
+            doneAt = if (has("doneAt")) getLong("doneAt") else null,
         )
     }
 
     private fun Settings.toJson() = JSONObject().apply {
         put("newOnTop", newOnTop)
         put("lockEnabled", lockEnabled)
-        put("lockHideDone", lockHideDone)
         put("lockText", lockText)
         put("ddayLabel", ddayLabel)
         ddayDate?.let { put("ddayDate", it) }
@@ -179,7 +180,6 @@ object TaskStore {
         Settings(
             newOnTop = optBoolean("newOnTop", d.newOnTop),
             lockEnabled = optBoolean("lockEnabled", d.lockEnabled),
-            lockHideDone = optBoolean("lockHideDone", d.lockHideDone),
             lockText = optString("lockText", d.lockText),
             ddayLabel = optString("ddayLabel", d.ddayLabel),
             ddayDate = if (has("ddayDate")) getLong("ddayDate") else null,

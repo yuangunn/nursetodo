@@ -1,28 +1,36 @@
 package com.ttaak.app.lock
 
+import android.app.KeyguardManager
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.text.format.DateFormat
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -53,6 +61,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -61,11 +70,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,6 +88,7 @@ import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.data.cardTextSp
+import com.ttaak.app.ui.MainActivity
 import com.ttaak.app.ui.TtaakTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -106,9 +119,25 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(adding, onClose = { finish() })
+                LockPage(adding, onClose = { finish() }, onOpenApp = ::openApp)
             }
         }
+    }
+
+    /** 잠금을 풀고 앱으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
+    private fun openApp() {
+        val go = {
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            finish()
+        }
+        val km = getSystemService(KeyguardManager::class.java)
+        if (!km.isKeyguardLocked) return go()
+        km.requestDismissKeyguard(
+            this,
+            object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() = go()
+            },
+        )
     }
 
     companion object {
@@ -120,14 +149,18 @@ private val Glass = Color.Black.copy(alpha = 0.32f)
 private val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit) {
+private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpenApp: () -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val today = Day.today()
-    val tasks = remember(all, today) { TaskStore.tasksFor(today, today) }
+    // 끝낸 일은 사라지고 앱의 '완료된 할 일'에서만 보입니다.
+    val tasks = remember(all, today) { TaskStore.tasksFor(today, today).filterNot { it.isDone(today) } }
+    val anyDone = remember(all, today) { TaskStore.tasksFor(today, today).any { it.isDone(today) } }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(startAdding) }
+    var editingId by remember { mutableStateOf<Long?>(null) }
+    BackHandler(enabled = editingId != null) { editingId = null }
     var drag by remember { mutableFloatStateOf(0f) }
 
     Box(
@@ -160,8 +193,8 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit) {
                 .padding(start = 20.dp, end = 20.dp, bottom = if (adding) 12.dp else 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 입력 중엔 키보드 자리를 만들려고 시계를 접습니다.
-            if (adding) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
+            // 입력·수정 중엔 키보드 자리를 만들려고 시계를 접습니다.
+            if (adding || editingId != null) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
 
             Surface(
                 color = Glass,
@@ -174,14 +207,23 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit) {
             ) {
                 if (tasks.isEmpty()) {
                     Text(
-                        "오늘 할 일이 없어요",
+                        if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
                         fontSize = settings.cardTextSp().sp,
                         color = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
                     )
                 } else {
                     LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
-                        items(tasks, key = { it.id }) { LockRow(it, today, settings.cardTextSp(), settings.checkOnLeft) }
+                        items(tasks, key = { it.id }) {
+                            Box(Modifier.animateItem()) {
+                                LockRow(
+                                    it, today, settings.cardTextSp(), settings.checkOnLeft,
+                                    editing = it.id == editingId,
+                                    onEditing = { on -> editingId = if (on) it.id else null },
+                                    onOpenApp = onOpenApp,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -232,49 +274,122 @@ private fun Clock(modifier: Modifier) {
     }
 }
 
-/** 동그라미 + 큰 글씨 한 줄. 줄 어디를 눌러도 체크됩니다. */
+/**
+ * 동그라미 + 큰 글씨 한 줄. 동그라미를 눌러야만 체크되고(체크 표시를 잠깐 보여 준 뒤 사라짐),
+ * 글씨를 누르면 앱으로, 글씨를 길게 누르면 그 자리에서 이름을 고칩니다.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun LockRow(task: Task, day: Long, sp: Float, checkOnLeft: Boolean) {
-    val done = task.isDone(day)
+private fun LockRow(
+    task: Task,
+    day: Long,
+    sp: Float,
+    checkOnLeft: Boolean,
+    editing: Boolean,
+    onEditing: (Boolean) -> Unit,
+    onOpenApp: () -> Unit,
+) {
+    var done by remember(task.id) { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
     val haptics = LocalHapticFeedback.current
+    LaunchedEffect(done) {
+        if (done) {
+            delay(350)
+            TaskStore.toggle(task.id, day)
+        }
+    }
     val circle = @Composable {
+        // 손가락 크기만큼(48dp) 눌리고, 보이는 동그라미는 26dp
         Box(
             Modifier
-                .size(26.dp)
-                .then(
-                    if (done) Modifier.background(accent, CircleShape)
-                    else Modifier.border(2.dp, Color.White.copy(alpha = 0.75f), CircleShape),
-                ),
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable(enabled = !done && !editing) {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    done = true
+                },
             contentAlignment = Alignment.Center,
         ) {
-            if (done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(18.dp))
+            Box(
+                Modifier
+                    .size(26.dp)
+                    .then(
+                        if (done) Modifier.background(accent, CircleShape)
+                        else Modifier.border(2.dp, Color.White.copy(alpha = 0.75f), CircleShape),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(18.dp))
+            }
         }
     }
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                TaskStore.toggle(task.id, day)
-            }
-            .padding(horizontal = 20.dp, vertical = 11.dp),
+            .padding(horizontal = 9.dp, vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (checkOnLeft) circle()
-        Text(
-            task.title,
-            color = Color.White.copy(alpha = if (done) 0.45f else 1f),
-            fontSize = sp.sp,
-            fontWeight = FontWeight.Medium,
-            textDecoration = if (done) TextDecoration.LineThrough else null,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        val textModifier = Modifier
+            .weight(1f)
+            .padding(horizontal = 6.dp)
+        if (editing) {
+            RenameField(task, sp, onDone = { onEditing(false) }, modifier = textModifier)
+        } else {
+            Text(
+                task.title,
+                color = Color.White.copy(alpha = if (done) 0.45f else 1f),
+                fontSize = sp.sp,
+                fontWeight = FontWeight.Medium,
+                textDecoration = if (done) TextDecoration.LineThrough else null,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = textModifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .combinedClickable(
+                        enabled = !done,
+                        onClick = onOpenApp,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onEditing(true)
+                        },
+                    )
+                    .padding(horizontal = 6.dp, vertical = 12.dp),
+            )
+        }
         if (!checkOnLeft) circle()
     }
+}
+
+/** 길게 눌러 여는 이름 고치기 칸. 엔터면 저장, 비우거나 그대로면 저장하지 않고 닫힘. */
+@Composable
+private fun RenameField(task: Task, sp: Float, onDone: () -> Unit, modifier: Modifier) {
+    var text by remember { mutableStateOf(TextFieldValue(task.title, TextRange(task.title.length))) }
+    val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
+    // 키보드를 내리면 고치기를 취소합니다.
+    CloseWhenImeHides(onClose = onDone)
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it },
+        singleLine = true,
+        textStyle = TextStyle(color = Color.White, fontSize = sp.sp, fontWeight = FontWeight.Medium),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            val title = text.text.trim()
+            if (title.isNotEmpty() && title != task.title) TaskStore.update(task.copy(title = title))
+            // 포커스를 비워 둬야 남은 키 입력이 옆 줄 동그라미로 넘어가 체크되지 않습니다.
+            focusManager.clearFocus()
+            onDone()
+        }),
+        modifier = modifier
+            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 6.dp, vertical = 12.dp)
+            .focusRequester(focus),
+    )
 }
 
 /** 접혀 있으면 '＋ 할 일 추가' 알약, 누르면 그 자리에서 입력칸이 됩니다. 적고 엔터면 추가, 빈 채로 엔터면 접힘. */
@@ -285,6 +400,8 @@ private fun AddField(adding: Boolean, onAdding: (Boolean) -> Unit, onAdded: (Tas
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     // 잠금화면 위에서는 창이 포커스를 받은 뒤에야 키보드가 뜹니다.
     LaunchedEffect(adding, windowFocused) { if (adding && windowFocused) focus.requestFocus() }
+    // 빈 채로 키보드를 내리면 알약으로 접고 시계를 다시 보여 줍니다.
+    if (adding) CloseWhenImeHides(onClose = { if (text.isBlank()) onAdding(false) })
 
     Surface(
         color = Glass,
@@ -332,3 +449,15 @@ private fun AddField(adding: Boolean, onAdding: (Boolean) -> Unit, onAdded: (Tas
         }
     }
 }
+
+/** 키보드가 한 번 올라왔다가 내려가면 [onClose]. 뒤로 가기로 키보드만 내린 경우를 알아차리려고 씁니다. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CloseWhenImeHides(onClose: () -> Unit) {
+    val imeVisible = WindowInsets.isImeVisible
+    var seen by remember { mutableStateOf(false) }
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) seen = true else if (seen) onClose()
+    }
+}
+
