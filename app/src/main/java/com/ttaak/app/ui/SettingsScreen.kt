@@ -132,25 +132,40 @@ fun SettingsScreen() {
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
             val hidden = remember(tick) { Setup.pageIconHidden(context) }
             val notiOn = remember(tick) { NotiListener.allowed(context) }
+            val notiLive = remember(tick) { NotiListener.connected }
             LinkRow(
                 "상태바의 딱 아이콘 숨기기",
                 if (hidden) "숨겼어요. 딱 화면은 그대로 동작해요."
                 else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 딱 화면은 그대로 동작해요.",
                 if (hidden) "숨김" else "열기",
             ) { Setup.openPageChannelSettings(context) }
-            LinkRow(
-                "딱 화면에 다른 앱 알림 보기",
-                if (notiOn) "팀즈 같은 앱 알림이 할 일 아래에 최근 3개까지 보여요. 누르면 잠금을 풀고 그 알림을 열어요."
-                else "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요.",
-                if (notiOn) "켜짐" else "켜기",
-            ) { Setup.openNotiAccess(context) }
-            if (notiOn) NotiApps(s)
-            if (!notiOn) {
+            if (!NotiListener.available(context)) {
                 LinkRow(
-                    "허용이 막혀 있으면",
-                    "스토어가 아닌 파일로 설치한 앱은 안드로이드가 막아 둬요. 앱 정보 → 오른쪽 위 ⋮ → '제한된 설정 허용' 뒤 다시 켜 주세요.",
-                    "앱 정보",
-                ) { Setup.openAppInfo(context) }
+                    "딱 화면에 다른 앱 알림 보기",
+                    "이 설치본(기본판)에는 없어요. 다른 앱 알림을 읽는 앱은 구글 Play 프로텍트가 파일 설치를 막아서, 알림판은 컴퓨터로 설치해야 해요.",
+                )
+            } else {
+                LinkRow(
+                    "딱 화면에 다른 앱 알림 보기",
+                    when {
+                        notiOn && notiLive -> "팀즈 같은 앱 알림이 할 일 아래에 최근 3개까지 보여요. 누르면 잠금을 풀고 그 알림을 열어요."
+                        notiOn -> "연결이 끊겼어요(다른 판을 깔았다가 다시 깔면 이래요). 열리는 화면에서 다시 켜 주세요."
+                        else -> "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요."
+                    },
+                    when {
+                        notiOn && notiLive -> "켜짐"
+                        notiOn -> "다시 켜기"
+                        else -> "켜기"
+                    },
+                ) { Setup.openNotiAccess(context) }
+                if (notiOn) NotiApps(s)
+                if (!notiOn) {
+                    LinkRow(
+                        "허용이 막혀 있으면",
+                        "스토어가 아닌 파일로 설치한 앱은 안드로이드가 막아 둬요. 앱 정보 → 오른쪽 위 ⋮ → '제한된 설정 허용' 뒤 다시 켜 주세요.",
+                        "앱 정보",
+                    ) { Setup.openAppInfo(context) }
+                }
             }
         }
         // 딱 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.

@@ -4,6 +4,7 @@ import android.app.ActivityOptions
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -92,6 +93,16 @@ class NotiListener : NotificationListenerService() {
 
         /** 지금 떠 있는 다른 앱 알림, 최근 것부터. 알림 접근이 꺼져 있으면 비어 있음. */
         val notis: StateFlow<List<Noti>> = _notis.asStateFlow()
+
+        /** 이 설치본에 알림 읽기 서비스가 있는지 (알림판만). */
+        fun available(context: Context): Boolean =
+            runCatching { context.packageManager.getServiceInfo(ComponentName(context, NotiListener::class.java), 0) }.isSuccess
+
+        /**
+         * 지금 시스템에 붙어 있는지. 기본판을 깔았다가 알림판으로 다시 깔면 허용은 남아도 시스템이 다시 붙이지 않아서
+         * (requestRebind 로도 안 됨, 에뮬레이터 확인) 사용자가 알림 접근을 껐다 켜야 합니다.
+         */
+        val connected: Boolean get() = instance != null
 
         fun allowed(context: Context): Boolean =
             context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
