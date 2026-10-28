@@ -482,6 +482,15 @@ private fun AlarmSettings(s: Settings) {
         val isDefault = uri == AlarmSound.defaultUri() || uri == android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI
         TaskStore.updateSettings { it.copy(alarmSound = if (isDefault) null else uri.toString()) }
     }
+    var tick by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    if (!remember(tick) { Setup.fullScreenAllowed(context) }) {
+        LinkRow(
+            "알람 화면이 꺼져 있어요",
+            "화면이 꺼진 채 알람이 울리면 소리와 알림만 나와요. 열리는 화면에서 '딱'을 허용해 주세요.",
+            "허용",
+        ) { Setup.openFullScreenSettings(context) }
+    }
     val soundName = remember(s.alarmSound) {
         s.alarmSound?.let { runCatching { RingtoneManager.getRingtone(context, Uri.parse(it))?.getTitle(context) }.getOrNull() }
             ?: "기본 알람음"

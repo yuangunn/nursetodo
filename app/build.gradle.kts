@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.ttaak.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.ttaak.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 8
-        versionName = "1.4.2"
+        targetSdk = 36
+        versionCode = 9
+        versionName = "1.5.0"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
@@ -26,13 +26,24 @@ android {
         }
     }
 
+    // Play 업로드 키: 저장소 밖(~/.gradle/gradle.properties 의 ttaakUploadStore·ttaakUploadPassword)에만 있습니다.
+    // `-Pplay` 로 빌드할 때만 씁니다(Play 내부 테스트용 AAB). 깃허브 APK 는 그대로 debug 키(기존 설치본 위에 덮어 설치되게).
+    val play = providers.gradleProperty("play").isPresent
+    if (play) {
+        signingConfigs.create("upload") {
+            storeFile = file(providers.gradleProperty("ttaakUploadStore").get())
+            storePassword = providers.gradleProperty("ttaakUploadPassword").get()
+            keyAlias = "upload"
+            keyPassword = providers.gradleProperty("ttaakUploadPassword").get()
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // 사내 배포용: 별도 키스토어가 없으면 debug 키로 서명합니다.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (play) "upload" else "debug")
         }
     }
     compileOptions {

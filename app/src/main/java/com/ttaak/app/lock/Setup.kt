@@ -142,6 +142,23 @@ object Setup {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")),
     )
 
+    /**
+     * 안드로이드 14+: 알람이 울릴 때 꺼진 화면을 켜고 알람 화면을 띄울 수 있는지('전체 화면 알림').
+     * Play 스토어가 전화·알람 앱이 아니라고 보면 회수합니다(에뮬레이터에서 파일 설치본도 회수됨 확인). 꺼져 있으면 소리와 알림만.
+     */
+    fun fullScreenAllowed(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+
+    fun openFullScreenSettings(context: Context) = open(
+        context,
+        if (Build.VERSION.SDK_INT >= 34) {
+            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:${context.packageName}"))
+        } else {
+            null
+        },
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+    )
+
     /** 삼성 One UI: 설정 → 알림 → 잠금화면 → 알림 스타일 (0 카드, 1 아이콘, 2 동그란 점). */
     private const val SAMSUNG_LOCK_STYLE = "lockscreen_minimizing_notification"
 

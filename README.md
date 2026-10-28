@@ -160,7 +160,7 @@ Play 프로텍트의 '강화된 사기 방지'는 알림 접근·문자 읽기·
 3. 컴퓨터: `adb install -r ttaak-vX-noti.apk`
 4. 앱 설정 → 딱 화면에 다른 앱 알림 보기 → 켜기 (컴퓨터로 깐 앱은 '제한된 설정'도 걸리지 않음)
 
-알림판은 업데이트도 컴퓨터로 합니다. 여러 폰에 나눠 주려면 구글 Play 내부 테스트로 배포하는 방법이 있습니다(개발자 계정 필요).
+알림판은 업데이트도 컴퓨터로 합니다. 여러 폰에 나눠 주려면 구글 Play 내부 테스트로 배포합니다 — [docs/PLAY.md](docs/PLAY.md).
 
 ## 빌드
 
@@ -171,8 +171,8 @@ Play 프로텍트의 '강화된 사기 방지'는 알림 접근·문자 읽기·
 ./gradlew testBasicDebugUnitTest   # 날짜·루틴·주입속도 로직, 저장 파일 변환 + Robolectric 렌더링/실행 테스트
 ```
 
-- minSdk 26 (Android 8.0), targetSdk 35
-- release 는 별도 키스토어가 없으면 debug 키로 서명됩니다. 사내 정식 배포 시 `app/build.gradle.kts` 의 `signingConfig` 를 사내 키로 바꾸세요.
+- minSdk 26 (Android 8.0), targetSdk 36 (Play 신규 앱 조건)
+- 깃허브 APK(release)는 debug 키로 서명합니다(기존 설치본 위에 덮어 설치되게). Play 용 AAB 는 `./gradlew bundleNotiRelease -Pplay` — 저장소 밖 업로드 키로 서명([docs/PLAY.md](docs/PLAY.md)).
 - GitHub Actions 가 PR/main 푸시마다 테스트·lint 후 `ttaak-apk` 아티팩트로 APK 를 올립니다.
 - 폐쇄망 안에서 빌드하려면 사내 Maven 미러(google, mavenCentral 프록시)를 `settings.gradle.kts` 에 지정하세요.
 
