@@ -12,8 +12,8 @@ android {
         applicationId = "com.ttaak.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.5.0"
+        versionCode = 10
+        versionName = "1.5.1"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.

@@ -339,7 +339,8 @@ private fun ShortcutSettings(s: Settings) {
         val apps = remember { Shortcuts.installedApps(context) }
         var query by remember { mutableStateOf("") }
         val present = s.shortcuts.map { it.id }.toSet()
-        val choices = (listOf(Shortcut(Shortcut.ADD) to "할 일 추가", Shortcut(Shortcut.CALC) to "계산기", Shortcut(Shortcut.ALARM) to "알람") + apps)
+        val builtIn = listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }
+        val choices = (builtIn.map { it to Shortcuts.name(context, it) } + apps)
             .filter { (sc, label) -> sc.id !in present && label.contains(query.trim(), ignoreCase = true) }
         AlertDialog(
             onDismissRequest = { picking = false },

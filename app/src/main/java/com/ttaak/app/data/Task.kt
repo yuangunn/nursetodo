@@ -97,7 +97,7 @@ data class Settings(
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
     /** 딱 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
-    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM)),
+    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.CALENDAR)),
     /** 바로가기 모양: 0 이름 3줄(9칸), 1 이름 2줄(6칸), 2 아이콘만 4개씩 2줄(8칸). */
     val shortcutStyle: Int = 0,
     /** 딱 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
@@ -107,7 +107,7 @@ data class Settings(
 )
 
 /**
- * 딱 화면 아래 바로가기 하나. [id] 는 [CALC]·[ALARM] 이거나 "app:패키지/액티비티".
+ * 딱 화면 아래 바로가기 하나. [id] 는 [CALC]·[ALARM]·[ADD]·[CALENDAR] 이거나 "app:패키지/액티비티".
  * [name] 이 비어 있으면 앱 이름(또는 '계산기'·'알람')을 씁니다.
  */
 data class Shortcut(val id: String, val name: String = "") {
@@ -115,6 +115,7 @@ data class Shortcut(val id: String, val name: String = "") {
         const val CALC = "calc"
         const val ALARM = "alarm"
         const val ADD = "add"
+        const val CALENDAR = "calendar"
         const val MAX = 9
         fun app(component: String) = Shortcut("app:$component")
     }

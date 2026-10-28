@@ -80,8 +80,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_TAB = "tab"
 
-        fun calcIntent(context: Context): Intent = Intent(context, MainActivity::class.java)
-            .putExtra(EXTRA_TAB, 2)
+        fun calcIntent(context: Context): Intent = tabIntent(context, 2)
+
+        fun calendarIntent(context: Context): Intent = tabIntent(context, 1)
+
+        private fun tabIntent(context: Context, tab: Int) = Intent(context, MainActivity::class.java)
+            .putExtra(EXTRA_TAB, tab)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
