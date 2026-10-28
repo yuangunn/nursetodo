@@ -12,8 +12,18 @@ android {
         applicationId = "com.ttaak.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.4.1"
+        versionCode = 8
+        versionName = "1.4.2"
+    }
+
+    // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
+    flavorDimensions += "noti"
+    productFlavors {
+        create("basic") { dimension = "noti" }
+        create("noti") {
+            dimension = "noti"
+            versionNameSuffix = "-noti"
+        }
     }
 
     buildTypes {

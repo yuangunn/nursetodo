@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        알림판에만: 다른 앱 알림 읽기. 구글 Play 프로텍트 '강화된 사기 방지'가 알림 읽기 서비스가 있는 앱을
+        파일 앱·브라우저·메신저로 설치하지 못하게 막아서(우회 버튼 없음) 기본판에는 넣지 않습니다.
+    -->
+    <application>
+        <service
+            android:name=".lock.NotiListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
