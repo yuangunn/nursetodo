@@ -121,9 +121,10 @@ class QuickAddActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT < 27) {
-            // 8.0 은 매니페스트의 showWhenLocked/turnScreenOn 을 무시하므로 창 플래그로 대신합니다.
+            // 8.0 은 매니페스트의 showWhenLocked 를 무시하므로 창 플래그로 대신합니다.
+            // 화면을 켜는 플래그는 넣지 않습니다: 늘 화면이 켜진 뒤에 열리고, 늦게 열려도 꺼진 화면을 다시 켜지 않게.
             @Suppress("DEPRECATION")
-            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
         }
         TaskStore.init(this)
         // 화면을 켜거나 카드를 눌러 열면 보고 체크가 먼저라 입력칸을 접어 둡니다. 타일·위젯 `+` 로 열면 바로 입력.
