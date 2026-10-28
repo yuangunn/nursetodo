@@ -141,7 +141,7 @@ fun SettingsScreen() {
             LinkRow(
                 "딱 화면에 다른 앱 알림 보기",
                 if (notiOn) "팀즈 같은 앱 알림이 할 일 아래에 최근 3개까지 보여요. 누르면 잠금을 풀고 그 알림을 열어요."
-                else "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요.",
+                else "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요.",
                 if (notiOn) "켜짐" else "켜기",
             ) { Setup.openNotiAccess(context) }
             if (notiOn) NotiApps(s)

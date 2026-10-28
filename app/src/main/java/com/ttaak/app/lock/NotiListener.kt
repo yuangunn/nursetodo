@@ -96,6 +96,13 @@ class NotiListener : NotificationListenerService() {
         fun allowed(context: Context): Boolean =
             context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
+        /** 다른 앱이 수신·통화 중 '전화' 알림을 띄우고 있는지 (인터넷 전화 포함). 알림 접근이 꺼져 있으면 false. */
+        fun callShowing(): Boolean = instance?.let { runCatching { it.activeNotifications }.getOrNull() }.orEmpty().any {
+            val n = it.notification
+            // 지난 통화 알림이 남아 있어도 딱 화면이 영영 안 뜨지 않게, 울리는 중(전체 화면)이거나 통화 중(계속 떠 있음)만
+            n.category == Notification.CATEGORY_CALL && (n.flags and Notification.FLAG_ONGOING_EVENT != 0 || n.fullScreenIntent != null)
+        }
+
         fun icon(context: Context, pkg: String): ImageBitmap? = runCatching {
             context.packageManager.getApplicationIcon(pkg).toBitmap(72, 72).asImageBitmap()
         }.getOrNull()

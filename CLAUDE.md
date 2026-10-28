@@ -26,7 +26,7 @@
 - 다른 앱 알림: `lock/NotiListener`(NotificationListenerService, 사용자가 알림 접근 허용). `notis` StateFlow 를 딱 화면이 구독하고 `Settings.notiApps`(패키지 이름, 비면 모든 앱)로 거름. 누르면 `requestDismissKeyguard` 뒤 contentIntent 를 BAL 허용 옵션(API 34+)으로 보냄. APK 설치본은 '제한된 설정'(packageSource=3 LOCAL_FILE)이라 앱 정보 ⋮ 에서 풀어야 함 — 에뮬레이터에서 파일 앱 설치로 재현·확인.
 - 딱 화면 바로가기: `Settings.shortcuts`(최대 9 저장, id = calc | alarm | add | "app:패키지/액티비티", name 비면 앱 이름). 보이는 칸은 `shortcutStyle`(0 이름 3줄 9, 1 이름 2줄 6, 2 아이콘 4×2 8, `shortcutSlots()`). 할 일 추가 버튼은 한 군데만: 보이는 바로가기에 add 가 있으면 그것, 아니면 `addButton`(0 카드 아래 알약, 1 카드 안 마지막 줄 오른쪽 메모 버튼, 적는 동안 숨김). 매니페스트 `<queries>` 로 런처 앱 목록. 앱 열기는 `requestDismissKeyguard` 후.
 - 끝낸 일은 잠금 카드·라이브·위젯·딱 화면에서 빼고, 앱 `TaskList` 맨 아래 접히는 '완료된 할 일'에만. `Task.doneAt`(ms) 저장, 만든 시각은 `createdAt = id`(만든 순간 ms).
-- 툭처럼 보이는 잠금화면은 알림으로는 안 된다(헤더 강제, 라이브 알림은 커스텀 거부). `LockPageService`(specialUse 포그라운드 서비스, SCREEN_ON 수신) + SYSTEM_ALERT_WINDOW 로 화면이 켜질 때 `QuickAddActivity`(showWhenLocked)를 띄운다. 서비스 알림 = 잠금화면 카드(같은 ID 1).
+- 툭처럼 보이는 잠금화면은 알림으로는 안 된다(헤더 강제, 라이브 알림은 커스텀 거부). `LockPageService`(specialUse 포그라운드 서비스, SCREEN_ON 수신) + SYSTEM_ALERT_WINDOW 로 화면이 켜질 때 `QuickAddActivity`(showWhenLocked)를 띄운다. 서비스 알림 = 잠금화면 카드(같은 ID 1). 전화 중엔 띄우지 않음(`inCall`: `AudioManager.mode != NORMAL` — 일반 전화는 기본 전화 앱이 무엇이든 Telecom 이 RINGTONE/IN_CALL 로 바꿈 — 또는 `NotiListener.callShowing()`: 다른 앱의 CATEGORY_CALL 알림 중 ongoing·fullScreenIntent, 인터넷 전화용). 없으면 화면 꺼진 채 오는 전화의 전체 화면 수신 UI(FSI)를 약 1초 뒤 덮었음(에뮬 재현). `QuickAddActivity` 에 turnScreenOn 금지 — 늦게 열리면 꺼진 화면을 다시 켜고, 그때 오는 전화는 FSI 대신 알림 띠가 됨.
 - 삼성 실기기 검증은 Samsung Remote Test Lab + rdb(크롬에서만 연결됨)로 한다. `locksettings` 같은 명령은 막혀서 연결이 끊기고, 화면 잠금(PIN)은 설정할 수 없다.
 - 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).
 
