@@ -205,6 +205,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
             Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
             Shortcut.ALARM -> askingAlarm = true
             Shortcut.ADD -> adding = true
+            Shortcut.CALENDAR -> onOpen(MainActivity.calendarIntent(context))
             else -> Shortcuts.launchIntent(sc)?.let(onOpen)
         }
     }

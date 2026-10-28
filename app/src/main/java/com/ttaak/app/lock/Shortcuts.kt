@@ -17,9 +17,10 @@ object Shortcuts {
 
     /** 앱이 지워졌으면 null. */
     fun defaultName(context: Context, s: Shortcut): String? = when (s.id) {
-        Shortcut.CALC -> "계산기"
+        Shortcut.CALC -> "항암계산기"
         Shortcut.ALARM -> "알람"
         Shortcut.ADD -> "할 일 추가"
+        Shortcut.CALENDAR -> "캘린더"
         else -> component(s)?.let { c ->
             runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
         }
@@ -27,10 +28,11 @@ object Shortcuts {
 
     fun name(context: Context, s: Shortcut): String = s.name.ifBlank { defaultName(context, s) ?: "지워진 앱" }
 
-    /** 계산기·알람·할 일 추가 버튼의 아이콘 (앱이 아닐 때). */
+    /** 계산기·알람·할 일 추가·캘린더 버튼의 아이콘 (앱이 아닐 때). */
     fun builtInIcon(s: Shortcut): Int = when (s.id) {
         Shortcut.ALARM -> R.drawable.ic_alarm
         Shortcut.ADD -> R.drawable.ic_memo
+        Shortcut.CALENDAR -> R.drawable.ic_calendar
         else -> R.drawable.ic_calc
     }
 

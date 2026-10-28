@@ -23,8 +23,8 @@ class StoreJsonTest {
     fun shortcutsRoundTrip() = with(TaskStore) {
         val s = Settings(shortcuts = listOf(Shortcut(Shortcut.ALARM), Shortcut.app("com.example/.Main").copy(name = "EMR")))
         assertEquals(s.shortcuts, s.toJson().toSettings().shortcuts)
-        // 저장된 적 없으면 기본: 계산기·알람
-        assertEquals(listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM)), JSONObject("{}").toSettings().shortcuts)
+        // 저장된 적 없으면 기본: 항암계산기·알람·캘린더
+        assertEquals(listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.CALENDAR)), JSONObject("{}").toSettings().shortcuts)
     }
 
     @Test
