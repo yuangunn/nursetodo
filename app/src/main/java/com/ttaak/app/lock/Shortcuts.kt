@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import com.ttaak.app.R
 import com.ttaak.app.data.Shortcut
 
 /** 딱 화면 바로가기의 이름·아이콘·여는 법. 앱은 런처에 보이는 앱만 고를 수 있습니다. */
@@ -18,6 +19,7 @@ object Shortcuts {
     fun defaultName(context: Context, s: Shortcut): String? = when (s.id) {
         Shortcut.CALC -> "계산기"
         Shortcut.ALARM -> "알람"
+        Shortcut.ADD -> "할 일 추가"
         else -> component(s)?.let { c ->
             runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
         }
@@ -25,7 +27,14 @@ object Shortcuts {
 
     fun name(context: Context, s: Shortcut): String = s.name.ifBlank { defaultName(context, s) ?: "지워진 앱" }
 
-    /** 앱 아이콘. 계산기·알람이나 지워진 앱이면 null. */
+    /** 계산기·알람·할 일 추가 버튼의 아이콘 (앱이 아닐 때). */
+    fun builtInIcon(s: Shortcut): Int = when (s.id) {
+        Shortcut.ALARM -> R.drawable.ic_alarm
+        Shortcut.ADD -> R.drawable.ic_memo
+        else -> R.drawable.ic_calc
+    }
+
+    /** 앱 아이콘. 계산기·알람·할 일 추가거나 지워진 앱이면 null. */
     fun icon(context: Context, s: Shortcut): ImageBitmap? = component(s)?.let { c ->
         runCatching { context.packageManager.getActivityIcon(c).toBitmap(96, 96).asImageBitmap() }.getOrNull()
     }

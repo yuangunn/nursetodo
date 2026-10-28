@@ -199,7 +199,8 @@ object TaskStore {
         put("setupDismissed", setupDismissed)
         put("tileAdded", tileAdded)
         put("calcHours", calcHours)
-        put("cardTextSize", cardTextSize)
+        put("cardSp", cardSp)
+        put("rowGap", rowGap)
         put("lockLive", lockLive)
         put("lockPage", lockPage)
         alarmSound?.let { put("alarmSound", it) }
@@ -207,6 +208,9 @@ object TaskStore {
         put("alarmMode", alarmMode)
         put("alarmAlwaysSound", alarmAlwaysSound)
         put("shortcuts", JSONArray().apply { shortcuts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)) } })
+        put("notiApps", JSONArray(notiApps.sorted()))
+        put("shortcutStyle", shortcutStyle)
+        put("addButton", addButton)
     }
 
     internal fun JSONObject.toSettings() = Settings().let { d ->
@@ -223,7 +227,10 @@ object TaskStore {
             setupDismissed = optBoolean("setupDismissed", d.setupDismissed),
             tileAdded = optBoolean("tileAdded", d.tileAdded),
             calcHours = optBoolean("calcHours", d.calcHours),
-            cardTextSize = optInt("cardTextSize", d.cardTextSize),
+            // 1.3.0 까지는 '보통·크게·아주 크게' 순번(cardTextSize)으로 저장했습니다.
+            cardSp = (if (has("cardSp")) getInt("cardSp") else listOf(16, 19, 23).getOrElse(optInt("cardTextSize", 1)) { d.cardSp })
+                .coerceIn(CardSpRange),
+            rowGap = optInt("rowGap", d.rowGap).coerceIn(RowGapRange),
             lockLive = optBoolean("lockLive", d.lockLive),
             lockPage = optBoolean("lockPage", d.lockPage),
             alarmSound = if (has("alarmSound")) getString("alarmSound") else null,
@@ -233,6 +240,9 @@ object TaskStore {
             shortcuts = optJSONArray("shortcuts")?.let { a ->
                 (0 until a.length()).map { a.getJSONObject(it) }.map { Shortcut(it.getString("id"), it.optString("name")) }
             } ?: d.shortcuts,
+            shortcutStyle = optInt("shortcutStyle", d.shortcutStyle).coerceIn(0, 2),
+            addButton = optInt("addButton", d.addButton).coerceIn(0, 1),
+            notiApps = optJSONArray("notiApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.notiApps,
         )
     }
 }

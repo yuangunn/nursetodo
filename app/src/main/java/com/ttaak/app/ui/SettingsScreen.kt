@@ -28,12 +28,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -65,18 +68,25 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.R
-import com.ttaak.app.data.CardTextSizes
+import com.ttaak.app.data.CardSpRange
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.RowGapRange
 import com.ttaak.app.data.Settings
 import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.data.shortcutSlots
 import com.ttaak.app.lock.AlarmRingService
 import com.ttaak.app.lock.AlarmSound
+import com.ttaak.app.lock.Glass
+import com.ttaak.app.lock.GlassEdge
+import com.ttaak.app.lock.NotiListener
+import com.ttaak.app.lock.circleBoxHeight
 import com.ttaak.app.lock.Setup
 import com.ttaak.app.lock.Shortcuts
 import kotlinx.coroutines.Job
@@ -110,36 +120,37 @@ fun SettingsScreen() {
             // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
             if (v) Setup.requestOverlay(context)
         }
-        ChoiceRow("카드·위젯 글자", CardTextSizes.map { it.first }, s.cardTextSize) { i ->
-            TaskStore.updateSettings { it.copy(cardTextSize = i) }
+        CardLook(s)
+        if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
+            LinkRow("할 일 추가 버튼", "딱 화면 아래 바로가기의 '할 일 추가'로 해요. 위쪽 버튼은 숨겼어요.")
+        } else {
+            ChoiceRow("할 일 추가 버튼", listOf("카드 아래", "카드 안"), s.addButton) { i -> TaskStore.updateSettings { it.copy(addButton = i) } }
         }
         if (s.lockPage) {
             // 안드로이드가 상시 서비스에 알림 하나를 꼭 요구해서 앱이 아이콘을 직접 지울 수는 없습니다.
             var tick by remember { mutableIntStateOf(0) }
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
             val hidden = remember(tick) { Setup.pageIconHidden(context) }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { Setup.openPageChannelSettings(context) }
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("상태바의 딱 아이콘 숨기기", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        if (hidden) "숨겼어요. 딱 화면은 그대로 동작해요."
-                        else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 딱 화면은 그대로 동작해요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    if (hidden) "숨김" else "열기",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 12.dp),
-                )
+            val notiOn = remember(tick) { NotiListener.allowed(context) }
+            LinkRow(
+                "상태바의 딱 아이콘 숨기기",
+                if (hidden) "숨겼어요. 딱 화면은 그대로 동작해요."
+                else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 딱 화면은 그대로 동작해요.",
+                if (hidden) "숨김" else "열기",
+            ) { Setup.openPageChannelSettings(context) }
+            LinkRow(
+                "딱 화면에 다른 앱 알림 보기",
+                if (notiOn) "팀즈 같은 앱 알림이 할 일 아래에 최근 3개까지 보여요. 누르면 잠금을 풀고 그 알림을 열어요."
+                else "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요.",
+                if (notiOn) "켜짐" else "켜기",
+            ) { Setup.openNotiAccess(context) }
+            if (notiOn) NotiApps(s)
+            if (!notiOn) {
+                LinkRow(
+                    "허용이 막혀 있으면",
+                    "스토어가 아닌 파일로 설치한 앱은 안드로이드가 막아 둬요. 앱 정보 → 오른쪽 위 ⋮ → '제한된 설정 허용' 뒤 다시 켜 주세요.",
+                    "앱 정보",
+                ) { Setup.openAppInfo(context) }
             }
         }
         // 딱 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.
@@ -229,14 +240,16 @@ fun SettingsScreen() {
     }
 }
 
-/** 딱 화면 아래 바로가기(3×3 까지): 앱을 골라 넣고, 눌러서 이름을 바꾸고, ↑ 로 앞으로, ✕ 로 뺍니다. */
+/** 딱 화면 아래 바로가기(모양에 따라 6~9칸): 앱을 골라 넣고, 눌러서 이름을 바꾸고, ↑ 로 앞으로, ✕ 로 뺍니다. */
 @Composable
 private fun ShortcutSettings(s: Settings) {
     val context = LocalContext.current
     var renaming by remember { mutableStateOf<Int?>(null) }
     var picking by remember { mutableStateOf(false) }
     val save = { list: List<Shortcut> -> TaskStore.updateSettings { it.copy(shortcuts = list) } }
+    val slots = s.shortcutSlots()
 
+    ChoiceRow("모양", listOf("이름 3줄", "이름 2줄", "아이콘"), s.shortcutStyle) { i -> TaskStore.updateSettings { it.copy(shortcutStyle = i) } }
     s.shortcuts.forEachIndexed { i, sc ->
         val name = remember(sc) { Shortcuts.name(context, sc) }
         Row(
@@ -257,6 +270,10 @@ private fun ShortcutSettings(s: Settings) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
+                if (i >= slots) {
+                    Text("칸이 모자라 딱 화면엔 안 보여요", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                }
             }
             if (i > 0) {
                 IconButton(onClick = { save(s.shortcuts.toMutableList().apply { add(i - 1, removeAt(i)) }) }) {
@@ -270,10 +287,13 @@ private fun ShortcutSettings(s: Settings) {
     }
     TextButton(
         onClick = { picking = true },
-        enabled = s.shortcuts.size < Shortcut.MAX,
+        enabled = s.shortcuts.size < slots,
         modifier = Modifier.padding(start = 12.dp),
-    ) { Text(if (s.shortcuts.size < Shortcut.MAX) "+ 바로가기 추가 (${s.shortcuts.size}/${Shortcut.MAX})" else "9개가 다 찼어요") }
-    Hint("딱 화면 아래에 3줄×3칸까지 놓여요. 눌러서 버튼 이름을 바꿀 수 있어요(비우면 앱 이름).")
+    ) { Text(if (s.shortcuts.size < slots) "+ 바로가기 추가 (${s.shortcuts.size}/$slots)" else "${slots}칸이 다 찼어요") }
+    Hint(
+        "이름 3줄은 9개, 이름 2줄은 6개, 아이콘은 한 줄에 4개씩 8개까지 놓여요. 눌러서 버튼 이름을 바꿀 수 있어요(비우면 앱 이름). " +
+            "'할 일 추가'를 넣으면 위쪽 할 일 추가 버튼은 숨겨요.",
+    )
 
     renaming?.let { i ->
         val sc = s.shortcuts.getOrNull(i) ?: return@let
@@ -304,7 +324,7 @@ private fun ShortcutSettings(s: Settings) {
         val apps = remember { Shortcuts.installedApps(context) }
         var query by remember { mutableStateOf("") }
         val present = s.shortcuts.map { it.id }.toSet()
-        val choices = (listOf(Shortcut(Shortcut.CALC) to "계산기", Shortcut(Shortcut.ALARM) to "알람") + apps)
+        val choices = (listOf(Shortcut(Shortcut.ADD) to "할 일 추가", Shortcut(Shortcut.CALC) to "계산기", Shortcut(Shortcut.ALARM) to "알람") + apps)
             .filter { (sc, label) -> sc.id !in present && label.contains(query.trim(), ignoreCase = true) }
         AlertDialog(
             onDismissRequest = { picking = false },
@@ -343,6 +363,80 @@ private fun ShortcutSettings(s: Settings) {
     }
 }
 
+/** 딱 화면에 알림을 보여 줄 앱 고르기. 아무것도 안 고르면 모든 앱. */
+@Composable
+private fun NotiApps(s: Settings) {
+    val context = LocalContext.current
+    var picking by remember { mutableStateOf(false) }
+    val names = remember(s.notiApps) {
+        val pm = context.packageManager
+        s.notiApps.map { pkg -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg) }.sorted()
+    }
+    LinkRow(
+        "알림 볼 앱",
+        if (names.isEmpty()) "모든 앱 알림을 보여요. 메시지·팀즈처럼 몇 개만 고를 수도 있어요." else names.joinToString(", "),
+        "고르기",
+    ) { picking = true }
+
+    if (picking) {
+        // 고른 앱이 맨 위, 나머지는 이름순 (런처에 보이는 앱만)
+        val apps = remember {
+            Shortcuts.installedApps(context)
+                .mapNotNull { (sc, label) -> Shortcuts.component(sc)?.packageName?.let { it to label } }
+                .distinctBy { it.first }
+                .sortedByDescending { it.first in s.notiApps }
+        }
+        var chosen by remember { mutableStateOf(s.notiApps) }
+        var query by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("알림 볼 앱") },
+            text = {
+                Column {
+                    Text(
+                        "아무것도 고르지 않으면 모든 앱 알림을 보여요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        placeholder = { Text("앱 이름으로 찾기") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                    LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                        items(apps.filter { it.second.contains(query.trim(), ignoreCase = true) }, key = { it.first }) { (pkg, label) ->
+                            val icon = remember(pkg) { NotiListener.icon(context, pkg) }
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { chosen = if (pkg in chosen) chosen - pkg else chosen + pkg }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = pkg in chosen, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+                                icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(28.dp)) }
+                                Spacer(Modifier.width(12.dp))
+                                Text(label, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // 지워진 앱은 목록에 없어서 풀 수도 없으니 저장할 때 뺍니다.
+                    val installed = apps.map { it.first }.toSet()
+                    TaskStore.updateSettings { it.copy(notiApps = chosen intersect installed) }
+                    picking = false
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("취소") } },
+        )
+    }
+}
+
 @Composable
 private fun ShortcutIcon(sc: Shortcut) {
     val context = LocalContext.current
@@ -351,7 +445,7 @@ private fun ShortcutIcon(sc: Shortcut) {
         Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
     } else {
         Icon(
-            painterResource(if (sc.id == Shortcut.ALARM) R.drawable.ic_alarm else R.drawable.ic_calc),
+            painterResource(Shortcuts.builtInIcon(sc)),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(28.dp),
@@ -502,6 +596,111 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/**
+ * 잠금화면 글자 크기·줄 간격. 아래에 딱 화면 모양 예시가 있어 움직이는 대로 바로 보입니다.
+ * 저장(카드·위젯 다시 그리기)은 손을 뗄 때 한 번만.
+ */
+@Composable
+private fun CardLook(s: Settings) {
+    var sp by remember(s.cardSp) { mutableFloatStateOf(s.cardSp.toFloat()) }
+    var gap by remember(s.rowGap) { mutableFloatStateOf(s.rowGap.toFloat()) }
+    // 예시가 커지면 그 아래가 밀리므로, 끄는 동안 손가락 밑이 움직이지 않게 슬라이더를 위에 둡니다.
+    SliderRow("글자 크기", sp, CardSpRange, { sp = it }) { TaskStore.updateSettings { it.copy(cardSp = sp.roundToInt()) } }
+    SliderRow("줄 간격", gap, RowGapRange, { gap = it }) { TaskStore.updateSettings { it.copy(rowGap = gap.roundToInt()) } }
+    Surface(
+        color = Color(0xFF3C4454),
+        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+    ) {
+        Surface(
+            color = Glass,
+            contentColor = Color.White,
+            shape = RoundedCornerShape(24.dp),
+            border = GlassEdge,
+            modifier = Modifier.padding(12.dp),
+        ) {
+            Column(Modifier.padding(vertical = 8.dp)) {
+                listOf("오전 투약 확인", "인계 준비", "수액 교체").forEach { title ->
+                    Row(
+                        Modifier.padding(horizontal = 9.dp, vertical = 1.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val circle = @Composable {
+                            Box(Modifier.size(48.dp, circleBoxHeight(gap.roundToInt())), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(26.dp).border(2.dp, Color.White.copy(alpha = 0.75f), CircleShape))
+                            }
+                        }
+                        if (s.checkOnLeft) circle()
+                        Text(
+                            title,
+                            fontSize = sp.roundToInt().sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp, vertical = gap.roundToInt().dp),
+                        )
+                        if (!s.checkOnLeft) circle()
+                    }
+                }
+            }
+        }
+    }
+    Text(
+        "글자 크기는 잠금화면 카드·홈 위젯에도 같이 적용돼요.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),
+    )
+}
+
+/** 1씩 움직이는 슬라이더 한 줄. 오른쪽에 지금 값. */
+@Composable
+private fun SliderRow(label: String, value: Float, range: IntRange, onChange: (Float) -> Unit, onDone: () -> Unit) {
+    Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(72.dp))
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            onValueChangeFinished = onDone,
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = range.last - range.first - 1,
+            // 칸이 많아 눈금 점이 빽빽하게 깔리므로 숨깁니다.
+            colors = SliderDefaults.colors(activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+        )
+        Text("${value.roundToInt()}", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(28.dp))
+    }
+}
+
+/** 누르면 시스템 화면을 여는 줄: 제목, 설명, 오른쪽에 상태·동작. [onClick] 이 없으면 안내만. */
+@Composable
+private fun LinkRow(title: String, body: String, action: String = "", onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            action,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 

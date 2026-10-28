@@ -121,6 +121,27 @@ object Setup {
         )
     }
 
+    /** '알림 접근' 허용 화면. 딱 화면에 다른 앱 알림을 보여 주는 데 필요합니다. */
+    fun openNotiAccess(context: Context) = open(
+        context,
+        if (Build.VERSION.SDK_INT >= 30) {
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(context, NotiListener::class.java).flattenToString())
+        } else {
+            null
+        },
+        Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+    )
+
+    /**
+     * 앱 정보 화면. 스토어가 아닌 APK 로 깐 앱은 안드로이드 13+ 가 '알림 접근'을 막아 두는데,
+     * 여기 오른쪽 위 ⋮ → '제한된 설정 허용'으로 풉니다.
+     */
+    fun openAppInfo(context: Context) = open(
+        context,
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")),
+    )
+
     /** 삼성 One UI: 설정 → 알림 → 잠금화면 → 알림 스타일 (0 카드, 1 아이콘, 2 동그란 점). */
     private const val SAMSUNG_LOCK_STYLE = "lockscreen_minimizing_notification"
 

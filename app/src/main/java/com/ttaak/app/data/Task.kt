@@ -80,8 +80,10 @@ data class Settings(
     val tileAdded: Boolean = false,
     /** 계산기: 투여시간 단위(true=시간, false=분). 용량은 저장하지 않습니다. */
     val calcHours: Boolean = false,
-    /** 잠금화면 카드·홈 위젯 글자 크기 ([CardTextSizes] 의 순번). 앱 목록 글자([textSize])와 따로 둡니다. */
-    val cardTextSize: Int = 1,
+    /** 딱 화면·잠금화면 카드·홈 위젯 글자 크기(sp, [CardSpRange]). 앱 목록 글자([textSize])와 따로 둡니다. */
+    val cardSp: Int = 19,
+    /** 딱 화면 할 일 줄 사이 여백(dp, [RowGapRange]). 줄마다 글자 위아래로 이만큼. */
+    val rowGap: Int = 12,
     /** 잠금화면 카드를 안드로이드 16+ 라이브 알림(Live Updates)으로 표시해 늘 펼쳐 보이게 합니다. 16+ 에서 기본. */
     val lockLive: Boolean = Build.VERSION.SDK_INT >= 36,
     /** 화면이 켜질 때마다 잠금화면 위에 딱 화면을 먼저 띄움 (LockPageService). 기본 방식. */
@@ -94,8 +96,14 @@ data class Settings(
     val alarmMode: Int = 0,
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
-    /** 딱 화면 아래 바로가기 (최대 [Shortcut.MAX]개, 3×3). */
+    /** 딱 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
     val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM)),
+    /** 바로가기 모양: 0 이름 3줄(9칸), 1 이름 2줄(6칸), 2 아이콘만 4개씩 2줄(8칸). */
+    val shortcutStyle: Int = 0,
+    /** 딱 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
+    val addButton: Int = 0,
+    /** 딱 화면에 알림을 보여 줄 앱(패키지 이름). 비어 있으면 모든 앱. */
+    val notiApps: Set<String> = emptySet(),
 )
 
 /**
@@ -106,15 +114,19 @@ data class Shortcut(val id: String, val name: String = "") {
     companion object {
         const val CALC = "calc"
         const val ALARM = "alarm"
+        const val ADD = "add"
         const val MAX = 9
         fun app(component: String) = Shortcut("app:$component")
     }
 }
 
-/** 잠금화면 카드·위젯 글자 크기(sp). 기본 '크게' 수준이 1.1 의 14sp 보다 큽니다. */
-val CardTextSizes = listOf("보통" to 16f, "크게" to 19f, "아주 크게" to 23f)
+val CardSpRange = 12..36
+val RowGapRange = 0..24
 
-fun Settings.cardTextSp(): Float = CardTextSizes[cardTextSize.coerceIn(CardTextSizes.indices)].second
+fun Settings.cardTextSp(): Float = cardSp.coerceIn(CardSpRange).toFloat()
+
+/** 딱 화면에 보이는 바로가기 칸 수. */
+fun Settings.shortcutSlots(): Int = listOf(9, 6, 8)[shortcutStyle.coerceIn(0, 2)]
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()
