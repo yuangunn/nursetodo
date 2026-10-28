@@ -4,7 +4,6 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.text.format.DateFormat
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -98,6 +97,7 @@ import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.data.cardTextSp
+import com.ttaak.app.data.shortcutSlots
 import com.ttaak.app.ui.MainActivity
 import com.ttaak.app.ui.TtaakTheme
 import kotlinx.coroutines.delay
@@ -110,6 +110,7 @@ import java.time.format.DateTimeFormatter
  * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 딱 화면 먼저 보기'(LockPageService)에서 열립니다.
  * 동그라미를 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
  * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
+ * 할 일 추가는 카드 아래 넓은 줄, 카드 안 메모 버튼, 아래 바로가기 중 하나로 합니다(설정).
  */
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,15 +131,20 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(adding, onClose = { finish() }, onOpen = ::openApp)
+                LockPage(adding, onClose = { finish() }, onOpen = ::openApp, onOpenNoti = ::openNoti)
             }
         }
     }
 
     /** 잠금을 풀고 앱(의 [target] 화면)으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
-    private fun openApp(target: Intent) {
+    private fun openApp(target: Intent) = unlockThen { startActivity(target) }
+
+    /** 다른 앱 알림을 누르면 잠금을 풀고 그 알림의 화면으로. */
+    private fun openNoti(n: Noti) = unlockThen { NotiListener.open(this, n) }
+
+    private fun unlockThen(action: () -> Unit) {
         val go = {
-            startActivity(target)
+            action()
             finish()
         }
         val km = getSystemService(KeyguardManager::class.java)
@@ -159,13 +165,18 @@ class QuickAddActivity : ComponentActivity() {
 internal val Glass = Color.Black.copy(alpha = 0.32f)
 internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 
+/** 할 일 줄의 동그라미 누름 칸 높이. 줄 간격을 좁히면 같이 줄어 줄이 촘촘해집니다(최대 손가락 크기 48dp). */
+internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).dp
+
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent) -> Unit) {
+private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent) -> Unit, onOpenNoti: (Noti) -> Unit) {
     val context = LocalContext.current
     val onOpenApp = { onOpen(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val alarms by TaskStore.alarms.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
+    val allNotis by NotiListener.notis.collectAsStateWithLifecycle()
+    val notis = allNotis.filter { settings.notiApps.isEmpty() || it.pkg in settings.notiApps }
     val today = Day.today()
     // 끝낸 일은 사라지고 앱의 '완료된 할 일'에서만 보입니다.
     val tasks = remember(all, today) { TaskStore.tasksFor(today, today).filterNot { it.isDone(today) } }
@@ -179,14 +190,20 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
     BackHandler(enabled = askingAlarm) { askingAlarm = false }
     // 키보드를 쓰는 동안엔 시계와 아래 버튼을 접어 자리를 만듭니다.
     val typing = adding || editingId != null || askingAlarm
-    // 지워진 앱은 빼고 3×3 까지
-    val shortcuts = remember(settings.shortcuts) {
-        settings.shortcuts.filter { Shortcuts.defaultName(context, it) != null }.take(Shortcut.MAX)
+    // 지워진 앱은 빼고 고른 모양의 칸 수까지
+    val shortcuts = remember(settings.shortcuts, settings.shortcutStyle) {
+        settings.shortcuts.filter { Shortcuts.defaultName(context, it) != null }.take(settings.shortcutSlots())
     }
+    // 추가 버튼은 한 군데만: 바로가기에 '할 일 추가'가 있으면 위쪽 버튼은 숨기고, 적는 동안엔 메모 버튼도 숨깁니다.
+    val addInShortcuts = shortcuts.any { it.id == Shortcut.ADD }
+    val addBar = !addInShortcuts && settings.addButton == 0
+    val addInCard = !addInShortcuts && settings.addButton == 1 && !typing
+    val memo = @Composable { MemoButton { adding = true } }
     val onShortcut: (Shortcut) -> Unit = { sc ->
         when (sc.id) {
             Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
             Shortcut.ALARM -> askingAlarm = true
+            Shortcut.ADD -> adding = true
             else -> Shortcuts.launchIntent(sc)?.let(onOpen)
         }
     }
@@ -229,7 +246,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 40.dp, bottom = 28.dp))
+                if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 24.dp, bottom = 20.dp))
                 if (alarms.isNotEmpty()) {
                     Timers(alarms) { Alarms.cancel(context, it) }
                     Spacer(Modifier.height(12.dp))
@@ -245,21 +262,28 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                         .weight(1f, fill = false),
                 ) {
                     if (tasks.isEmpty()) {
-                        Text(
-                            if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
-                            fontSize = settings.cardTextSp().sp,
-                            color = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
+                                fontSize = settings.cardTextSp().sp,
+                                color = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                            )
+                            if (addInCard) Box(Modifier.padding(end = 9.dp)) { memo() }
+                        }
                     } else {
                         LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
                             items(tasks, key = { it.id }) {
                                 Box(Modifier.animateItem()) {
                                     LockRow(
-                                        it, today, settings.cardTextSp(), settings.checkOnLeft,
+                                        it, today, settings.cardTextSp(), settings.rowGap, settings.checkOnLeft,
                                         editing = it.id == editingId,
                                         onEditing = { on -> editingId = if (on) it.id else null },
                                         onOpenApp = onOpenApp,
+                                        // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
+                                        trailing = memo.takeIf { _ -> addInCard && it.id == tasks.last().id },
                                     )
                                 }
                             }
@@ -267,7 +291,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                if (askingAlarm || addBar || adding) Spacer(Modifier.height(12.dp))
                 if (askingAlarm) {
                     AlarmAsk(
                         onStart = { minutes, label ->
@@ -276,7 +300,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                         },
                         onCancel = { askingAlarm = false },
                     )
-                } else {
+                } else if (addBar || adding) {
                     AddField(
                         adding = adding,
                         onAdding = { adding = it },
@@ -286,11 +310,15 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                         },
                     )
                 }
+                if (!typing && notis.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    NotiList(notis, onOpenNoti)
+                }
             }
             if (!typing) {
                 if (shortcuts.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
-                    ShortcutGrid(shortcuts, onShortcut)
+                    ShortcutGrid(shortcuts, iconsOnly = settings.shortcutStyle == 2, onShortcut)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
@@ -303,21 +331,25 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
     }
 }
 
-/** 아래쪽 바로가기 (3×3 까지): 계산기·알람·고른 앱. 반투명 타일에 아이콘과 이름. */
+/**
+ * 아래쪽 바로가기: 계산기·알람·할 일 추가·고른 앱. 낮은 반투명 타일에 작은 아이콘과 오른쪽 이름(한 줄 3개),
+ * 또는 [iconsOnly] 면 아이콘만 한 줄 4개.
+ */
 @Composable
-private fun ShortcutGrid(items: List<Shortcut>, onTap: (Shortcut) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { sc -> ShortcutTile(sc, Modifier.weight(1f)) { onTap(sc) } }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+private fun ShortcutGrid(items: List<Shortcut>, iconsOnly: Boolean, onTap: (Shortcut) -> Unit) {
+    val perRow = if (iconsOnly) 4 else 3
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.chunked(perRow).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { sc -> ShortcutTile(sc, iconsOnly, Modifier.weight(1f)) { onTap(sc) } }
+                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
 @Composable
-private fun ShortcutTile(sc: Shortcut, modifier: Modifier, onClick: () -> Unit) {
+private fun ShortcutTile(sc: Shortcut, iconsOnly: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val context = LocalContext.current
     val name = remember(sc) { Shortcuts.name(context, sc) }
     val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
@@ -325,25 +357,84 @@ private fun ShortcutTile(sc: Shortcut, modifier: Modifier, onClick: () -> Unit) 
         onClick = onClick,
         color = Glass,
         contentColor = Color.White,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(14.dp),
         border = GlassEdge,
         modifier = modifier,
     ) {
-        Column(
-            Modifier.padding(horizontal = 6.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        val iconSize = if (iconsOnly) 24.dp else 20.dp
+        // 아이콘만 보일 땐 이름을 화면 낭독기에 알려 줍니다.
+        val label = name.takeIf { iconsOnly }
+        val iconView = @Composable {
             when {
-                icon != null -> Image(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+                icon != null -> Image(icon, contentDescription = label, modifier = Modifier.size(iconSize))
                 else -> Icon(
-                    painterResource(if (sc.id == Shortcut.ALARM) R.drawable.ic_alarm else R.drawable.ic_calc),
-                    contentDescription = null,
+                    painterResource(Shortcuts.builtInIcon(sc)),
+                    contentDescription = label,
                     tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(iconSize),
                 )
             }
-            Spacer(Modifier.height(6.dp))
-            Text(name, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (iconsOnly) {
+            Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) { iconView() }
+        } else {
+            // 좁은 폰(360dp)에서도 한글 4~5글자가 들어가게 여백을 줄였습니다.
+            Row(
+                Modifier.padding(start = 8.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                iconView()
+                Spacer(Modifier.width(5.dp))
+                Text(name, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** 다른 앱 알림 (최근 3개): 앱 아이콘, 제목·시각, 내용 한 줄. 누르면 잠금을 풀고 그 앱으로. */
+@Composable
+private fun NotiList(items: List<Noti>, onTap: (Noti) -> Unit) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.take(3).forEach { n ->
+            val icon = remember(n.pkg) { NotiListener.icon(context, n.pkg) }
+            Surface(
+                onClick = { onTap(n) },
+                color = Glass,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(18.dp),
+                border = GlassEdge,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                n.title,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(Fmt.stamp(n.time).removePrefix("오늘 "), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                        }
+                        if (n.text.isNotBlank()) {
+                            Text(n.text, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+        if (items.size > 3) {
+            Text(
+                "알림 ${items.size - 3}개 더",
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
@@ -506,22 +597,28 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
 /** 잠금화면을 가리는 대신 시계는 그대로 보여 줍니다. 분이 바뀔 때마다 다시 그립니다. */
 @Composable
 private fun Clock(modifier: Modifier) {
-    val context = LocalContext.current
     val now by produceState(LocalDateTime.now()) {
         while (true) {
             value = LocalDateTime.now()
             delay(60_000L - value.second * 1_000L - value.nano / 1_000_000L)
         }
     }
-    val pattern = if (DateFormat.is24HourFormat(context)) "H:mm" else "h:mm"
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(Fmt.date(now.toLocalDate().toEpochDay()), color = Color.White, style = MaterialTheme.typography.titleMedium)
+    // 시계와 날짜를 한 줄에 (글자 밑선을 맞춰서). 할 일 자리를 넓히려고 작게, 대신 얇은 글씨는 피합니다.
+    Row(modifier) {
         Text(
-            now.format(DateTimeFormatter.ofPattern(pattern)),
+            now.format(DateTimeFormatter.ofPattern("HH:mm")), // 폰 설정과 상관없이 24시간제
             color = Color.White,
-            fontSize = 84.sp,
-            lineHeight = 90.sp,
-            fontWeight = FontWeight.Light,
+            fontSize = 48.sp,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.alignByBaseline(),
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            Fmt.date(now.toLocalDate().toEpochDay()),
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.alignByBaseline(),
         )
     }
 }
@@ -536,10 +633,12 @@ private fun LockRow(
     task: Task,
     day: Long,
     sp: Float,
+    gap: Int,
     checkOnLeft: Boolean,
     editing: Boolean,
     onEditing: (Boolean) -> Unit,
     onOpenApp: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     var done by remember(task.id) { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -551,10 +650,10 @@ private fun LockRow(
         }
     }
     val circle = @Composable {
-        // 손가락 크기만큼(48dp) 눌리고, 보이는 동그라미는 26dp
+        // 손가락 폭만큼(48dp) 눌리고, 보이는 동그라미는 26dp
         Box(
             Modifier
-                .size(48.dp)
+                .size(48.dp, circleBoxHeight(gap))
                 .clip(CircleShape)
                 .clickable(enabled = !done && !editing) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -586,7 +685,7 @@ private fun LockRow(
             .weight(1f)
             .padding(horizontal = 6.dp)
         if (editing) {
-            RenameField(task, sp, onDone = { onEditing(false) }, modifier = textModifier)
+            RenameField(task, sp, gap, onDone = { onEditing(false) }, modifier = textModifier)
         } else {
             Text(
                 task.title,
@@ -606,16 +705,39 @@ private fun LockRow(
                             onEditing(true)
                         },
                     )
-                    .padding(horizontal = 6.dp, vertical = 12.dp),
+                    .padding(horizontal = 6.dp, vertical = gap.dp),
             )
         }
+        // 오른쪽 체크일 때도 동그라미 줄이 다른 줄과 맞도록 메모 버튼은 동그라미 앞에
+        trailing?.invoke()
         if (!checkOnLeft) circle()
+    }
+}
+
+/** 카드 안 '할 일 추가' 버튼: 메모 아이콘만, 테마 색 동그라미라 유리 카드 위에서도 잘 보입니다. */
+@Composable
+private fun MemoButton(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(R.drawable.ic_memo), contentDescription = "할 일 추가", tint = Color.White, modifier = Modifier.size(22.dp))
+        }
     }
 }
 
 /** 길게 눌러 여는 이름 고치기 칸. 엔터면 저장, 비우거나 그대로면 저장하지 않고 닫힘. */
 @Composable
-private fun RenameField(task: Task, sp: Float, onDone: () -> Unit, modifier: Modifier) {
+private fun RenameField(task: Task, sp: Float, gap: Int, onDone: () -> Unit, modifier: Modifier) {
     var text by remember { mutableStateOf(TextFieldValue(task.title, TextRange(task.title.length))) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -639,7 +761,7 @@ private fun RenameField(task: Task, sp: Float, onDone: () -> Unit, modifier: Mod
         }),
         modifier = modifier
             .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 6.dp, vertical = 12.dp)
+            .padding(horizontal = 6.dp, vertical = gap.dp)
             .focusRequester(focus),
     )
 }

@@ -99,11 +99,7 @@ object LockCard {
 
         // 펼친 카드 높이는 시스템이 약 256dp 로 자르므로 글자가 클수록 줄 수를 줄입니다.
         val sp = settings.cardTextSp()
-        val maxRows = when (settings.cardTextSize) {
-            0 -> 6
-            1 -> 5
-            else -> 4
-        }
+        val maxRows = (100 / sp).toInt().coerceIn(2, 7) // 16sp 6줄, 19sp 5줄, 23sp 4줄
 
         val collapsed = RemoteViews(context.packageName, R.layout.lock_card_small).apply {
             setTextViewText(R.id.title, title)
