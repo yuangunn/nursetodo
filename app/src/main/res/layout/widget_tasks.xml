@@ -69,7 +69,7 @@
         android:background="@drawable/widget_button_bg"
         android:gravity="center"
         android:text="@string/widget_calc"
-        android:textColor="@color/brand"
+        android:textColor="@color/accent"
         android:textSize="14sp"
         android:textStyle="bold"
         android:visibility="gone" />

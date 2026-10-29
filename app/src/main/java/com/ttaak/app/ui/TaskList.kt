@@ -119,7 +119,7 @@ fun TaskList(
         if (shown.isEmpty() && done.isEmpty()) {
             item(key = "empty") {
                 Text(
-                    "아직 할 일이 없어요.\n아래에 딱 적어보세요.",
+                    "아직 할 일이 없어요.\n아래에 적어보세요.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp),

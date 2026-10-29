@@ -10,7 +10,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.ttaak.app.R
 import com.ttaak.app.data.Shortcut
 
-/** 딱 화면 바로가기의 이름·아이콘·여는 법. 앱은 런처에 보이는 앱만 고를 수 있습니다. */
+/** 할 일 화면 바로가기의 이름·아이콘·여는 법. 앱은 런처에 보이는 앱만 고를 수 있습니다. */
 object Shortcuts {
     fun component(s: Shortcut): ComponentName? =
         s.id.takeIf { it.startsWith("app:") }?.let { ComponentName.unflattenFromString(it.removePrefix("app:")) }
@@ -48,7 +48,7 @@ object Shortcuts {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
     }
 
-    /** 고를 수 있는 앱 (런처 앱, 딱 자신 빼고) — (바로가기, 이름) 을 이름순으로. */
+    /** 고를 수 있는 앱 (런처 앱, 이 앱 빼고) — (바로가기, 이름) 을 이름순으로. */
     fun installedApps(context: Context): List<Pair<Shortcut, String>> {
         val pm = context.packageManager
         return pm.queryIntentActivities(

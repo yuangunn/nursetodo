@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#FFFF6B4A</color>
+    <!-- 시그니처 블루: 아이콘은 짙은 남색, 글자·버튼은 어두운 바탕에서도 보이게 밝은 파랑 -->
+    <color name="brand">#FF003876</color>
+    <color name="accent">#FF0054D1</color>
     <color name="widget_bg">#F2FFFFFF</color>
     <color name="widget_text">#FF1C1C1E</color>
     <color name="widget_sub">#FF8E8E93</color>

@@ -81,7 +81,7 @@ fun SetupGuide(
     val widget = remember(tick, settings) { Setup.widgetAdded(context) }
     val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
     val overlay = remember(tick, settings) { android.provider.Settings.canDrawOverlays(context) }
-    // 딱 화면(A안)을 쓰면 잠금화면 카드·알림 스타일·라이브 알림은 필요 없습니다 (카드를 띄우지 않음).
+    // 할 일 화면(A안)을 쓰면 잠금화면 카드·알림 스타일·라이브 알림은 필요 없습니다 (카드를 띄우지 않음).
     val page = settings.lockPage
     val live = !page && Build.VERSION.SDK_INT >= 36 && settings.lockLive
     val promoted = remember(tick, settings) { live && Setup.liveShowing(context) }
@@ -92,7 +92,7 @@ fun SetupGuide(
             StepSpec(
                 state = if (allowed) State.Done else State.Todo,
                 title = "알림 허용",
-                body = if (page) "알람이 울리고 딱 화면이 늘 켜져 있으려면 필요해요." else "잠금화면 카드는 알림으로 표시돼요.",
+                body = if (page) "알람이 울리고 할 일 화면이 늘 켜져 있으려면 필요해요." else "잠금화면 카드는 알림으로 표시돼요.",
                 action = "허용하기".takeIf { !allowed },
             ) {
                 if (Build.VERSION.SDK_INT >= 33) askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -103,11 +103,11 @@ fun SetupGuide(
             add(
                 StepSpec(
                     state = if (overlay && settings.lockEnabled) State.Done else State.Todo,
-                    title = "화면 켜면 딱 화면",
+                    title = "화면 켜면 할 일 화면",
                     body = when {
                         !settings.lockEnabled -> "'잠금화면에 오늘 할 일 표시'가 꺼져 있어요."
                         overlay -> "화면을 켜면 잠금 위에 오늘 할 일이 먼저 떠요."
-                        else -> "'다른 앱 위에 표시'를 허용해야 화면을 켤 때 딱 화면이 떠요. 열리는 목록에서 '딱'을 찾아 켜 주세요."
+                        else -> "'다른 앱 위에 표시'를 허용해야 화면을 켤 때 할 일 화면이 떠요. 열리는 목록에서 '널스투두'를 찾아 켜 주세요."
                     },
                     action = when {
                         !settings.lockEnabled -> "켜기"
@@ -128,7 +128,7 @@ fun SetupGuide(
                         !allowed -> "알림 허용을 먼저 해 주세요."
                         blocked -> "'잠금화면 카드' 알림이 꺼져 있어요. 켜 주세요."
                         !settings.lockEnabled -> "설정에서 꺼 두었어요."
-                        showing -> "상단바를 내리면 '딱' 카드가 보여요."
+                        showing -> "상단바를 내리면 '널스투두' 카드가 보여요."
                         else -> "카드가 아직 없어요. 다시 띄워 볼게요."
                     },
                     action = when {
@@ -160,7 +160,7 @@ fun SetupGuide(
                         null -> "폰 설정이라 직접 바꿔야 해요. 화면을 끄고 켜서 카드가 보이는지 확인하세요.\n" +
                             "· 삼성: 설정 → 알림 → 잠금화면 → 알림 스타일 '카드'\n" +
                             "· 픽셀/기타: 설정 → 알림 → 잠금 화면의 알림 → '모든 알림 표시'"
-                        else -> "잠금화면 알림이 '${if (style == 1) "아이콘" else "동그란 점"}'이라 딱 카드가 안 보여요. " +
+                        else -> "잠금화면 알림이 '${if (style == 1) "아이콘" else "동그란 점"}'이라 할 일 카드가 안 보여요. " +
                             "열리는 화면에서 알림 스타일을 '카드'로 골라 주세요."
                     },
                     action = "설정 열기".takeIf { style != 0 },
@@ -191,9 +191,9 @@ fun SetupGuide(
                 state = if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
                 optional = true,
                 title = "잠금화면에서 바로 추가 (상단바 버튼)",
-                body = if (Setup.canRequestTile) "상단바를 내려 '딱 추가'(✓)를 누르면 잠금을 풀지 않고 적을 수 있어요. " +
+                body = if (Setup.canRequestTile) "상단바를 내려 '할 일 추가'(✓)를 누르면 잠금을 풀지 않고 적을 수 있어요. " +
                     "삼성은 오른쪽 위에서 내린 빠른 설정창 맨 아래에 있어요."
-                else "상단바를 내려 연필(편집) 버튼 → '딱 추가' 타일을 끌어다 놓으세요.",
+                else "상단바를 내려 연필(편집) 버튼 → '할 일 추가' 타일을 끌어다 놓으세요.",
                 action = "추가하기".takeIf { Setup.canRequestTile && !settings.tileAdded },
             ) { (context as? Activity)?.let { Setup.requestTile(it) } },
         )
@@ -202,11 +202,11 @@ fun SetupGuide(
                 state = if (widget) State.Done else State.Todo,
                 optional = true,
                 title = "홈 화면 위젯 (선택)",
-                body = if (widget) "위젯이 홈 화면에 있어요." else "홈 화면을 길게 눌러 위젯 → '딱'을 골라도 돼요.",
+                body = if (widget) "위젯이 홈 화면에 있어요." else "홈 화면을 길게 눌러 위젯 → '널스투두'를 골라도 돼요.",
                 action = "추가하기".takeIf { !widget },
             ) {
                 if (!Setup.requestWidget(context)) {
-                    Toast.makeText(context, "홈 화면을 길게 눌러 위젯 → '딱'을 추가해 주세요", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "홈 화면을 길게 눌러 위젯 → '널스투두'를 추가해 주세요", Toast.LENGTH_LONG).show()
                 }
             },
         )

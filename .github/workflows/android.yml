@@ -24,5 +24,5 @@ jobs:
         continue-on-error: true
         with:
           retention-days: 7
-          name: ttaak-apk
+          name: nursetodo-apk
           path: app/build/outputs/apk/*/release/*.apk

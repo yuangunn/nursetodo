@@ -89,7 +89,7 @@ class AlarmRingService : Service() {
                 .setContentIntent(screen)
                 .addAction(0, "끄기", Alarms.stopIntent(context))
                 .setOngoing(true)
-                // 딱 카드와 한 묶음으로 섞이지 않게 따로 묶습니다.
+                // 할 일 카드와 한 묶음으로 섞이지 않게 따로 묶습니다.
                 .setGroup(Alarms.CHANNEL_ID)
                 .build()
         }

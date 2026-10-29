@@ -6,7 +6,7 @@
         <item name="android:windowBackground">@android:color/white</item>
     </style>
 
-    <!-- 딱 화면: 잠금화면 대신 폰 배경화면이 뒤에 보이게 (뿌연 막 없이) -->
+    <!-- 할 일 화면: 잠금화면 대신 폰 배경화면이 뒤에 보이게 (뿌연 막 없이) -->
     <style name="Theme.Ttaak.QuickAdd" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowShowWallpaper">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>

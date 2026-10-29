@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">딱</string>
+    <string name="app_name">널스투두</string>
     <string name="channel_name">잠금화면 카드</string>
     <string name="channel_desc">오늘 할 일을 잠금화면에 고정해서 보여줍니다.</string>
-    <string name="lock_empty">오늘 할 일을 딱 적어보세요</string>
+    <string name="lock_empty">오늘 할 일을 적어보세요</string>
     <string name="lock_all_done">오늘 할 일 끝! 🎉</string>
     <string name="check">체크</string>
     <string name="add">할 일 추가</string>
     <string name="add_short">＋ 추가</string>
-    <string name="tile_label">딱 추가</string>
+    <string name="tile_label">할 일 추가</string>
     <string name="widget_label">오늘 할 일</string>
     <string name="widget_desc">오늘 할 일을 보고 바로 체크해요</string>
     <string name="widget_calc">항암 주입속도 계산기</string>

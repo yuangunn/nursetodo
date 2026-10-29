@@ -50,7 +50,7 @@ object Alarms {
     /** 저장된 알람을 다시 맞춥니다. 꺼져 있던 사이에 지난 알람은 바로 울립니다. */
     fun scheduleAll(context: Context) = TaskStore.alarms.value.forEach { schedule(context, it) }
 
-    /** 지금 울리고 있는지. 울리는 동안엔 화면이 켜져도 딱 화면을 띄우지 않습니다. */
+    /** 지금 울리고 있는지. 울리는 동안엔 화면이 켜져도 할 일 화면을 띄우지 않습니다. */
     fun ringing(): Boolean = AlarmRingService.ringing.value != null
 
     /** 울리는 알람을 끕니다 (소리·진동·알림·알람 화면 모두). */
