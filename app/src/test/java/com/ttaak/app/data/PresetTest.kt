@@ -23,10 +23,12 @@ class PresetTest {
     private val presets = Preset.Defaults
 
     // TaskStore 는 앱 전체에 하나라 다른 시험에 남지 않게 앞뒤로 비웁니다.
+    // 앱의 onChanged(→ refreshPreset)는 진짜 시계로 교대를 다시 불러와 시험의 시각을 덮으므로 뗍니다.
     @Before
     @After
     fun reset() {
         TaskStore.init(ApplicationProvider.getApplicationContext())
+        TaskStore.onChanged = null
         TaskStore.tasks.value.forEach { TaskStore.delete(it.id) }
         TaskStore.updateSettings { Settings() }
     }
