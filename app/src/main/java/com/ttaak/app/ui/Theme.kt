@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.sp
 import com.ttaak.app.data.Settings
 
 val Accents = listOf(
+    Color(0xFF0054D1), // 시그니처 블루 (res/values/colors.xml 의 accent)
     Color(0xFFFF6B4A), // 코랄
-    Color(0xFF3478F6), // 블루
     Color(0xFF34C759), // 그린
     Color(0xFFAF52DE), // 퍼플
     Color(0xFFFF9F0A), // 오렌지

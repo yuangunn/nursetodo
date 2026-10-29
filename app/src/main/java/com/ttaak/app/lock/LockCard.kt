@@ -19,8 +19,10 @@ import com.ttaak.app.data.Fmt
 import com.ttaak.app.data.Task
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.data.cardTextSp
+import com.ttaak.app.data.nextShift
 import com.ttaak.app.ui.Accents
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
@@ -34,13 +36,13 @@ object LockCard {
     const val NOTIFICATION_ID = 1
 
     /**
-     * 딱 화면(A안) 상시 서비스용 조용한 알림. 안드로이드가 상시 서비스 알림을 MIN 으로 못 두게 해서(LOW 로 올림)
+     * 할 일 화면(A안) 상시 서비스용 조용한 알림. 안드로이드가 상시 서비스 알림을 MIN 으로 못 두게 해서(LOW 로 올림)
      * 상태바에 아이콘이 남습니다. 사용자가 이 알림 종류를 끄면 아이콘·알림은 사라지고 서비스는 그대로 돕니다(실기기·에뮬 확인).
      */
     const val PAGE_CHANNEL_ID = "lock_page"
 
     /**
-     * 화면을 켜면 딱 화면이 뜨는 상태(A안)인지. 이때는 잠금화면 카드·라이브 알림이 겹치므로 띄우지 않고,
+     * 화면을 켜면 할 일 화면이 뜨는 상태(A안)인지. 이때는 잠금화면 카드·라이브 알림이 겹치므로 띄우지 않고,
      * 서비스가 꼭 가져야 하는 알림만 조용히 둡니다.
      */
     fun pageMode(context: Context): Boolean =
@@ -59,8 +61,8 @@ object LockCard {
             enableLights(false)
             setShowBadge(false)
         }
-        val page = NotificationChannel(PAGE_CHANNEL_ID, "딱 화면 유지", NotificationManager.IMPORTANCE_MIN).apply {
-            description = "화면을 켜면 딱 화면을 띄우려고 늘 켜 두는 알림. 꺼도 딱 화면은 그대로 동작해요."
+        val page = NotificationChannel(PAGE_CHANNEL_ID, "할 일 화면 유지", NotificationManager.IMPORTANCE_MIN).apply {
+            description = "화면을 켜면 할 일 화면을 띄우려고 늘 켜 두는 알림. 꺼도 할 일 화면은 그대로 동작해요."
             lockscreenVisibility = Notification.VISIBILITY_SECRET
             setShowBadge(false)
         }
@@ -172,7 +174,7 @@ object LockCard {
     private fun buildPage(context: Context): Notification =
         NotificationCompat.Builder(context, PAGE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
-            .setContentTitle("딱 화면 켜짐")
+            .setContentTitle("할 일 화면 켜짐")
             .setContentText("화면을 켜면 오늘 할 일이 먼저 보여요")
             .setContentIntent(pageIntent(context))
             .setOngoing(true)
@@ -185,7 +187,7 @@ object LockCard {
     /**
      * 라이브 알림 (안드로이드 16+ Live Updates). 시스템이 잠금화면 맨 위에 늘 펼쳐 보여 주는 대신 커스텀 화면을
      * 못 써서(넣으면 시스템이 라이브로 올려 주지 않음) 줄마다 체크는 안 됩니다. 버튼은 시스템이 3개까지만 받아서
-     * 남은 할 일 위에서 3개까지 완료 버튼을 둡니다. 그 아래는 카드를 눌러 딱 화면에서 체크합니다.
+     * 남은 할 일 위에서 3개까지 완료 버튼을 둡니다. 그 아래는 카드를 눌러 할 일 화면에서 체크합니다.
      * 앱 아이콘·이름 줄은 시스템이 강제로 붙입니다.
      */
     private fun buildLive(
@@ -251,7 +253,7 @@ object LockCard {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** 카드를 누르면 딱 화면을 목록부터 (키보드 없이). 추가는 화면 안의 '할 일 추가'로. */
+    /** 카드를 누르면 할 일 화면을 목록부터 (키보드 없이). 추가는 화면 안의 '할 일 추가'로. */
     private fun pageIntent(context: Context): PendingIntent = PendingIntent.getActivity(
         context, 3,
         Intent(context, QuickAddActivity::class.java)
@@ -267,13 +269,14 @@ object LockCard {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-    /** 날짜가 바뀌면 카드를 새 날짜로 다시 그립니다. (정확한 알람 권한 없이 5분 창 안에서) */
-    fun scheduleMidnight(context: Context) {
+    /** 날짜나 교대(프리셋)가 바뀌면 카드·위젯을 다시 그립니다. (정확한 알람 권한 없이 5분 창 안에서) */
+    fun scheduleRefresh(context: Context) {
         val am = context.getSystemService(AlarmManager::class.java)
-        val midnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault())
-            .toInstant().toEpochMilli() + 1_000
+        val midnight = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val s = TaskStore.settings.value
+        val shift = if (s.presetMode) s.presets.nextShift(LocalDateTime.now()) else null
         am.setWindow(
-            AlarmManager.RTC, midnight, 5 * 60_000L,
+            AlarmManager.RTC, minOf(midnight, shift ?: midnight) + 1_000, 5 * 60_000L,
             broadcast(context, LockActionReceiver.ACTION_REFRESH, 2),
         )
     }

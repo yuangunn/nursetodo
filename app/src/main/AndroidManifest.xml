@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 안드로이드 16+ 라이브 알림(Live Updates). 설정에서 켤 때만 씁니다. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
-    <!-- 화면 켜면 잠금화면 위에 딱 화면(LockPageService): 상시 서비스 + 다른 앱 위에 표시 -->
+    <!-- 화면 켜면 잠금화면 위에 할 일 화면(LockPageService): 상시 서비스 + 다른 앱 위에 표시 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -20,7 +20,7 @@
     <!-- 알람이 울리는 동안 알람음을 직접 재생하는 서비스 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- 딱 화면 바로가기로 고를 수 있게 런처에 보이는 앱 목록을 읽습니다 -->
+    <!-- 할 일 화면 바로가기로 고를 수 있게 런처에 보이는 앱 목록을 읽습니다 -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />

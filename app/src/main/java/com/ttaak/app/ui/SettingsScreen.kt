@@ -2,6 +2,8 @@ package com.ttaak.app.ui
 
 import android.app.Activity
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.content.DialogInterface
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
@@ -68,6 +70,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -76,10 +79,12 @@ import com.ttaak.app.R
 import com.ttaak.app.data.CardSpRange
 import com.ttaak.app.data.Day
 import com.ttaak.app.data.Fmt
+import com.ttaak.app.data.Preset
 import com.ttaak.app.data.RowGapRange
 import com.ttaak.app.data.Settings
 import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.TaskStore
+import com.ttaak.app.data.currentShift
 import com.ttaak.app.data.shortcutSlots
 import com.ttaak.app.lock.AlarmRingService
 import com.ttaak.app.lock.AlarmSound
@@ -94,6 +99,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 @Composable
 fun SettingsScreen() {
@@ -115,14 +121,14 @@ fun SettingsScreen() {
 
         Section("잠금화면")
         SwitchRow("잠금화면에 오늘 할 일 표시", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
-        SwitchRow("화면 켜면 딱 화면 먼저 보기", s.lockPage) { v ->
+        SwitchRow("화면 켜면 할 일 화면 먼저 보기", s.lockPage) { v ->
             TaskStore.updateSettings { it.copy(lockPage = v) }
             // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
             if (v) Setup.requestOverlay(context)
         }
         CardLook(s)
         if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
-            LinkRow("할 일 추가 버튼", "딱 화면 아래 바로가기의 '할 일 추가'로 해요. 위쪽 버튼은 숨겼어요.")
+            LinkRow("할 일 추가 버튼", "할 일 화면 아래 바로가기의 '할 일 추가'로 해요. 위쪽 버튼은 숨겼어요.")
         } else {
             ChoiceRow("할 일 추가 버튼", listOf("카드 아래", "카드 안"), s.addButton) { i -> TaskStore.updateSettings { it.copy(addButton = i) } }
         }
@@ -134,23 +140,23 @@ fun SettingsScreen() {
             val notiOn = remember(tick) { NotiListener.allowed(context) }
             val notiLive = remember(tick) { NotiListener.connected }
             LinkRow(
-                "상태바의 딱 아이콘 숨기기",
-                if (hidden) "숨겼어요. 딱 화면은 그대로 동작해요."
-                else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 딱 화면은 그대로 동작해요.",
+                "상태바의 널스투두 아이콘 숨기기",
+                if (hidden) "숨겼어요. 할 일 화면은 그대로 동작해요."
+                else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 할 일 화면은 그대로 동작해요.",
                 if (hidden) "숨김" else "열기",
             ) { Setup.openPageChannelSettings(context) }
             if (!NotiListener.available(context)) {
                 LinkRow(
-                    "딱 화면에 다른 앱 알림 보기",
+                    "할 일 화면에 다른 앱 알림 보기",
                     "이 설치본(기본판)에는 없어요. 다른 앱 알림을 읽는 앱은 구글 Play 프로텍트가 파일 설치를 막아서, 알림판은 컴퓨터로 설치해야 해요.",
                 )
             } else {
                 LinkRow(
-                    "딱 화면에 다른 앱 알림 보기",
+                    "할 일 화면에 다른 앱 알림 보기",
                     when {
                         notiOn && notiLive -> "팀즈 같은 앱 알림이 할 일 아래에 최근 3개까지 보여요. 누르면 잠금을 풀고 그 알림을 열어요."
                         notiOn -> "연결이 끊겼어요(다른 판을 깔았다가 다시 깔면 이래요). 열리는 화면에서 다시 켜 주세요."
-                        else -> "열리는 화면에서 '딱'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요."
+                        else -> "열리는 화면에서 '널스투두'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요."
                     },
                     when {
                         notiOn && notiLive -> "켜짐"
@@ -168,14 +174,14 @@ fun SettingsScreen() {
                 }
             }
         }
-        // 딱 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.
+        // 할 일 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.
         if (Build.VERSION.SDK_INT >= 36 && !s.lockPage) {
             SwitchRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
         }
         SettingField(
             value = s.lockText,
             max = 40,
-            label = "카드 문구 (예: 오늘도 딱 해내자)",
+            label = "카드 문구 (예: 오늘도 무사히)",
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
         ) { v -> TaskStore.updateSettings { it.copy(lockText = v) } }
         Row(
@@ -206,7 +212,10 @@ fun SettingsScreen() {
         }
         SetupGuide(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-        Section("딱 화면 바로가기")
+        Section("교대 프리셋")
+        PresetSettings(s)
+
+        Section("할 일 화면 바로가기")
         ShortcutSettings(s)
 
         Section("알람")
@@ -255,7 +264,123 @@ fun SettingsScreen() {
     }
 }
 
-/** 딱 화면 아래 바로가기(모양에 따라 6~9칸): 앱을 골라 넣고, 눌러서 이름을 바꾸고, ↑ 로 앞으로, ✕ 로 뺍니다. */
+/** 교대 프리셋: 켜기, 프리셋마다 이름·불러올 시각·할 일 수. 눌러서 고치고 복제·삭제·지금 불러오기. */
+@Composable
+private fun PresetSettings(s: Settings) {
+    var editing by remember { mutableStateOf<Preset?>(null) }
+    SwitchRow("교대 프리셋 사용", s.presetMode) { TaskStore.setPresetMode(it) }
+    s.presets.forEach { p ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { editing = p }
+                .padding(horizontal = 24.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(p.name, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${p.start?.let(::clock) ?: "자동으로 안 불러옴"} · 할 일 ${p.items.size}개",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (s.presetMode && p.id == s.presetLoaded) Text("지금", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+    TextButton(
+        onClick = { editing = Preset(System.currentTimeMillis(), "", null, emptyList()) },
+        modifier = Modifier.padding(start = 12.dp),
+    ) { Text("+ 프리셋 추가") }
+    Hint(
+        "켜면 매일 정한 시각에 할 일 목록이 그 프리셋으로 바뀌어요. 프리셋에서 온 할 일 중 못 끝낸 것은 다음 교대에 사라지고, " +
+            "직접 추가한 할 일은 그대로예요. 할 일 화면은 시계와 바로가기 사이를 할 일이 다 채우고, 개수에 맞춰 글자 크기와 줄 간격이 바뀌어요. " +
+            "다른 앱 알림은 오른쪽에 앱 아이콘으로 보이고, 누르면 내용을 펼쳐요.",
+    )
+    editing?.let { p -> PresetEditor(p, s, onDone = { editing = it }) }
+}
+
+/** 프리셋 하나 고치기. 할 일은 한 줄에 하나. [onDone] 에 다음에 열 프리셋(복제본) 또는 null(닫기). */
+@Composable
+private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
+    val context = LocalContext.current
+    var name by remember(p.id) { mutableStateOf(p.name) }
+    var start by remember(p.id) { mutableStateOf(p.start) }
+    var items by remember(p.id) { mutableStateOf(p.items.joinToString("\n")) }
+    var deleting by remember(p.id) { mutableStateOf(false) }
+    val isNew = s.presets.none { it.id == p.id }
+    val edited = { Preset(p.id, name.trim().ifEmpty { "프리셋" }, start, items.lines().map { it.trim() }.filter { it.isNotEmpty() }) }
+    val withEdits = { if (isNew) s.presets + edited() else s.presets.map { if (it.id == p.id) edited() else it } }
+    AlertDialog(
+        onDismissRequest = { onDone(null) },
+        title = { Text(if (isNew) "프리셋 추가" else "프리셋 고치기") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(20) },
+                    label = { Text("이름") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("매일 불러올 시각", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        val t = start ?: (7 * 60)
+                        TimePickerDialog(context, { _, h, m -> start = h * 60 + m }, t / 60, t % 60, true).apply {
+                            setButton(DialogInterface.BUTTON_NEUTRAL, "안 불러옴") { _, _ -> start = null }
+                        }.show()
+                    }) { Text(start?.let(::clock) ?: "안 불러옴") }
+                }
+                OutlinedTextField(
+                    value = items,
+                    onValueChange = { items = it },
+                    label = { Text("할 일 (한 줄에 하나)") },
+                    minLines = 6,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row {
+                    if (!isNew) {
+                        // 고친 내용을 저장하고, 자동으로 불러오지 않는 복사본을 만들어 바로 엽니다.
+                        TextButton(onClick = {
+                            val copy = edited().copy(id = System.currentTimeMillis(), name = "${edited().name} 복사", start = null)
+                            TaskStore.savePresets(withEdits() + copy, changed = p.id)
+                            onDone(copy)
+                        }) { Text("복제") }
+                        TextButton(onClick = {
+                            if (deleting) {
+                                TaskStore.savePresets(s.presets.filterNot { it.id == p.id })
+                                onDone(null)
+                            } else {
+                                deleting = true
+                            }
+                        }) { Text(if (deleting) "정말 삭제" else "삭제", color = MaterialTheme.colorScheme.error) }
+                    }
+                    if (s.presetMode) {
+                        // 시각과 상관없이 지금 이 프리셋으로 바꿉니다. 다음 교대 시각엔 그 시각 프리셋으로 다시 바뀝니다.
+                        TextButton(onClick = {
+                            val list = withEdits()
+                            TaskStore.savePresets(list)
+                            TaskStore.loadPreset(edited(), list.currentShift(LocalDateTime.now())?.second ?: System.currentTimeMillis())
+                            onDone(null)
+                        }) { Text("지금 불러오기") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                TaskStore.savePresets(withEdits(), changed = p.id)
+                onDone(null)
+            }) { Text("저장") }
+        },
+        dismissButton = { TextButton(onClick = { onDone(null) }) { Text("취소") } },
+    )
+}
+
+private fun clock(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60)
+
+/** 할 일 화면 아래 바로가기(모양에 따라 6~9칸): 앱을 골라 넣고, 눌러서 이름을 바꾸고, ↑ 로 앞으로, ✕ 로 뺍니다. */
 @Composable
 private fun ShortcutSettings(s: Settings) {
     val context = LocalContext.current
@@ -287,7 +412,7 @@ private fun ShortcutSettings(s: Settings) {
                 }
                 // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
                 if (i >= slots) {
-                    Text("칸이 모자라 딱 화면엔 안 보여요", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    Text("칸이 모자라 할 일 화면엔 안 보여요", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                 }
             }
             if (i > 0) {
@@ -379,7 +504,7 @@ private fun ShortcutSettings(s: Settings) {
     }
 }
 
-/** 딱 화면에 알림을 보여 줄 앱 고르기. 아무것도 안 고르면 모든 앱. */
+/** 할 일 화면에 알림을 보여 줄 앱 고르기. 아무것도 안 고르면 모든 앱. */
 @Composable
 private fun NotiApps(s: Settings) {
     val context = LocalContext.current
@@ -469,7 +594,7 @@ private fun ShortcutIcon(sc: Shortcut) {
     }
 }
 
-/** 딱 화면의 '알람'이 울리는 방식: 알람음, 크기, 소리/진동, 무음 모드에서도 소리. */
+/** 할 일 화면의 '알람'이 울리는 방식: 알람음, 크기, 소리/진동, 무음 모드에서도 소리. */
 @Composable
 private fun AlarmSettings(s: Settings) {
     val context = LocalContext.current
@@ -488,7 +613,7 @@ private fun AlarmSettings(s: Settings) {
     if (!remember(tick) { Setup.fullScreenAllowed(context) }) {
         LinkRow(
             "알람 화면이 꺼져 있어요",
-            "화면이 꺼진 채 알람이 울리면 소리와 알림만 나와요. 열리는 화면에서 '딱'을 허용해 주세요.",
+            "화면이 꺼진 채 알람이 울리면 소리와 알림만 나와요. 열리는 화면에서 '널스투두'를 허용해 주세요.",
             "허용",
         ) { Setup.openFullScreenSettings(context) }
     }
@@ -566,7 +691,7 @@ private fun AlarmSettings(s: Settings) {
         modifier = Modifier.padding(start = 12.dp),
     ) { Text("들어 보기 (3초)") }
     Hint(
-        "딱 화면의 '알람' 버튼으로 몇 분 뒤에 울릴지 맞춰요. 화면이 꺼져 있어도 정시에 울리고, 끄기를 누를 때까지" +
+        "할 일 화면의 '알람' 버튼으로 몇 분 뒤에 울릴지 맞춰요. 화면이 꺼져 있어도 정시에 울리고, 끄기를 누를 때까지" +
             "(최대 10분) 울려요. 울리는 동안만 폰의 알람 음량을 위 크기로 맞췄다가 되돌려요.",
     )
 }
@@ -625,7 +750,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 }
 
 /**
- * 잠금화면 글자 크기·줄 간격. 아래에 딱 화면 모양 예시가 있어 움직이는 대로 바로 보입니다.
+ * 잠금화면 글자 크기·줄 간격. 아래에 할 일 화면 모양 예시가 있어 움직이는 대로 바로 보입니다.
  * 저장(카드·위젯 다시 그리기)은 손을 뗄 때 한 번만.
  */
 @Composable
@@ -664,6 +789,7 @@ private fun CardLook(s: Settings) {
                         Text(
                             title,
                             fontSize = sp.roundToInt().sp,
+                            lineHeight = 1.25.em,
                             fontWeight = FontWeight.Medium,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -678,7 +804,7 @@ private fun CardLook(s: Settings) {
         }
     }
     Text(
-        "글자 크기는 잠금화면 카드·홈 위젯에도 같이 적용돼요.",
+        "글자 크기는 잠금화면 카드·홈 위젯에도 같이 적용돼요." + if (s.presetMode) " 교대 프리셋을 쓰는 동안 할 일 화면은 개수에 맞춰 자동이에요." else "",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp),

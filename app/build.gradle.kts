@@ -9,11 +9,12 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.ttaak.app"
+        // v1.6.0 에 딱 → 널스투두로 바꿈. 코드 패키지(namespace)는 그대로, res/xml/shortcuts.xml 의 targetPackage 도 같이.
+        applicationId = "com.yuangunn.nursetodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.5.1"
+        versionCode = 11
+        versionName = "1.6.0"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.

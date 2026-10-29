@@ -20,6 +20,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,11 +42,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -56,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +79,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -84,9 +90,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.R
@@ -106,8 +114,8 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * 잠금화면 위에 바로 뜨는 딱 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
- * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 딱 화면 먼저 보기'(LockPageService)에서 열립니다.
+ * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
+ * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 할 일 화면 먼저 보기'(LockPageService)에서 열립니다.
  * 동그라미를 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
  * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
  * 할 일 추가는 카드 아래 넓은 줄, 카드 안 메모 버튼, 아래 바로가기 중 하나로 합니다(설정).
@@ -127,6 +135,7 @@ class QuickAddActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
         }
         TaskStore.init(this)
+        TaskStore.refreshPreset()
         // 화면을 켜거나 카드를 눌러 열면 보고 체크가 먼저라 입력칸을 접어 둡니다. 타일·위젯 `+` 로 열면 바로 입력.
         val adding = !intent.getBooleanExtra(EXTRA_LOOK_FIRST, false)
         setContent {
@@ -210,6 +219,13 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
         }
     }
     var drag by remember { mutableFloatStateOf(0f) }
+    // 교대 프리셋이면 할 일이 시계와 바로가기 사이를 다 채우고, 다른 앱 알림은 오른쪽 아이콘 줄로 갑니다.
+    val preset = settings.presetMode
+    var peek by remember { mutableStateOf<String?>(null) }
+    val peekNotis = notis.filter { it.pkg == peek }
+    BackHandler(enabled = peekNotis.isNotEmpty()) { peek = null }
+    // 적는 동안 키보드에 밀려 글자가 줄었다 커지지 않게, 마지막으로 다 보일 때의 높이로 맞춥니다.
+    var fitHeight by remember { mutableFloatStateOf(0f) }
 
     Box(
         Modifier
@@ -254,42 +270,81 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                     Spacer(Modifier.height(12.dp))
                 }
 
-                Surface(
-                    color = Glass,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(28.dp),
-                    border = GlassEdge,
-                    modifier = Modifier
+                Box(
+                    Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false),
+                        .weight(1f, fill = preset),
                 ) {
-                    if (tasks.isEmpty()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
-                                fontSize = settings.cardTextSp().sp,
-                                color = Color.White.copy(alpha = 0.6f),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 24.dp, vertical = 22.dp),
-                            )
-                            if (addInCard) Box(Modifier.padding(end = 9.dp)) { memo() }
-                        }
-                    } else {
-                        LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
-                            items(tasks, key = { it.id }) {
-                                Box(Modifier.animateItem()) {
-                                    LockRow(
-                                        it, today, settings.cardTextSp(), settings.rowGap, settings.checkOnLeft,
-                                        editing = it.id == editingId,
-                                        onEditing = { on -> editingId = if (on) it.id else null },
-                                        onOpenApp = onOpenApp,
-                                        // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
-                                        trailing = memo.takeIf { _ -> addInCard && it.id == tasks.last().id },
-                                    )
+                    Row(if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+                        Surface(
+                            color = Glass,
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(28.dp),
+                            border = GlassEdge,
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(if (preset) Modifier.fillMaxHeight() else Modifier),
+                        ) {
+                            BoxWithConstraints {
+                                if (preset && !typing) SideEffect { fitHeight = maxHeight.value }
+                                val (sp, gap) = if (preset) {
+                                    val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, tasks.size)
+                                    with(LocalDensity.current) { textDp.dp.toSp().value } to fitGap
+                                } else {
+                                    settings.cardTextSp() to settings.rowGap
+                                }
+                                if (tasks.isEmpty()) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
+                                            fontSize = sp.sp,
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(horizontal = 24.dp, vertical = 22.dp),
+                                        )
+                                        if (addInCard) Box(Modifier.padding(end = 9.dp)) { memo() }
+                                    }
+                                } else {
+                                    LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
+                                        items(tasks, key = { it.id }) {
+                                            Box(Modifier.animateItem()) {
+                                                LockRow(
+                                                    it, today, sp, gap, settings.checkOnLeft,
+                                                    editing = it.id == editingId,
+                                                    onEditing = { on -> editingId = if (on) it.id else null },
+                                                    onOpenApp = onOpenApp,
+                                                    // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
+                                                    trailing = memo.takeIf { _ -> addInCard && it.id == tasks.last().id },
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
+                        if (preset && notis.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            NotiRail(notis) { peek = it }
+                        }
+                    }
+                    // 아이콘을 누르면 그 앱 알림을 위에 펼쳐 보여 줍니다. 바깥을 누르면 닫힘.
+                    if (peekNotis.isNotEmpty()) {
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .clickable { peek = null },
+                        )
+                        // 뒤의 할 일 글씨가 비치지 않게 진한 바탕 위에
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.92f),
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(28.dp),
+                            border = GlassEdge,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Box(Modifier.padding(8.dp)) { NotiList(peekNotis, onOpenNoti) } }
                     }
                 }
 
@@ -312,7 +367,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                         },
                     )
                 }
-                if (!typing && notis.isNotEmpty()) {
+                if (!preset && !typing && notis.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
                     NotiList(notis, onOpenNoti)
                 }
@@ -388,6 +443,60 @@ private fun ShortcutTile(sc: Shortcut, iconsOnly: Boolean, modifier: Modifier, o
                 iconView()
                 Spacer(Modifier.width(5.dp))
                 Text(name, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/**
+ * 교대 프리셋 화면: 할 일 [count] 개가 [height](dp)를 고르게 채우도록 글자 크기(dp)와 줄 위아래 여백(dp).
+ * 적으면 크고 넉넉하게, 많으면 작고 촘촘하게. 아주 많으면 가장 작은 크기로 두고 넘치는 줄은 밀어서 봅니다.
+ */
+internal fun autoFit(height: Float, count: Int): Pair<Float, Int> {
+    // 목록 위아래 8dp, 줄마다 위아래 1dp
+    val row = (height - 16f) / count.coerceAtLeast(1) - 2f
+    val text = (row * 0.36f).coerceIn(15f, 26f)
+    // 줄 높이 = 위아래 여백 + (글자 한 줄과 동그라미 26dp 중 큰 것)
+    val gap = ((row - maxOf(26f, text * 1.4f)) / 2f).toInt().coerceIn(2, 32)
+    return text to gap
+}
+
+/** 교대 프리셋 화면 오른쪽 줄: 알림이 온 앱 아이콘(최근 것부터, 2개 이상이면 숫자). 누르면 그 앱 알림을 펼쳐 봅니다. */
+@Composable
+private fun NotiRail(items: List<Noti>, onTap: (String) -> Unit) {
+    val context = LocalContext.current
+    Surface(color = Glass, contentColor = Color.White, shape = RoundedCornerShape(28.dp), border = GlassEdge) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 6.dp, horizontal = 2.dp),
+        ) {
+            items.groupBy { it.pkg }.forEach { (pkg, list) ->
+                val icon = remember(pkg) { NotiListener.icon(context, pkg) }
+                Box(
+                    Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .clickable { onTap(pkg) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (icon != null) Image(icon, contentDescription = "${list.first().title} 알림", modifier = Modifier.size(34.dp))
+                    if (list.size > 1) {
+                        Text(
+                            "${list.size}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 4.dp, end = 4.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .widthIn(min = 18.dp)
+                                .padding(horizontal = 4.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
             }
         }
     }
@@ -693,6 +802,8 @@ private fun LockRow(
                 task.title,
                 color = Color.White.copy(alpha = if (done) 0.45f else 1f),
                 fontSize = sp.sp,
+                // 큰 글씨가 두 줄로 넘어가도 줄끼리 겹치지 않게 (기본 줄 높이는 글자 크기와 상관없이 24sp)
+                lineHeight = 1.25.em,
                 fontWeight = FontWeight.Medium,
                 textDecoration = if (done) TextDecoration.LineThrough else null,
                 maxLines = 2,

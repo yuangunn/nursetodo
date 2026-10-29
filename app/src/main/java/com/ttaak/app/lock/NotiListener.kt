@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** 딱 화면에 보이는 다른 앱 알림 하나. */
+/** 할 일 화면에 보이는 다른 앱 알림 하나. */
 data class Noti(
     val key: String,
     val pkg: String,
@@ -30,7 +30,7 @@ data class Noti(
 )
 
 /**
- * 팀즈 같은 다른 앱 알림을 딱 화면에 보여 주려고 읽는 서비스. 사용자가 '알림 접근'을 허용해야 붙습니다.
+ * 팀즈 같은 다른 앱 알림을 할 일 화면에 보여 주려고 읽는 서비스. 사용자가 '알림 접근'을 허용해야 붙습니다.
  * 시스템 잠금화면에 원래 안 뜨는 알림(계속 떠 있는 알림, 조용한 알림, 잠금화면에서 숨긴 앱·종류)은 똑같이 뺍니다.
  * 읽은 알림은 기기 밖으로 나가지 않습니다(인터넷 권한 없음).
  */
@@ -110,7 +110,7 @@ class NotiListener : NotificationListenerService() {
         /** 다른 앱이 수신·통화 중 '전화' 알림을 띄우고 있는지 (인터넷 전화 포함). 알림 접근이 꺼져 있으면 false. */
         fun callShowing(): Boolean = instance?.let { runCatching { it.activeNotifications }.getOrNull() }.orEmpty().any {
             val n = it.notification
-            // 지난 통화 알림이 남아 있어도 딱 화면이 영영 안 뜨지 않게, 울리는 중(전체 화면)이거나 통화 중(계속 떠 있음)만
+            // 지난 통화 알림이 남아 있어도 할 일 화면이 영영 안 뜨지 않게, 울리는 중(전체 화면)이거나 통화 중(계속 떠 있음)만
             n.category == Notification.CATEGORY_CALL && (n.flags and Notification.FLAG_ONGOING_EVENT != 0 || n.fullScreenIntent != null)
         }
 

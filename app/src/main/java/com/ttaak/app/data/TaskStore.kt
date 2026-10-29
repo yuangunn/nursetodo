@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDateTime
 
 /**
  * 기기 내부 JSON 파일 하나에 모든 할 일과 설정을 저장합니다.
@@ -95,6 +96,48 @@ object TaskStore {
         commit(_tasks.value.map { t -> newOrder[t.id]?.let { t.copy(order = it) } ?: t })
     }
 
+    /**
+     * 교대 프리셋 불러오기: 프리셋에서 넣었다가 못 끝낸 할 일은 지우고 [preset] 항목을 맨 위에 새로 넣습니다.
+     * 이번 교대([shift])에 이미 끝낸 항목은 다시 넣지 않습니다. 직접 추가한 할 일은 그대로 둡니다.
+     */
+    fun loadPreset(preset: Preset, shift: Long) {
+        val kept = _tasks.value.filterNot { it.shift != null && it.doneOn == null }
+        val done = kept.filter { it.shift == shift }.map { it.title }.toSet()
+        val titles = preset.items.map { it.trim() }.filter { it.isNotEmpty() && it !in done }
+        val top = (kept.minOfOrNull { it.order } ?: 0) - titles.size
+        val firstId = System.currentTimeMillis().coerceAtLeast((_tasks.value.maxOfOrNull { it.id } ?: 0) + 1)
+        val today = Day.today()
+        val added = titles.mapIndexed { i, t -> Task(id = firstId + i, title = t, createdDay = today, order = top + i, shift = shift) }
+        _settings.value = _settings.value.copy(presetApplied = shift, presetLoaded = preset.id)
+        commit(kept + added)
+    }
+
+    /** 교대 프리셋을 켜 두었고 교대가 바뀌었으면 새 교대의 프리셋을 불러옵니다. 화면이 켜질 때·앱을 열 때·교대 시각 알람에서 부릅니다. */
+    fun refreshPreset(now: LocalDateTime = LocalDateTime.now()) {
+        val s = _settings.value
+        if (!s.presetMode) return
+        val (preset, shift) = s.presets.currentShift(now) ?: return
+        if (shift != s.presetApplied) loadPreset(preset, shift)
+    }
+
+    /** 켜면 지금 교대의 프리셋을 바로 불러오고, 끄면 프리셋에서 넣었다가 못 끝낸 할 일을 치웁니다. */
+    fun setPresetMode(on: Boolean) {
+        updateSettings { it.copy(presetMode = on, presetApplied = 0) }
+        if (on) refreshPreset() else commit(_tasks.value.filterNot { it.shift != null && it.doneOn == null })
+    }
+
+    /** 프리셋 목록 저장. 시각을 바꿔 교대가 달라졌거나 지금 불러와 둔 프리셋([changed])을 고쳤으면 바로 다시 불러옵니다. */
+    fun savePresets(list: List<Preset>, changed: Long? = null, now: LocalDateTime = LocalDateTime.now()) {
+        updateSettings { it.copy(presets = list) }
+        val s = _settings.value
+        if (!s.presetMode) return
+        val (scheduled, shift) = list.currentShift(now) ?: return
+        when {
+            shift != s.presetApplied -> loadPreset(scheduled, shift)
+            changed == s.presetLoaded -> list.firstOrNull { it.id == changed }?.let { loadPreset(it, shift) }
+        }
+    }
+
     fun addAlarm(minutes: Int, label: String): Alarm {
         val now = System.currentTimeMillis().coerceAtLeast((_alarms.value.maxOfOrNull { it.id } ?: 0) + 1)
         val alarm = Alarm(id = now, at = now + minutes * 60_000L, label = label.trim())
@@ -158,6 +201,7 @@ object TaskStore {
         put("order", order)
         if (doneDays.isNotEmpty()) put("doneDays", JSONArray(doneDays.sorted()))
         doneAt?.let { put("doneAt", it) }
+        shift?.let { put("shift", it) }
     }
 
     internal fun JSONObject.toTask(): Task {
@@ -175,6 +219,7 @@ object TaskStore {
             order = optLong("order"),
             doneDays = doneDays ?: if (repeat != 0 && doneOn != null) setOf(doneOn) else emptySet(),
             doneAt = if (has("doneAt")) getLong("doneAt") else null,
+            shift = if (has("shift")) getLong("shift") else null,
         )
     }
 
@@ -211,7 +256,25 @@ object TaskStore {
         put("notiApps", JSONArray(notiApps.sorted()))
         put("shortcutStyle", shortcutStyle)
         put("addButton", addButton)
+        put("presetMode", presetMode)
+        put("presets", JSONArray().apply { presets.forEach { put(it.toJson()) } })
+        put("presetApplied", presetApplied)
+        put("presetLoaded", presetLoaded)
     }
+
+    internal fun Preset.toJson() = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        start?.let { put("start", it) }
+        put("items", JSONArray(items))
+    }
+
+    internal fun JSONObject.toPreset() = Preset(
+        id = getLong("id"),
+        name = getString("name"),
+        start = if (has("start")) getInt("start").coerceIn(0, 24 * 60 - 1) else null,
+        items = getJSONArray("items").let { a -> (0 until a.length()).map { a.getString(it) } },
+    )
 
     internal fun JSONObject.toSettings() = Settings().let { d ->
         Settings(
@@ -243,6 +306,10 @@ object TaskStore {
             shortcutStyle = optInt("shortcutStyle", d.shortcutStyle).coerceIn(0, 2),
             addButton = optInt("addButton", d.addButton).coerceIn(0, 1),
             notiApps = optJSONArray("notiApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.notiApps,
+            presetMode = optBoolean("presetMode", d.presetMode),
+            presets = optJSONArray("presets")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).toPreset() } } ?: d.presets,
+            presetApplied = optLong("presetApplied", d.presetApplied),
+            presetLoaded = optLong("presetLoaded", d.presetLoaded),
         )
     }
 }
