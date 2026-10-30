@@ -19,11 +19,11 @@
 - 잠금화면 카드 안 버튼에는 **화면을 여는 PendingIntent를 걸지 않는다.** 시스템이 무조건 PIN부터 요구한다. 잠금 위에서 열어야 하는 화면은 카드 전체 탭(contentIntent) + `showWhenLocked` 액티비티로 연다. 체크처럼 화면이 없는 동작은 브로드캐스트로 한다.
 - 삼성 One UI 잠금화면 알림 스타일은 `Settings.System` 의 `lockscreen_minimizing_notification`(0 카드)이다. 앱은 읽을 수만 있고 쓰기는 안드로이드가 막는다(실기기 확인). 설정 화면은 `com.android.settings/.Settings$LockscreenNotificationActivity` 로 바로 연다.
 - 라이브 알림 모드(`lockLive`)는 커스텀 RemoteViews 없이 BigTextStyle + `android.requestPromotedOngoing` 로 만든다. 커스텀 화면을 넣으면 시스템이 promoted 로 올려 주지 않는다. One UI 9 에서 `PROMOTED_ONGOING` 으로 올라가고 잠금화면에 늘 펼쳐 보임(실기기 확인).
-- 삼성 Now Bar '실시간 정보'는 화이트리스트다. One UI 8.5(SM-A576S)에서 딱(현 널스투두)은 PROMOTED_ONGOING 인데도 목록에 없음. 앱별 토글은 `Settings.System` `key_now_bar_<패키지 . → _>`, 화면은 액션 `com.samsung.settings.NowBarLiveNotificationSettings`(aodservice). 사용자에게 Now Bar 켜라고 안내하지 말 것.
+- 삼성 Now Bar '실시간 정보'는 화이트리스트다. One UI 8.5(SM-A576S)에서 딱(현 널스투두)은 PROMOTED_ONGOING 인데도 목록에 없음. 앱별 토글은 `Settings.System` `key_now_bar_<패키지 . → _>`, 화면은 액션 `com.samsung.settings.NowBarLiveNotificationSettings`(aodservice). 앱 안내에 Now Bar 켜기를 넣지 않는다.
 - 삼성은 라이브 알림도 `lockscreen_minimizing_notification`=0(카드)이어야 잠금화면에 보인다. 삼성 앱 알림 설정에는 라이브 토글이 없고 `APP_NOTIFICATION_PROMOTION_SETTINGS`는 앱 알림 설정으로 열린다(One UI 8.5).
 - 할 일 화면(`QuickAddActivity`)은 툭 잠금화면 모양: 테마 `windowShowWallpaper`(불투명, 배경화면이 비침 → 키가드를 가림) + 시계 + 유리 카드(검정 32%) + `＋ 할 일 추가` 알약, 위로 밀어 닫기. `EXTRA_LOOK_FIRST`면 입력칸을 접은 채로(화면 켜짐·카드 탭), 아니면 바로 입력(타일·위젯 `+`).
 - 할 일 화면 줄: 동그라미만 체크(350ms 체크 표시 후 toggle), 글씨 탭 = `requestDismissKeyguard` 후 MainActivity, 길게 = 제자리 이름 고치기. 고치기 저장 뒤 `clearFocus()` 필수 — 안 하면 하드웨어 엔터의 남은 키 입력이 옆 줄 동그라미로 넘어가 체크됨(실기기 adb 로 재현).
-- '몇 분 뒤' 알람(`lock/Alarms.kt`): `TaskStore.alarms`(JSON "alarms") + `setExactAndAllowWhileIdle`(USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM) — 사용자 요청으로 상태바 ⏰ 없게 setAlarmClock 은 안 씀. 울리면 목록에서 빼고 `AlarmRingService`(mediaPlayback FGS)가 `AlarmSound` 로 직접 재생(USAGE_ALARM, 울리는 동안 STREAM_ALARM 을 설정 크기로 맞췄다 되돌림) + 진동, 조용한 채널 `alarm_ring` 알림의 fullScreenIntent 로 `AlarmActivity`. 10분 뒤 자동 정지. 채널 소리로는 알람음·크기를 못 바꿔서 이렇게 함. 부팅·업데이트 땐 `refreshSurfaces` → `Alarms.scheduleAll`. 울리는 중(`AlarmRingService.ringing`)엔 `LockPageService` 가 할 일 화면을 띄우지 않음 — 채널로 판단하면 시스템 자동 묶음 요약(같은 채널)에 걸려 할 일 화면이 영영 안 뜸(실기기 버그).
+- '몇 분 뒤' 알람(`lock/Alarms.kt`): `TaskStore.alarms`(JSON "alarms") + `setExactAndAllowWhileIdle`(USE_EXACT_ALARM, 12 이하는 SCHEDULE_EXACT_ALARM) — 상태바에 ⏰ 가 생기지 않게 setAlarmClock 은 쓰지 않는다. 울리면 목록에서 빼고 `AlarmRingService`(mediaPlayback FGS)가 `AlarmSound` 로 직접 재생(USAGE_ALARM, 울리는 동안 STREAM_ALARM 을 설정 크기로 맞췄다 되돌림) + 진동, 조용한 채널 `alarm_ring` 알림의 fullScreenIntent 로 `AlarmActivity`. 10분 뒤 자동 정지. 채널 소리로는 알람음·크기를 못 바꿔서 이렇게 함. 부팅·업데이트 땐 `refreshSurfaces` → `Alarms.scheduleAll`. 울리는 중(`AlarmRingService.ringing`)엔 `LockPageService` 가 할 일 화면을 띄우지 않음 — 채널로 판단하면 시스템 자동 묶음 요약(같은 채널)에 걸려 할 일 화면이 영영 안 뜸(실기기 버그).
 - A안(할 일 화면) 확정(v1.3): `lockPage` 기본 true. `LockCard.pageMode`(lockPage && 오버레이 권한)면 카드·라이브 대신 조용한 채널 `lock_page` 알림만(상시 서비스용). 안드로이드가 FGS 알림을 MIN→LOW 로 올려 상태바 ✓ 가 남음 → 사용자가 채널을 끄면 숨겨지고 서비스는 계속(설정의 '상태바의 널스투두 아이콘 숨기기'). 오버레이 설정은 안드로이드 11+ 에서 목록 화면으로 열림.
 - 글자·줄 간격: `Settings.cardSp`(sp, 1.3.0 까지의 순번 `cardTextSize` 는 읽을 때 16/19/23 으로 옮김), `rowGap`(할 일 화면 줄 글자 위아래 여백 dp, 동그라미 누름 칸 높이도 `circleBoxHeight` 로 같이 줄어듦).
 - 빌드: AGP 8.11.1, compileSdk/targetSdk 36(Play 신규 앱 조건, 2026-08-31~). Play AAB 는 `bundleNotiRelease -Pplay` → 업로드 키는 저장소 밖 `~/.gradle/gradle.properties`(ttaakUploadStore·ttaakUploadPassword, 키 파일 `~/ttaak-play/ttaak-upload.jks`). `-Pplay` 없으면 debug 키(깃허브 APK). 배포 절차·콘솔 답안은 docs/PLAY.md.
@@ -34,7 +34,7 @@
 - 끝낸 일은 잠금 카드·라이브·위젯·할 일 화면에서 빼고, 앱 `TaskList` 맨 아래 접히는 '완료된 할 일'에만. `Task.doneAt`(ms) 저장, 만든 시각은 `createdAt = id`(만든 순간 ms).
 - 툭처럼 보이는 잠금화면은 알림으로는 안 된다(헤더 강제, 라이브 알림은 커스텀 거부). `LockPageService`(specialUse 포그라운드 서비스, SCREEN_ON 수신) + SYSTEM_ALERT_WINDOW 로 화면이 켜질 때 `QuickAddActivity`(showWhenLocked)를 띄운다. 서비스 알림 = 잠금화면 카드(같은 ID 1). 전화 중엔 띄우지 않음(`inCall`: `AudioManager.mode != NORMAL` — 일반 전화는 기본 전화 앱이 무엇이든 Telecom 이 RINGTONE/IN_CALL 로 바꿈 — 또는 `NotiListener.callShowing()`: 다른 앱의 CATEGORY_CALL 알림 중 ongoing·fullScreenIntent, 인터넷 전화용). 없으면 화면 꺼진 채 오는 전화의 전체 화면 수신 UI(FSI)를 약 1초 뒤 덮었음(에뮬 재현). `QuickAddActivity` 에 turnScreenOn 금지 — 늦게 열리면 꺼진 화면을 다시 켜고, 그때 오는 전화는 FSI 대신 알림 띠가 됨.
 - 삼성 실기기 검증은 Samsung Remote Test Lab + rdb(크롬에서만 연결됨)로 한다. `locksettings` 같은 명령은 막혀서 연결이 끊기고, 화면 잠금(PIN)은 설정할 수 없다.
-- 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**(사용자 확인 2026-10-25). 용량 입력값은 저장하지 않는다(공용 폰 안전).
+- 계산기(`data/Infusion.kt`)의 priming은 별도 수액으로 채운 용량이라 총량에 **더한다**. 용량 입력값은 저장하지 않는다(공용 폰 안전).
 
 ## 빌드·검증
 
