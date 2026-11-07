@@ -24,6 +24,11 @@ object TaskStore {
     /** 맞춰 둔 'N분 뒤' 알람 (울릴 시각 순). 울리게 맞추는 건 [com.yuangunn.nursetodo.lock.Alarms] 가 합니다. */
     val alarms: StateFlow<List<Alarm>> = _alarms.asStateFlow()
 
+    private val _pockets = MutableStateFlow<List<Pocket>>(emptyList())
+
+    /** 포켓북 (만든 순서). */
+    val pockets: StateFlow<List<Pocket>> = _pockets.asStateFlow()
+
     /** 데이터가 바뀔 때마다 호출 — 잠금화면 카드와 위젯을 갱신합니다. */
     var onChanged: (() -> Unit)? = null
 
@@ -117,12 +122,50 @@ object TaskStore {
         commit(kept + added)
     }
 
-    /** 교대 프리셋을 켜 두었고 교대가 바뀌었으면 새 교대의 프리셋을 불러옵니다. 화면이 켜질 때·앱을 열 때·교대 시각 알람에서 부릅니다. */
+    /**
+     * 교대 프리셋을 켜 두었고 교대가 바뀌었으면 새 교대의 프리셋을 불러옵니다. 화면이 켜질 때·앱을 열 때·교대 시각 알람에서 부릅니다.
+     * 공용폰을 다음 근무자가 받으므로 포켓북 체크도 새로 시작합니다.
+     */
     fun refreshPreset(now: LocalDateTime = LocalDateTime.now()) {
         val s = _settings.value
         if (!s.presetMode) return
         val (preset, shift) = s.presets.currentShift(now) ?: return
-        if (shift != s.presetApplied) loadPreset(preset, shift)
+        if (shift != s.presetApplied) {
+            _pockets.value = _pockets.value.map { it.copy(checks = emptySet()) }
+            loadPreset(preset, shift)
+        }
+    }
+
+    /** 붙여넣은 글로 포켓북을 만듭니다(여러 개면 여러 개). 만든 수. */
+    fun addPockets(pasted: String): Int {
+        val texts = splitPockets(pasted)
+        val first = System.currentTimeMillis().coerceAtLeast((_pockets.value.maxOfOrNull { it.id } ?: 0) + 1)
+        commitPockets(_pockets.value + texts.mapIndexed { i, t -> Pocket(first + i, t) })
+        return texts.size
+    }
+
+    /** 글을 고치면 항목 자리가 바뀔 수 있어 체크는 비웁니다. */
+    fun updatePocket(id: Long, text: String) =
+        commitPockets(_pockets.value.map { if (it.id == id) Pocket(id, text.trim()) else it })
+
+    fun deletePocket(id: Long) = commitPockets(_pockets.value.filterNot { it.id == id })
+
+    fun togglePocketCheck(id: Long, path: String) = commitPockets(
+        _pockets.value.map { if (it.id == id) it.copy(checks = if (path in it.checks) it.checks - path else it.checks + path) else it },
+    )
+
+    fun clearPocketChecks(id: Long) = commitPockets(_pockets.value.map { if (it.id == id) it.copy(checks = emptySet()) else it })
+
+    /** 근무 루틴 알림 '09:00 정규 라운딩(…)'이 울리면, 이름이 그렇게 시작하는 포켓북('정규 라운딩')의 체크를 새로 시작합니다. */
+    fun restartPocketsFor(routine: String) {
+        val text = itemText(routine)
+        if (_pockets.value.none { it.checks.isNotEmpty() && text.startsWith(it.doc.title) }) return
+        commitPockets(_pockets.value.map { if (text.startsWith(it.doc.title)) it.copy(checks = emptySet()) else it })
+    }
+
+    private fun commitPockets(list: List<Pocket>) {
+        _pockets.value = list
+        save()
     }
 
     /** 켜면 지금 교대의 프리셋을 바로 불러오고, 끄면 프리셋에서 넣었다가 못 끝낸 할 일을 치웁니다. */
@@ -177,6 +220,12 @@ object TaskStore {
         root.put("tasks", JSONArray().apply { _tasks.value.forEach { put(it.toJson()) } })
         root.put("settings", _settings.value.toJson())
         root.put("alarms", JSONArray().apply { _alarms.value.forEach { put(it.toJson()) } })
+        root.put(
+            "pockets",
+            JSONArray().apply {
+                _pockets.value.forEach { put(JSONObject().put("id", it.id).put("text", it.text).put("checks", JSONArray(it.checks.sorted()))) }
+            },
+        )
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writeText(root.toString())
         if (!tmp.renameTo(file)) {
@@ -194,6 +243,12 @@ object TaskStore {
             root.optJSONObject("settings")?.let { _settings.value = it.toSettings() }
             val alarms = root.optJSONArray("alarms") ?: JSONArray()
             _alarms.value = (0 until alarms.length()).map { alarms.getJSONObject(it).toAlarm() }.sortedBy { it.at }
+            val pockets = root.optJSONArray("pockets") ?: JSONArray()
+            _pockets.value = (0 until pockets.length()).map { i ->
+                val o = pockets.getJSONObject(i)
+                val checks = o.optJSONArray("checks")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+                Pocket(o.getLong("id"), o.getString("text"), checks)
+            }
         }.onFailure {
             // 읽지 못한 파일을 다음 저장 때 덮어쓰지 않도록 옆에 따로 남겨 둡니다.
             file.renameTo(File(file.parentFile, "nursetodo.broken-${System.currentTimeMillis()}.json"))
@@ -326,7 +381,7 @@ object TaskStore {
             presetLoaded = optLong("presetLoaded", d.presetLoaded),
             routineAlarm = optBoolean("routineAlarm", d.routineAlarm),
             dutyShift = optLong("dutyShift", d.dutyShift),
-            lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 2),
+            lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 3),
         )
     }
 }

@@ -57,6 +57,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +77,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -110,6 +112,11 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.Alarm
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
+import com.yuangunn.nursetodo.data.Pocket
+import com.yuangunn.nursetodo.data.PocketKind
+import com.yuangunn.nursetodo.data.PocketNode
+import com.yuangunn.nursetodo.data.doneCount
+import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.Task
@@ -229,6 +236,7 @@ class QuickAddActivity : ComponentActivity() {
 
 private const val PAGE_TODO = 0
 private const val PAGE_DUTY = 1
+private const val PAGE_POCKET = 2
 private val Late = Color(0xFFFF8A80)
 
 // 근무 페이지는 정보 전달이 먼저라 개수에 맞춰 키우지 않고 작은 글씨·좁은 줄로 (할 일 페이지는 크게 그대로)
@@ -298,12 +306,21 @@ private fun LockPage(
     var fitHeight by remember { mutableFloatStateOf(0f) }
     // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
     val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
-    // 교대 프리셋을 쓰면 '할 일'(직접 적은 일)과 '근무'(프리셋에서 온 일)를 좌우로 넘겨 봅니다. 설정에서 하나만 고를 수 있습니다.
-    val pages = when {
-        !preset || settings.lockPages == 1 -> listOf(PAGE_TODO)
-        settings.lockPages == 2 -> listOf(PAGE_DUTY)
-        else -> listOf(PAGE_TODO, PAGE_DUTY)
+    // '할 일'(직접 적은 일), 교대 프리셋이면 '근무'(프리셋에서 온 일), 포켓북이 있으면 '포켓북'을 좌우로 넘겨 봅니다.
+    // 설정에서 하나만 고를 수 있습니다.
+    val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
+    val available = buildList {
+        add(PAGE_TODO)
+        if (preset) add(PAGE_DUTY)
+        if (pockets.isNotEmpty()) add(PAGE_POCKET)
     }
+    val pages = when (settings.lockPages) {
+        1 -> listOf(PAGE_TODO)
+        2 -> if (preset) listOf(PAGE_DUTY) else available
+        3 -> if (pockets.isNotEmpty()) listOf(PAGE_POCKET) else available
+        else -> available
+    }
+    val paged = pages != listOf(PAGE_TODO)
     val pager = rememberPagerState(initialPage = pages.indexOf(PAGE_DUTY).coerceAtLeast(0)) { pages.size }
     LaunchedEffect(dutyRequest) {
         if (dutyRequest > 0) pages.indexOf(PAGE_DUTY).takeIf { it >= 0 }?.let { pager.scrollToPage(it) }
@@ -425,10 +442,10 @@ private fun LockPage(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = preset),
+                        .weight(1f, fill = preset || paged),
                 ) {
-                    Row(if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
-                        if (preset) {
+                    Row(if (preset || paged) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+                        if (paged) {
                             Column(
                                 Modifier
                                     .weight(1f)
@@ -443,13 +460,13 @@ private fun LockPage(
                                     pageSpacing = 16.dp,
                                     verticalAlignment = Alignment.Top,
                                 ) { i ->
-                                    if (pages[i] == PAGE_DUTY) {
-                                        Column(Modifier.fillMaxSize()) {
+                                    when (pages[i]) {
+                                        PAGE_DUTY -> Column(Modifier.fillMaxSize()) {
                                             DutyHeader(settings, now)
                                             card(duty, dutyListState, true, Modifier.weight(1f))
                                         }
-                                    } else {
-                                        card(todo, listState, false, Modifier.fillMaxSize())
+                                        PAGE_POCKET -> PocketCard(pockets, Modifier.fillMaxSize())
+                                        else -> card(todo, listState, false, if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
                                     }
                                 }
                             }
@@ -698,7 +715,11 @@ private fun PageTabs(pages: List<Int>, current: Int, onTap: (Int) -> Unit) {
     ) {
         pages.forEachIndexed { i, page ->
             Text(
-                if (page == PAGE_DUTY) "근무" else "할 일",
+                when (page) {
+                    PAGE_DUTY -> "근무"
+                    PAGE_POCKET -> "포켓북"
+                    else -> "할 일"
+                },
                 fontSize = 15.sp,
                 fontWeight = if (i == current) FontWeight.Bold else FontWeight.Medium,
                 color = Color.White.copy(alpha = if (i == current) 1f else 0.5f),
@@ -766,6 +787,161 @@ private fun DutyHeader(s: Settings, now: Long) {
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 포켓북 한 줄(펼친 모양 그대로 줄 세운 것). */
+private class PocketLine(
+    val key: String,
+    val depth: Int,
+    val kind: PocketKind?, // null = 포켓북 이름 줄
+    val text: String,
+    val pocket: Long,
+    val path: String = "",
+    val done: Boolean = false,
+    val progress: String? = null,
+    val open: Boolean = false,
+    val clear: Boolean = false, // 펼친 포켓북 맨 아래 '체크 지우기'
+)
+
+private fun pocketLines(pockets: List<Pocket>, open: Set<String>): List<PocketLine> = buildList {
+    pockets.forEach { p ->
+        val doc = p.doc
+        val total = doc.nodes.sumOf { it.itemCount() }
+        val pk = "p${p.id}"
+        add(
+            PocketLine(
+                pk, 0, null, doc.title, p.id,
+                progress = if (total > 0) "${doc.nodes.sumOf { it.doneCount(p.checks) }}/$total" else null,
+                open = pk in open,
+            ),
+        )
+        if (pk !in open) return@forEach
+        fun addNode(n: PocketNode, depth: Int) {
+            val key = "$pk/${n.path}"
+            when (n.kind) {
+                PocketKind.SECTION -> {
+                    val total = n.itemCount()
+                    add(
+                        PocketLine(
+                            key, depth, n.kind, n.text, p.id, n.path,
+                            progress = if (total > 0) "${n.doneCount(p.checks)}/$total" else null,
+                            open = key in open,
+                        ),
+                    )
+                    if (key in open) n.children.forEach { addNode(it, depth + 1) }
+                }
+                else -> {
+                    add(PocketLine(key, depth, n.kind, n.text, p.id, n.path, done = n.path in p.checks))
+                    n.children.forEach { addNode(it, depth + 1) }
+                }
+            }
+        }
+        doc.nodes.forEach { addNode(it, 1) }
+        if (p.checks.isNotEmpty()) add(PocketLine("$pk/clear", 1, null, "체크 지우기", p.id, clear = true))
+    }
+}
+
+/**
+ * 포켓북 페이지: 이름을 누르면 펼치고, 묶음(##)도 눌러 펼칩니다. 체크 항목은 동그라미, 설명은 흐린 글씨.
+ * 읽을 거리가 많아 작은 글씨·좁은 줄로 한 화면에 많이 보이게 합니다.
+ */
+@Composable
+private fun PocketCard(pockets: List<Pocket>, modifier: Modifier) {
+    var open by remember { mutableStateOf(setOf<String>()) }
+    val lines = remember(pockets, open) { pocketLines(pockets, open) }
+    val toggle = { key: String -> open = if (key in open) open - key else open + key }
+    Surface(
+        color = Glass,
+        contentColor = Color.White,
+        shape = RoundedCornerShape(28.dp),
+        border = GlassEdge,
+        modifier = modifier,
+    ) {
+        LazyColumn(contentPadding = PaddingValues(vertical = 10.dp)) {
+            items(lines, key = { it.key }) { line ->
+                val indent = (14 + line.depth * 16).dp
+                if (line.clear) {
+                    Box(Modifier.fillMaxWidth().padding(end = 14.dp), contentAlignment = Alignment.CenterEnd) {
+                        Text(
+                            line.text,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable { TaskStore.clearPocketChecks(line.pocket) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                    return@items
+                }
+                when (line.kind) {
+                    null, PocketKind.SECTION -> Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { toggle(line.key) }
+                            .padding(start = indent - 4.dp, end = 18.dp, top = if (line.kind == null) 10.dp else 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (line.open) "접기" else "펼치기",
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(if (line.open) 0f else -90f),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            line.text,
+                            fontSize = if (line.kind == null) 16.sp else 15.sp,
+                            fontWeight = if (line.kind == null) FontWeight.Bold else FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = if (line.kind == null) 1f else 0.9f),
+                            lineHeight = 1.25.em,
+                            modifier = Modifier.weight(1f),
+                        )
+                        line.progress?.let {
+                            Text(it, fontSize = 13.sp, color = Color.White.copy(alpha = 0.55f), style = TextStyle(fontFeatureSettings = "tnum"))
+                        }
+                    }
+                    PocketKind.ITEM -> Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { TaskStore.togglePocketCheck(line.pocket, line.path) }
+                            .padding(start = indent, end = 18.dp, top = 3.dp, bottom = 3.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Box(
+                            Modifier
+                                .padding(top = 1.dp)
+                                .size(18.dp)
+                                .then(
+                                    if (line.done) Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    else Modifier.border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (line.done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(13.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            line.text,
+                            fontSize = 15.sp,
+                            lineHeight = 1.3.em,
+                            color = Color.White.copy(alpha = if (line.done) 0.45f else 1f),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    PocketKind.NOTE -> Text(
+                        line.text,
+                        fontSize = 14.sp,
+                        lineHeight = 1.3.em,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(start = indent, end = 18.dp, top = 2.dp, bottom = 2.dp),
                     )
                 }
             }

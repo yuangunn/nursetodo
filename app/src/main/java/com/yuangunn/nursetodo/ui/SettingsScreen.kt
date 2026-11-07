@@ -79,7 +79,11 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.CardSpRange
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
+import com.yuangunn.nursetodo.data.Pocket
 import com.yuangunn.nursetodo.data.Preset
+import com.yuangunn.nursetodo.data.itemCount
+import com.yuangunn.nursetodo.data.parsePocket
+import com.yuangunn.nursetodo.data.splitPockets
 import com.yuangunn.nursetodo.data.itemMinute
 import com.yuangunn.nursetodo.data.RowGapRange
 import com.yuangunn.nursetodo.data.Settings
@@ -128,6 +132,12 @@ fun SettingsScreen() {
             if (v) Setup.requestOverlay(context)
         }
         CardLook(s)
+        val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
+        if (s.lockPage && (s.presetMode || pockets.isNotEmpty())) {
+            ChoiceRow("페이지", listOf("모두", "할 일", "근무", "포켓북"), s.lockPages) { i ->
+                TaskStore.updateSettings { it.copy(lockPages = i) }
+            }
+        }
         if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
             LinkRow("할 일 추가 버튼", "할 일 화면 아래 바로가기의 '할 일 추가'로 해요. 위쪽 버튼은 숨겼어요.")
         } else {
@@ -216,6 +226,9 @@ fun SettingsScreen() {
         Section("교대 프리셋")
         PresetSettings(s)
 
+        Section("포켓북")
+        PocketSettings()
+
         Section("할 일 화면 바로가기")
         ShortcutSettings(s)
 
@@ -272,7 +285,6 @@ private fun PresetSettings(s: Settings) {
     SwitchRow("교대 프리셋 사용", s.presetMode) { TaskStore.setPresetMode(it) }
     if (s.presetMode) {
         SwitchRow("근무 루틴 알림", s.routineAlarm) { v -> TaskStore.updateSettings { it.copy(routineAlarm = v) } }
-        ChoiceRow("할 일 화면", listOf("넘겨 보기", "할 일만", "근무만"), s.lockPages) { i -> TaskStore.updateSettings { it.copy(lockPages = i) } }
     }
     s.presets.forEach { p ->
         Row(
@@ -406,6 +418,115 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                 onDone(null)
             }) { Text("저장") }
         },
+        dismissButton = { TextButton(onClick = { onDone(null) }) { Text("취소") } },
+    )
+}
+
+/**
+ * 포켓북: 붙여넣기로 만들기(엑셀 표도), 예시 불러오기, 양식 파일 저장. 하나를 누르면 글 그대로 고치거나 지웁니다.
+ */
+@Composable
+private fun PocketSettings() {
+    val context = LocalContext.current
+    val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf<Pocket?>(null) }
+    var pasting by remember { mutableStateOf(false) }
+    val raw = { id: Int -> context.resources.openRawResource(id).bufferedReader().use { it.readText() } }
+    val saver = { id: Int ->
+        { uri: Uri? ->
+            uri?.let { u -> context.contentResolver.openOutputStream(u)?.use { it.write(raw(id).toByteArray()) } }
+            if (uri != null) Toast.makeText(context, "저장했어요", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val saveText = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain"), saver(R.raw.pocketbook_example))
+    val saveTable = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/tab-separated-values"),
+        saver(R.raw.pocketbook_table),
+    )
+
+    pockets.forEach { p ->
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clickable { editing = p }
+                .padding(horizontal = 24.dp, vertical = 10.dp),
+        ) {
+            Text(p.doc.title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "체크 항목 ${p.doc.nodes.sumOf { it.itemCount() }}개",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    Row(Modifier.padding(start = 12.dp)) {
+        TextButton(onClick = { pasting = true }) { Text("+ 붙여넣기로 만들기") }
+        TextButton(onClick = {
+            // 이미 있는 이름은 건너뜁니다.
+            val have = pockets.map { it.doc.title }.toSet()
+            val texts = splitPockets(raw(R.raw.pocketbook_example)).filter { parsePocket(it).title !in have }
+            val n = if (texts.isEmpty()) 0 else TaskStore.addPockets(texts.joinToString("\n\n"))
+            Toast.makeText(context, if (n > 0) "예시 ${n}개를 넣었어요" else "예시가 이미 있어요", Toast.LENGTH_SHORT).show()
+        }) { Text("예시 불러오기") }
+    }
+    Row(Modifier.padding(start = 12.dp)) {
+        TextButton(onClick = { saveText.launch("포켓북-양식.txt") }) { Text("양식 저장 (글)") }
+        TextButton(onClick = { saveTable.launch("포켓북-양식.tsv") }) { Text("양식 저장 (표)") }
+    }
+    Hint(
+        "진단명·수술명·업무마다 사정할 때 볼 것을 적어 두면, 할 일 화면의 포켓북 페이지에서 잠금을 풀지 않고 펼쳐 봐요.\n" +
+            "형식: '# 이름' 한 줄로 포켓북 하나, '## 묶음'은 접고 펴는 묶음, '- 항목'은 체크 항목(두 칸 들여 쓰면 하위 항목), 그냥 줄은 설명. " +
+            "여러 개를 한 번에 붙여 넣어도 되고, 엑셀 표(포켓북 | 묶음 | 항목 | 하위 항목)를 복사해 붙여 넣어도 돼요.\n" +
+            "체크는 같은 이름의 근무 루틴 알림(예: '09:00 정규 라운딩')이 울릴 때와 교대가 바뀔 때 새로 시작해요.",
+    )
+    if (pasting) {
+        PocketTextDialog("붙여넣기로 만들기", "", "만들기") { text ->
+            if (!text.isNullOrBlank()) {
+                val n = TaskStore.addPockets(text)
+                Toast.makeText(context, "포켓북 ${n}개를 만들었어요", Toast.LENGTH_SHORT).show()
+            }
+            pasting = false
+        }
+    }
+    editing?.let { p ->
+        PocketTextDialog("포켓북 고치기", p.text, "저장", onDelete = { TaskStore.deletePocket(p.id) }) { text ->
+            if (text != null) TaskStore.updatePocket(p.id, text)
+            editing = null
+        }
+    }
+}
+
+/** 포켓북 글 하나를 붙여넣기 형식 그대로 고칩니다. [onDone] 에 고친 글, 취소면 null. */
+@Composable
+private fun PocketTextDialog(title: String, initial: String, confirm: String, onDelete: (() -> Unit)? = null, onDone: (String?) -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    var deleting by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { onDone(null) },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("포켓북 글") },
+                    supportingText = { Text("# 이름 · ## 묶음 · - 체크 항목(두 칸 들여 쓰면 하위) · 그냥 줄은 설명") },
+                    minLines = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (onDelete != null) {
+                    TextButton(onClick = {
+                        if (deleting) {
+                            onDelete()
+                            onDone(null)
+                        } else {
+                            deleting = true
+                        }
+                    }) { Text(if (deleting) "정말 삭제" else "삭제", color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onDone(text) }) { Text(confirm) } },
         dismissButton = { TextButton(onClick = { onDone(null) }) { Text("취소") } },
     )
 }
