@@ -116,7 +116,8 @@ import java.time.format.DateTimeFormatter
 /**
  * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
  * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 할 일 화면 먼저 보기'(LockPageService)에서 열립니다.
- * 동그라미를 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
+ * 동그라미를 누르면 체크. 위로 밀면 잠금 해제를 요청합니다: 밀어서 잠금이면 바로 홈, PIN 이면 PIN 화면으로
+ * (잠금화면을 두 번 넘기지 않게). 얼굴·지문으로 이미 풀렸으면 그냥 닫힙니다. 뒤로 가기는 원래 잠금화면으로 돌아갑니다.
  * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
  * 할 일 추가는 카드 아래 넓은 줄, 카드 안 메모 버튼, 아래 바로가기 중 하나로 합니다(설정).
  */
@@ -143,7 +144,7 @@ class QuickAddActivity : ComponentActivity() {
             TtaakTheme(settings) {
                 LockPage(
                     adding,
-                    onClose = { finish() },
+                    onUnlock = { unlockThen {} },
                     onOpen = ::openApp,
                     onOpenNoti = ::openNoti,
                     onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
@@ -187,7 +188,7 @@ internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).d
 @Composable
 private fun LockPage(
     startAdding: Boolean,
-    onClose: () -> Unit,
+    onUnlock: () -> Unit,
     onOpen: (Intent) -> Unit,
     onOpenNoti: (Noti) -> Unit,
     onAllowAlarm: () -> Unit,
@@ -238,6 +239,8 @@ private fun LockPage(
     BackHandler(enabled = peekNotis.isNotEmpty()) { peek = null }
     // 적는 동안 키보드에 밀려 글자가 줄었다 커지지 않게, 마지막으로 다 보일 때의 높이로 맞춥니다.
     var fitHeight by remember { mutableFloatStateOf(0f) }
+    // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
+    val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
 
     Box(
         Modifier
@@ -251,10 +254,10 @@ private fun LockPage(
                 ),
             )
             .pointerInput(Unit) {
-                // 잠금 해제하듯 위로 밀면 닫힘
+                // 위로 밀면 잠금 해제
                 detectVerticalDragGestures(
                     onDragEnd = {
-                        if (drag < -120.dp.toPx()) onClose()
+                        if (drag < -120.dp.toPx()) onUnlock()
                         drag = 0f
                     },
                     onDragCancel = { drag = 0f },
@@ -392,7 +395,7 @@ private fun LockPage(
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "위로 밀어서 닫기",
+                    if (locked) "위로 밀어서 잠금 해제" else "위로 밀어서 닫기",
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.55f),
                 )
