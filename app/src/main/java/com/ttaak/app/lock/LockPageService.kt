@@ -16,6 +16,7 @@ import com.ttaak.app.data.TaskStore
 
 /**
  * 화면이 켜질 때마다 잠금화면 위에 할 일 화면(오늘 할 일)을 먼저 띄웁니다. 툭의 잠금화면 카드에 해당.
+ * 화면 잠금이 '없음'인 폰은 잠금화면 대신 띄웁니다.
  *
  * '화면 켜짐' 신호는 실행 중인 앱만 받을 수 있어서 상시(포그라운드) 서비스로 둡니다. 서비스 알림은
  * 잠금화면 카드와 같은 번호를 써서 알림이 하나만 보입니다. 백그라운드에서 화면을 띄우려면
@@ -26,9 +27,12 @@ class LockPageService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             // 교대 시각 알람은 화면이 꺼져 있으면 늦게 오므로, 켜질 때 먼저 프리셋을 맞춥니다.
             TaskStore.refreshPreset()
-            val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+            val km = getSystemService(KeyguardManager::class.java)
+            // 화면 잠금이 '없음'이면 잠금화면 자체가 없어서 그 대신 띄웁니다. PIN 폰이 자동 잠금 전에(유예 시간 안에)
+            // 다시 켜진 경우만 잠금화면 없이 쓰던 화면으로 바로 돌아가게 둡니다.
+            val lockMoment = km.isKeyguardLocked || !km.isDeviceSecure
             // 알람이 울리거나 전화가 와서 화면이 켜진 경우엔 그 화면을 가리지 않습니다.
-            if (!locked || !Settings.canDrawOverlays(context) || Alarms.ringing() || inCall(context)) return
+            if (!lockMoment || !Settings.canDrawOverlays(context) || Alarms.ringing() || inCall(context)) return
             startActivity(
                 Intent(context, QuickAddActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

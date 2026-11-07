@@ -4,6 +4,8 @@ import android.app.AlarmManager
 import android.app.Application
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import com.ttaak.app.data.Settings
 import com.ttaak.app.data.TaskStore
@@ -52,6 +54,21 @@ class AlarmTest {
 
         service.destroy()
         assertEquals(null, AlarmRingService.ringing.value)
+    }
+
+    @Test
+    fun exactAlarmIsAskedFromTheUserAndRearmedWhenAllowed() {
+        // Play 정책상 할 일 앱은 USE_EXACT_ALARM(설치 때 자동 허용)을 못 씁니다.
+        val requested = context.packageManager
+            .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions!!.toList()
+        assertTrue("android.permission.SCHEDULE_EXACT_ALARM" in requested)
+        assertTrue("android.permission.USE_EXACT_ALARM" !in requested)
+        // 허용하면 시스템이 이 방송을 보냅니다. 받는 곳이 없으면 맞춰 둔 알람이 늦는 채로 남습니다.
+        val allowed = Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED).setPackage(context.packageName)
+        assertEquals(
+            LockActionReceiver::class.java.name,
+            context.packageManager.queryBroadcastReceivers(allowed, 0).single().activityInfo.name,
+        )
     }
 
     @Test

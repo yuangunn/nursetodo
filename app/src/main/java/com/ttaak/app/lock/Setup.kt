@@ -1,6 +1,7 @@
 package com.ttaak.app.lock
 
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.StatusBarManager
 import android.appwidget.AppWidgetManager
@@ -157,6 +158,23 @@ object Setup {
             null
         },
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+    )
+
+    /**
+     * 안드로이드 12+: 알람을 제시간에 울릴 수 있는지('알람 및 리마인더'). 14+ 는 새로 깔면 꺼져 있습니다.
+     * 꺼져 있어도 알람은 맞춰지지만 늦게 울릴 수 있습니다.
+     */
+    fun exactAlarmAllowed(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 31 || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+    fun openExactAlarmSettings(context: Context) = open(
+        context,
+        if (Build.VERSION.SDK_INT >= 31) {
+            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:${context.packageName}"))
+        } else {
+            null
+        },
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")),
     )
 
     /** 삼성 One UI: 설정 → 알림 → 잠금화면 → 알림 스타일 (0 카드, 1 아이콘, 2 동그란 점). */

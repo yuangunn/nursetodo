@@ -116,7 +116,8 @@ import java.time.format.DateTimeFormatter
 /**
  * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
  * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 할 일 화면 먼저 보기'(LockPageService)에서 열립니다.
- * 동그라미를 누르면 체크, 위로 밀거나 뒤로 가기를 누르면 원래 잠금화면으로 돌아갑니다.
+ * 동그라미를 누르면 체크. 위로 밀면 잠금 해제를 요청합니다: 밀어서 잠금이면 바로 홈, PIN 이면 PIN 화면으로
+ * (잠금화면을 두 번 넘기지 않게). 얼굴·지문으로 이미 풀렸으면 그냥 닫힙니다. 뒤로 가기는 원래 잠금화면으로 돌아갑니다.
  * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
  * 할 일 추가는 카드 아래 넓은 줄, 카드 안 메모 버튼, 아래 바로가기 중 하나로 합니다(설정).
  */
@@ -141,7 +142,13 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(adding, onClose = { finish() }, onOpen = ::openApp, onOpenNoti = ::openNoti)
+                LockPage(
+                    adding,
+                    onUnlock = { unlockThen {} },
+                    onOpen = ::openApp,
+                    onOpenNoti = ::openNoti,
+                    onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
+                )
             }
         }
     }
@@ -179,7 +186,13 @@ internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).dp
 
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent) -> Unit, onOpenNoti: (Noti) -> Unit) {
+private fun LockPage(
+    startAdding: Boolean,
+    onUnlock: () -> Unit,
+    onOpen: (Intent) -> Unit,
+    onOpenNoti: (Noti) -> Unit,
+    onAllowAlarm: () -> Unit,
+) {
     val context = LocalContext.current
     val onOpenApp = { onOpen(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
@@ -226,6 +239,8 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
     BackHandler(enabled = peekNotis.isNotEmpty()) { peek = null }
     // 적는 동안 키보드에 밀려 글자가 줄었다 커지지 않게, 마지막으로 다 보일 때의 높이로 맞춥니다.
     var fitHeight by remember { mutableFloatStateOf(0f) }
+    // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
+    val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
 
     Box(
         Modifier
@@ -239,10 +254,10 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                 ),
             )
             .pointerInput(Unit) {
-                // 잠금 해제하듯 위로 밀면 닫힘
+                // 위로 밀면 잠금 해제
                 detectVerticalDragGestures(
                     onDragEnd = {
-                        if (drag < -120.dp.toPx()) onClose()
+                        if (drag < -120.dp.toPx()) onUnlock()
                         drag = 0f
                     },
                     onDragCancel = { drag = 0f },
@@ -356,6 +371,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                             askingAlarm = false
                         },
                         onCancel = { askingAlarm = false },
+                        onAllow = onAllowAlarm,
                     )
                 } else if (addBar || adding) {
                     AddField(
@@ -379,7 +395,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    "위로 밀어서 닫기",
+                    if (locked) "위로 밀어서 잠금 해제" else "위로 밀어서 닫기",
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.55f),
                 )
@@ -602,7 +618,9 @@ private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
 
 /** '몇 분 뒤?' — 숫자만 받습니다. 이름은 '+ 이름 붙이기'를 눌렀을 때만 적습니다. */
 @Composable
-private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
+private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
+    val context = LocalContext.current
+    val exactAlarm = remember { Setup.exactAlarmAllowed(context) }
     var minutes by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var withLabel by remember { mutableStateOf(false) }
@@ -624,6 +642,18 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("몇 분 뒤?", fontSize = 17.sp, color = Color.White.copy(alpha = 0.8f))
+            // 항암 끝 같은 시각을 맞추는 곳이라 늦을 수 있으면 여기서 바로 알립니다. 허용하면 맞춰 둔 알람도 제시간으로 다시 맞춰집니다.
+            if (!exactAlarm) {
+                Text(
+                    "'알람 및 리마인더'가 꺼져 있어 늦게 울릴 수 있어요. 눌러서 허용",
+                    fontSize = 15.sp,
+                    color = Color(0xFFFF9F0A),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onAllow)
+                        .padding(vertical = 6.dp, horizontal = 2.dp),
+                )
+            }
             Row(verticalAlignment = Alignment.Bottom) {
                 BasicTextField(
                     value = minutes,

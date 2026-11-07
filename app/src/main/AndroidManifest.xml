@@ -10,11 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- '몇 분 뒤' 알람: 시계 앱처럼 정시에 울리고(정확한 알람), 잠금 위에 알람 화면, 진동 -->
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-    <uses-permission
-        android:name="android.permission.SCHEDULE_EXACT_ALARM"
-        android:maxSdkVersion="32" />
+    <!-- '몇 분 뒤' 알람: 제시간에 울리고(정확한 알람, 사용자가 '알람 및 리마인더' 허용), 잠금 위에 알람 화면, 진동 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- 알람이 울리는 동안 알람음을 직접 재생하는 서비스 -->
@@ -90,6 +87,8 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <!-- '알람 및 리마인더'를 허용하면 맞춰 둔 알람을 정확한 알람으로 다시 맞춥니다 -->
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 
