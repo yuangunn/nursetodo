@@ -26,13 +26,13 @@
     </queries>
 
     <application
-        android:name=".TtaakApp"
+        android:name=".NurseTodoApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Ttaak">
+        android:theme="@style/Theme.NurseTodo">
 
         <activity
             android:name=".ui.MainActivity"
@@ -55,8 +55,8 @@
             android:exported="true"
             android:launchMode="singleInstance"
             android:showWhenLocked="true"
-            android:taskAffinity="com.ttaak.app.quickadd"
-            android:theme="@style/Theme.Ttaak.QuickAdd"
+            android:taskAffinity="com.yuangunn.nursetodo.quickadd"
+            android:theme="@style/Theme.NurseTodo.QuickAdd"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <!-- 알람이 울릴 때 잠금 위에 뜨는 화면 -->
@@ -66,8 +66,8 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:showWhenLocked="true"
-            android:taskAffinity="com.ttaak.app.alarm"
-            android:theme="@style/Theme.Ttaak.QuickAdd"
+            android:taskAffinity="com.yuangunn.nursetodo.alarm"
+            android:theme="@style/Theme.NurseTodo.QuickAdd"
             android:turnScreenOn="true" />
 
         <receiver
