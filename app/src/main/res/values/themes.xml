@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Ttaak" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.NurseTodo" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/white</item>
     </style>
 
     <!-- 할 일 화면: 잠금화면 대신 폰 배경화면이 뒤에 보이게 (뿌연 막 없이) -->
-    <style name="Theme.Ttaak.QuickAdd" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.NurseTodo.QuickAdd" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowShowWallpaper">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>

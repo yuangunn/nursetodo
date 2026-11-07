@@ -7,7 +7,7 @@
         android:shortcutShortLabel="@string/add">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetClass="com.ttaak.app.lock.QuickAddActivity"
+            android:targetClass="com.yuangunn.nursetodo.lock.QuickAddActivity"
             android:targetPackage="com.yuangunn.nursetodo" />
     </shortcut>
 </shortcuts>

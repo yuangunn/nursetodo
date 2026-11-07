@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.ttaak.app"
+    namespace = "com.yuangunn.nursetodo"
     compileSdk = 36
 
     defaultConfig {
@@ -13,8 +13,8 @@ android {
         applicationId = "com.yuangunn.nursetodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.6.1"
+        versionCode = 13
+        versionName = "1.6.2"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
@@ -27,15 +27,15 @@ android {
         }
     }
 
-    // Play 업로드 키: 저장소 밖(~/.gradle/gradle.properties 의 ttaakUploadStore·ttaakUploadPassword)에만 있습니다.
+    // Play 업로드 키: 저장소 밖(~/.gradle/gradle.properties 의 nursetodoUploadStore·nursetodoUploadPassword)에만 있습니다.
     // `-Pplay` 로 빌드할 때만 씁니다(Play 용 AAB). 깃허브 APK 는 그대로 debug 키(기존 설치본 위에 덮어 설치되게).
     val play = providers.gradleProperty("play").isPresent
     if (play) {
         signingConfigs.create("upload") {
-            storeFile = file(providers.gradleProperty("ttaakUploadStore").get())
-            storePassword = providers.gradleProperty("ttaakUploadPassword").get()
+            storeFile = file(providers.gradleProperty("nursetodoUploadStore").get())
+            storePassword = providers.gradleProperty("nursetodoUploadPassword").get()
             keyAlias = "upload"
-            keyPassword = providers.gradleProperty("ttaakUploadPassword").get()
+            keyPassword = providers.gradleProperty("nursetodoUploadPassword").get()
         }
     }
 

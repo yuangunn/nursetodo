@@ -204,8 +204,8 @@ v1.6.0 부터 앱 ID 가 바뀌어(`com.ttaak.app` → `com.yuangunn.nursetodo`)
 ## 구조
 
 ```
-app/src/main/java/com/ttaak/app/
-├── TtaakApp.kt            앱 시작 시 저장소 로드, 카드·위젯 갱신
+app/src/main/java/com/yuangunn/nursetodo/
+├── NurseTodoApp.kt        앱 시작 시 저장소 로드, 카드·위젯 갱신
 ├── data/                  Task 모델(날짜·루틴 규칙), JSON 저장소, 날짜 포맷, 주입속도 계산(Infusion)
 ├── lock/                  잠금화면 카드, 체크 리시버, 잠금화면 위 패널, 빠른 설정 타일
 ├── widget/                홈 화면 위젯

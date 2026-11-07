@@ -9,7 +9,7 @@
 
 **널스투두(NurseTodo, v1.5.1 까지 딱/ttaak)**: iOS 앱 툭(Took)을 오마주한 간호사용 안드로이드 투두 앱. 병동 업무폰(인트라넷·폐쇄망)의 잠금화면에서 오늘 할 일을 보고 체크하는 것이 핵심이다.
 
-- v1.6.0 이름 변경: 저장소는 `yuangunn/nursetodo`(옛 `ttaak` 주소는 깃허브가 넘겨 줌), 앱 ID(`applicationId`)는 `com.yuangunn.nursetodo`, 코드 패키지(`namespace`·폴더)·클래스 이름(`TtaakApp` 등)·저장 파일(`ttaak.json`)은 옛 이름 그대로. `res/xml/shortcuts.xml` 의 `targetPackage` 는 앱 ID 와 같아야 한다. 화면 문구에서 옛 '딱 화면'은 '할 일 화면'.
+- v1.6.0 이름 변경: 저장소는 `yuangunn/nursetodo`(옛 `ttaak` 주소는 깃허브가 넘겨 줌), 앱 ID(`applicationId`)는 `com.yuangunn.nursetodo`. v1.6.2 에 코드 패키지(`namespace`·폴더)도 `com.yuangunn.nursetodo`, 클래스는 `NurseTodoApp`·`NurseTodoTheme`·`Theme.NurseTodo`, 저장 파일은 `nursetodo.json` 으로 바꿨다(옛 `ttaak.json` 은 `TaskStore.init` 이 옮김). 컴포넌트 이름이 바뀌어 v1.6.1 이하 위에 덮어 깔면 홈 위젯·상단바 타일·알림 접근은 다시 추가·허용해야 한다(타일은 `tileAdded` 를 되돌려 안내가 다시 뜸). `res/xml/shortcuts.xml` 의 `targetPackage` 는 앱 ID 와 같아야 한다. 화면 문구에서 옛 '딱 화면'은 '할 일 화면'.
 - 색: 시그니처 블루(공개 저장소라 병원 이름은 코드·문서·커밋에 쓰지 않는다). `colors.xml` 의 `brand`(#003876, 아이콘·Play 그래픽) / `accent`(#0054D1, `Accents[0]` 기본 강조색, 위젯). 남색은 어두운 잠금화면에서 안 보여서 강조색은 밝은 쪽.
 
 - Kotlin + Jetpack Compose, minSdk 26 / targetSdk 35
@@ -28,7 +28,7 @@
 - '몇 분 뒤' 알람(`lock/Alarms.kt`): `TaskStore.alarms`(JSON "alarms") + `setExactAndAllowWhileIdle`(`SCHEDULE_EXACT_ALARM` 만. `USE_EXACT_ALARM` 은 Play 정책상 알람·캘린더가 핵심인 앱 전용이라 넣지 않는다. 14+ 는 새로 깔면 꺼져 있어 `SetupGuide`·알람 입력 칸(`AlarmAsk`)이 `Setup.openExactAlarmSettings` 로 허용을 받고, 허용 방송 `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED` 를 `LockActionReceiver` 가 받아 다시 맞춘다. 꺼져 있으면 `setAndAllowWhileIdle` 로 늦게 울림) — 상태바에 ⏰ 가 생기지 않게 setAlarmClock 은 쓰지 않는다. 울리면 목록에서 빼고 `AlarmRingService`(mediaPlayback FGS)가 `AlarmSound` 로 직접 재생(USAGE_ALARM, 울리는 동안 STREAM_ALARM 을 설정 크기로 맞췄다 되돌림) + 진동, 조용한 채널 `alarm_ring` 알림의 fullScreenIntent 로 `AlarmActivity`. 10분 뒤 자동 정지. 채널 소리로는 알람음·크기를 못 바꿔서 이렇게 함. 부팅·업데이트 땐 `refreshSurfaces` → `Alarms.scheduleAll`. 울리는 중(`AlarmRingService.ringing`)엔 `LockPageService` 가 할 일 화면을 띄우지 않음 — 채널로 판단하면 시스템 자동 묶음 요약(같은 채널)에 걸려 할 일 화면이 영영 안 뜸(실기기 버그).
 - A안(할 일 화면) 확정(v1.3): `lockPage` 기본 true. `LockCard.pageMode`(lockPage && 오버레이 권한)면 카드·라이브 대신 조용한 채널 `lock_page` 알림만(상시 서비스용). 안드로이드가 FGS 알림을 MIN→LOW 로 올려 상태바 ✓ 가 남음 → 사용자가 채널을 끄면 숨겨지고 서비스는 계속(설정의 '상태바의 널스투두 아이콘 숨기기'). 오버레이 설정은 안드로이드 11+ 에서 목록 화면으로 열림.
 - 글자·줄 간격: `Settings.cardSp`(sp, 1.3.0 까지의 순번 `cardTextSize` 는 읽을 때 16/19/23 으로 옮김), `rowGap`(할 일 화면 줄 글자 위아래 여백 dp, 동그라미 누름 칸 높이도 `circleBoxHeight` 로 같이 줄어듦).
-- 빌드: AGP 8.11.1, compileSdk/targetSdk 36(Play 신규 앱 조건, 2026-08-31~). Play AAB 는 `bundleNotiRelease -Pplay` → 업로드 키는 저장소 밖 `~/.gradle/gradle.properties`(ttaakUploadStore·ttaakUploadPassword, 키 파일 `~/ttaak-play/ttaak-upload.jks`). `-Pplay` 없으면 debug 키(깃허브 APK). 배포 절차·콘솔 답안은 docs/PLAY.md.
+- 빌드: AGP 8.11.1, compileSdk/targetSdk 36(Play 신규 앱 조건, 2026-08-31~). Play AAB 는 `bundleNotiRelease -Pplay` → 업로드 키는 저장소 밖 `~/.gradle/gradle.properties`(nursetodoUploadStore·nursetodoUploadPassword, 키 파일 `~/ttaak-play/ttaak-upload.jks`). `-Pplay` 없으면 debug 키(깃허브 APK). 배포 절차·콘솔 답안은 docs/PLAY.md.
 - 전체 화면 알림(알람 화면): 에뮬레이터에서 uid 모드가 deny 로 바뀌어(FSI_REQUESTED_BUT_DENIED, Play 스토어의 회수로 추정) 알람이 소리·알림만 나옴 → 설정 알람 칸에 `Setup.fullScreenAllowed` 가 false 면 '알람 화면이 꺼져 있어요'(ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).
 - 다른 앱 알림: `lock/NotiListener`(NotificationListenerService, 사용자가 알림 접근 허용). **서비스 선언은 noti 플레이버 매니페스트(`app/src/noti`)에만** — Play 프로텍트 '강화된 사기 방지'가 알림 리스너(·SMS·접근성)가 있는 APK 를 파일 앱·브라우저·메신저 설치에서 우회 불가로 차단(한국 갤럭시 실기기, v1.4.0/1.4.1). basic 플레이버(기본판)는 파일 설치용, noti 는 adb/Play 설치용. 코드는 main 에 두고 `NotiListener.available()`(서비스 선언 여부)로 설정 UI 를 가름. 판을 바꿔 깔면 허용은 남아도 리스너가 다시 안 붙음(requestRebind 무효) → `connected` 로 '다시 켜기' 표시. lintNotiDebug 는 ForegroundServiceType 오판이라 CI 는 basic 만 lint. `notis` StateFlow 를 할 일 화면이 구독하고 `Settings.notiApps`(패키지 이름, 비면 모든 앱)로 거름. 누르면 `requestDismissKeyguard` 뒤 contentIntent 를 BAL 허용 옵션(API 34+)으로 보냄. APK 설치본은 '제한된 설정'(packageSource=3 LOCAL_FILE)이라 앱 정보 ⋮ 에서 풀어야 함 — 에뮬레이터에서 파일 앱 설치로 재현·확인.
 - 할 일 화면 바로가기: `Settings.shortcuts`(최대 9 저장, id = calc(이름 '항암계산기') | alarm | add | calendar(앱 캘린더 탭) | "app:패키지/액티비티", 기본 calc·alarm·calendar, name 비면 앱 이름). 보이는 칸은 `shortcutStyle`(0 이름 3줄 9, 1 이름 2줄 6, 2 아이콘 4×2 8, `shortcutSlots()`). 할 일 추가 버튼은 한 군데만: 보이는 바로가기에 add 가 있으면 그것, 아니면 `addButton`(0 카드 아래 알약, 1 카드 안 마지막 줄 오른쪽 메모 버튼, 적는 동안 숨김). 매니페스트 `<queries>` 로 런처 앱 목록. 앱 열기는 `requestDismissKeyguard` 후.
@@ -45,4 +45,4 @@
 ```
 
 - 단위 테스트에는 Robolectric 렌더링/실행 테스트가 포함된다 (잠금화면 카드·위젯 inflate, 화면 실행).
-- `TTAAK_SHOTS=<디렉터리> ./gradlew testDebugUnitTest --tests '*LaunchTest*'` 로 화면 스크린샷을 남길 수 있다.
+- `NURSETODO_SHOTS=<디렉터리> ./gradlew testDebugUnitTest --tests '*LaunchTest*'` 로 화면 스크린샷을 남길 수 있다.
