@@ -141,7 +141,13 @@ class QuickAddActivity : ComponentActivity() {
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             TtaakTheme(settings) {
-                LockPage(adding, onClose = { finish() }, onOpen = ::openApp, onOpenNoti = ::openNoti)
+                LockPage(
+                    adding,
+                    onClose = { finish() },
+                    onOpen = ::openApp,
+                    onOpenNoti = ::openNoti,
+                    onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
+                )
             }
         }
     }
@@ -179,7 +185,13 @@ internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
 internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).dp
 
 @Composable
-private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent) -> Unit, onOpenNoti: (Noti) -> Unit) {
+private fun LockPage(
+    startAdding: Boolean,
+    onClose: () -> Unit,
+    onOpen: (Intent) -> Unit,
+    onOpenNoti: (Noti) -> Unit,
+    onAllowAlarm: () -> Unit,
+) {
     val context = LocalContext.current
     val onOpenApp = { onOpen(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
@@ -356,6 +368,7 @@ private fun LockPage(startAdding: Boolean, onClose: () -> Unit, onOpen: (Intent)
                             askingAlarm = false
                         },
                         onCancel = { askingAlarm = false },
+                        onAllow = onAllowAlarm,
                     )
                 } else if (addBar || adding) {
                     AddField(
@@ -602,7 +615,9 @@ private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
 
 /** '몇 분 뒤?' — 숫자만 받습니다. 이름은 '+ 이름 붙이기'를 눌렀을 때만 적습니다. */
 @Composable
-private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
+private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
+    val context = LocalContext.current
+    val exactAlarm = remember { Setup.exactAlarmAllowed(context) }
     var minutes by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var withLabel by remember { mutableStateOf(false) }
@@ -624,6 +639,18 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit) {
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("몇 분 뒤?", fontSize = 17.sp, color = Color.White.copy(alpha = 0.8f))
+            // 항암 끝 같은 시각을 맞추는 곳이라 늦을 수 있으면 여기서 바로 알립니다. 허용하면 맞춰 둔 알람도 제시간으로 다시 맞춰집니다.
+            if (!exactAlarm) {
+                Text(
+                    "'알람 및 리마인더'가 꺼져 있어 늦게 울릴 수 있어요. 눌러서 허용",
+                    fontSize = 15.sp,
+                    color = Color(0xFFFF9F0A),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onAllow)
+                        .padding(vertical = 6.dp, horizontal = 2.dp),
+                )
+            }
             Row(verticalAlignment = Alignment.Bottom) {
                 BasicTextField(
                     value = minutes,

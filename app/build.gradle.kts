@@ -13,8 +13,8 @@ android {
         applicationId = "com.yuangunn.nursetodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.6.0"
+        versionCode = 12
+        versionName = "1.6.1"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
@@ -28,7 +28,7 @@ android {
     }
 
     // Play 업로드 키: 저장소 밖(~/.gradle/gradle.properties 의 ttaakUploadStore·ttaakUploadPassword)에만 있습니다.
-    // `-Pplay` 로 빌드할 때만 씁니다(Play 내부 테스트용 AAB). 깃허브 APK 는 그대로 debug 키(기존 설치본 위에 덮어 설치되게).
+    // `-Pplay` 로 빌드할 때만 씁니다(Play 용 AAB). 깃허브 APK 는 그대로 debug 키(기존 설치본 위에 덮어 설치되게).
     val play = providers.gradleProperty("play").isPresent
     if (play) {
         signingConfigs.create("upload") {

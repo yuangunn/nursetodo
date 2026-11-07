@@ -45,6 +45,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ttaak.app.TtaakApp
+import com.ttaak.app.data.Shortcut
 import com.ttaak.app.data.TaskStore
 import com.ttaak.app.lock.Setup
 
@@ -81,6 +82,7 @@ fun SetupGuide(
     val widget = remember(tick, settings) { Setup.widgetAdded(context) }
     val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
     val overlay = remember(tick, settings) { android.provider.Settings.canDrawOverlays(context) }
+    val exactAlarm = remember(tick, settings) { Setup.exactAlarmAllowed(context) }
     // 할 일 화면(A안)을 쓰면 잠금화면 카드·알림 스타일·라이브 알림은 필요 없습니다 (카드를 띄우지 않음).
     val page = settings.lockPage
     val live = !page && Build.VERSION.SDK_INT >= 36 && settings.lockLive
@@ -186,6 +188,20 @@ fun SetupGuide(
                 )
             }
         }
+        add(
+            StepSpec(
+                state = if (exactAlarm) State.Done else State.Todo,
+                // 바로가기에서 알람을 뺐으면 오늘 탭에서 조르지 않습니다.
+                optional = settings.shortcuts.none { it.id == Shortcut.ALARM },
+                title = "알람 제시간에 울리기",
+                body = if (exactAlarm) {
+                    "'몇 분 뒤' 알람이 맞춘 시각에 울려요."
+                } else {
+                    "'알람 및 리마인더'를 허용하지 않으면 '몇 분 뒤' 알람이 늦게 울릴 수 있어요. 열리는 화면에서 켜 주세요."
+                },
+                action = "허용하기".takeIf { !exactAlarm },
+            ) { Setup.openExactAlarmSettings(context) },
+        )
         add(
             StepSpec(
                 state = if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
