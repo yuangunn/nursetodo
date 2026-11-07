@@ -143,9 +143,13 @@ object TaskStore {
         }
     }
 
-    fun addAlarm(minutes: Int, label: String): Alarm {
+    /** '근무 교대 받았습니다': 이 폰에서 [shift] 교대의 근무 루틴 알림을 켭니다. 0 이면 끕니다. */
+    fun setDuty(shift: Long) = updateSettings { it.copy(dutyShift = shift) }
+
+    /** [at](ms)에 울릴 알람. '몇 분 뒤'도 '몇 시에'도 시각으로 받습니다. */
+    fun addAlarm(at: Long, label: String): Alarm {
         val now = System.currentTimeMillis().coerceAtLeast((_alarms.value.maxOfOrNull { it.id } ?: 0) + 1)
-        val alarm = Alarm(id = now, at = now + minutes * 60_000L, label = label.trim())
+        val alarm = Alarm(id = now, at = at, label = label.trim())
         _alarms.value = (_alarms.value + alarm).sortedBy { it.at }
         save()
         return alarm
@@ -265,6 +269,9 @@ object TaskStore {
         put("presets", JSONArray().apply { presets.forEach { put(it.toJson()) } })
         put("presetApplied", presetApplied)
         put("presetLoaded", presetLoaded)
+        put("routineAlarm", routineAlarm)
+        put("dutyShift", dutyShift)
+        put("lockPages", lockPages)
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -272,6 +279,7 @@ object TaskStore {
         put("name", name)
         start?.let { put("start", it) }
         put("items", JSONArray(items))
+        if (quiet.isNotEmpty()) put("quiet", JSONArray(quiet.sorted()))
     }
 
     internal fun JSONObject.toPreset() = Preset(
@@ -279,6 +287,7 @@ object TaskStore {
         name = getString("name"),
         start = if (has("start")) getInt("start").coerceIn(0, 24 * 60 - 1) else null,
         items = getJSONArray("items").let { a -> (0 until a.length()).map { a.getString(it) } },
+        quiet = optJSONArray("quiet")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet(),
     )
 
     internal fun JSONObject.toSettings() = Settings().let { d ->
@@ -315,6 +324,9 @@ object TaskStore {
             presets = optJSONArray("presets")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).toPreset() } } ?: d.presets,
             presetApplied = optLong("presetApplied", d.presetApplied),
             presetLoaded = optLong("presetLoaded", d.presetLoaded),
+            routineAlarm = optBoolean("routineAlarm", d.routineAlarm),
+            dutyShift = optLong("dutyShift", d.dutyShift),
+            lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 2),
         )
     }
 }

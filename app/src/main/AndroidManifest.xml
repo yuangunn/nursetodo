@@ -74,6 +74,10 @@
             android:name=".lock.Alarms$AlarmReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".lock.Routine$Receiver"
+            android:exported="false" />
+
         <service
             android:name=".lock.AlarmRingService"
             android:exported="false"

@@ -80,6 +80,7 @@ import com.yuangunn.nursetodo.data.CardSpRange
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Preset
+import com.yuangunn.nursetodo.data.itemMinute
 import com.yuangunn.nursetodo.data.RowGapRange
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
@@ -269,6 +270,10 @@ fun SettingsScreen() {
 private fun PresetSettings(s: Settings) {
     var editing by remember { mutableStateOf<Preset?>(null) }
     SwitchRow("교대 프리셋 사용", s.presetMode) { TaskStore.setPresetMode(it) }
+    if (s.presetMode) {
+        SwitchRow("근무 루틴 알림", s.routineAlarm) { v -> TaskStore.updateSettings { it.copy(routineAlarm = v) } }
+        ChoiceRow("할 일 화면", listOf("넘겨 보기", "할 일만", "근무만"), s.lockPages) { i -> TaskStore.updateSettings { it.copy(lockPages = i) } }
+    }
     s.presets.forEach { p ->
         Row(
             Modifier
@@ -295,7 +300,10 @@ private fun PresetSettings(s: Settings) {
     Hint(
         "켜면 매일 정한 시각에 할 일 목록이 그 프리셋으로 바뀌어요. 프리셋에서 온 할 일 중 못 끝낸 것은 다음 교대에 사라지고, " +
             "직접 추가한 할 일은 그대로예요. 할 일 화면은 시계와 바로가기 사이를 할 일이 다 채우고, 개수에 맞춰 글자 크기와 줄 간격이 바뀌어요. " +
-            "다른 앱 알림은 오른쪽에 앱 아이콘으로 보이고, 누르면 내용을 펼쳐요.",
+            "다른 앱 알림은 오른쪽에 앱 아이콘으로 보이고, 누르면 내용을 펼쳐요.\n" +
+            "할 일 앞에 '07:00 정규 라운딩'처럼 시각을 쓰면 근무 루틴 알림이 돼요. 할 일 화면의 근무 페이지에서 '근무 교대 받았습니다'를 " +
+            "누른 폰에서만 그 시각에 소리 없이 진동과 팝업으로 알리고(꺼진 화면은 잠깐 켜짐), 놓친 항목은 빨갛게 보여요. " +
+            "다음 교대가 되면 저절로 꺼지고, 다음 교대 1시간 전부터는 다음 교대를 받을 수 있어요.",
     )
     editing?.let { p -> PresetEditor(p, s, onDone = { editing = it }) }
 }
@@ -307,9 +315,11 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
     var name by remember(p.id) { mutableStateOf(p.name) }
     var start by remember(p.id) { mutableStateOf(p.start) }
     var items by remember(p.id) { mutableStateOf(p.items.joinToString("\n")) }
+    var quiet by remember(p.id) { mutableStateOf(p.quiet) }
+    val lines = items.lines().map { it.trim() }.filter { it.isNotEmpty() }
     var deleting by remember(p.id) { mutableStateOf(false) }
     val isNew = s.presets.none { it.id == p.id }
-    val edited = { Preset(p.id, name.trim().ifEmpty { "프리셋" }, start, items.lines().map { it.trim() }.filter { it.isNotEmpty() }) }
+    val edited = { Preset(p.id, name.trim().ifEmpty { "프리셋" }, start, lines, quiet.filter { it in lines }.toSet()) }
     val withEdits = { if (isNew) s.presets + edited() else s.presets.map { if (it.id == p.id) edited() else it } }
     AlertDialog(
         onDismissRequest = { onDone(null) },
@@ -336,9 +346,31 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     value = items,
                     onValueChange = { items = it },
                     label = { Text("할 일 (한 줄에 하나)") },
+                    supportingText = { Text("07:00 처럼 시각을 앞에 쓰면 그 시각에 근무 루틴 알림") },
                     minLines = 6,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // 예시는 지운 것 없이 맨 아래에 붙입니다.
+                TextButton(onClick = {
+                    items = (lines + Preset.DayExample).joinToString("\n")
+                }) { Text("예시 불러오기 (Day)") }
+                // 시각 붙은 줄마다 근무 루틴 알림을 따로 끄고 켭니다.
+                val timed = lines.filter { itemMinute(it) != null }
+                if (timed.isNotEmpty()) {
+                    Text("근무 루틴 알림", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+                    timed.forEach { line ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(checked = line !in quiet, onCheckedChange = { on -> quiet = if (on) quiet - line else quiet + line })
+                        }
+                    }
+                }
                 Row {
                     if (!isNew) {
                         // 고친 내용을 저장하고, 자동으로 불러오지 않는 복사본을 만들어 바로 엽니다.

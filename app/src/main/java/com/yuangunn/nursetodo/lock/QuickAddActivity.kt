@@ -1,6 +1,7 @@
 package com.yuangunn.nursetodo.lock
 
 import android.app.KeyguardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -40,8 +41,11 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +66,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -84,11 +89,15 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -101,16 +110,23 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.Alarm
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
+import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.cardTextSp
+import com.yuangunn.nursetodo.data.due
+import com.yuangunn.nursetodo.data.dutyTarget
+import com.yuangunn.nursetodo.data.itemMinute
+import com.yuangunn.nursetodo.data.reminders
 import com.yuangunn.nursetodo.data.shortcutSlots
 import com.yuangunn.nursetodo.ui.MainActivity
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
@@ -138,12 +154,14 @@ class QuickAddActivity : ComponentActivity() {
         TaskStore.init(this)
         TaskStore.refreshPreset()
         // 화면을 켜거나 카드를 눌러 열면 보고 체크가 먼저라 입력칸을 접어 둡니다. 타일·위젯 `+` 로 열면 바로 입력.
-        val adding = !intent.getBooleanExtra(EXTRA_LOOK_FIRST, false)
+        val adding = !intent.getBooleanExtra(EXTRA_LOOK_FIRST, false) && !intent.getBooleanExtra(EXTRA_DUTY, false)
+        handleDuty(intent)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             NurseTodoTheme(settings) {
                 LockPage(
                     adding,
+                    dutyRequest = dutyRequest.intValue,
                     onUnlock = { unlockThen {} },
                     onOpen = ::openApp,
                     onOpenNoti = ::openNoti,
@@ -151,6 +169,26 @@ class QuickAddActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /** 근무 루틴 알림으로 열면 근무 페이지로 넘기고, 꺼진 화면이면 잠깐 켭니다(꺼짐 시간이 지나면 다시 꺼짐). */
+    private val dutyRequest = mutableIntStateOf(0)
+
+    private fun handleDuty(intent: Intent) {
+        if (!intent.getBooleanExtra(EXTRA_DUTY, false)) return
+        dutyRequest.intValue++
+        if (intent.getBooleanExtra(EXTRA_WAKE, false) && Build.VERSION.SDK_INT >= 27) setTurnScreenOn(true)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDuty(intent)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 다음에 늦게 열릴 때 꺼진 화면을 다시 켜지 않게 되돌립니다.
+        if (Build.VERSION.SDK_INT >= 27) setTurnScreenOn(false)
     }
 
     /** 잠금을 풀고 앱(의 [target] 화면)으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
@@ -176,8 +214,21 @@ class QuickAddActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_LOOK_FIRST = "lookFirst"
+        private const val EXTRA_DUTY = "duty"
+        private const val EXTRA_WAKE = "wake"
+
+        /** 근무 페이지로 여는 인텐트. [wake] 면 꺼진 화면을 잠깐 켭니다(근무 루틴 알림). */
+        fun dutyIntent(context: Context, wake: Boolean = true): Intent =
+            Intent(context, QuickAddActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_DUTY, true)
+                .putExtra(EXTRA_WAKE, wake)
     }
 }
+
+private const val PAGE_TODO = 0
+private const val PAGE_DUTY = 1
+private val Late = Color(0xFFFF8A80)
 
 internal val Glass = Color.Black.copy(alpha = 0.32f)
 internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
@@ -188,6 +239,7 @@ internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).d
 @Composable
 private fun LockPage(
     startAdding: Boolean,
+    dutyRequest: Int,
     onUnlock: () -> Unit,
     onOpen: (Intent) -> Unit,
     onOpenNoti: (Noti) -> Unit,
@@ -241,6 +293,27 @@ private fun LockPage(
     var fitHeight by remember { mutableFloatStateOf(0f) }
     // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
     val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
+    // 교대 프리셋을 쓰면 '할 일'(직접 적은 일)과 '근무'(프리셋에서 온 일)를 좌우로 넘겨 봅니다. 설정에서 하나만 고를 수 있습니다.
+    val pages = when {
+        !preset || settings.lockPages == 1 -> listOf(PAGE_TODO)
+        settings.lockPages == 2 -> listOf(PAGE_DUTY)
+        else -> listOf(PAGE_TODO, PAGE_DUTY)
+    }
+    val pager = rememberPagerState(initialPage = pages.indexOf(PAGE_DUTY).coerceAtLeast(0)) { pages.size }
+    LaunchedEffect(dutyRequest) {
+        if (dutyRequest > 0) pages.indexOf(PAGE_DUTY).takeIf { it >= 0 }?.let { pager.scrollToPage(it) }
+    }
+    val todo = if (preset) tasks.filter { it.shift == null } else tasks
+    // 자정을 넘는 근무(Night 23:00~)도 시각 순서로. 시각 없는 항목은 적은 순서대로 맨 아래.
+    val duty = tasks.filter { it.shift != null }.sortedBy { it.due ?: Long.MAX_VALUE }
+    val dutyListState = rememberLazyListState()
+    // 지난 근무 항목을 빨갛게, 근무 줄의 '다음' 시각을 맞추려고 분이 바뀔 때마다
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(60_000 - value % 60_000 + 50)
+        }
+    }
 
     Box(
         Modifier
@@ -285,58 +358,92 @@ private fun LockPage(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = preset),
-                ) {
-                    Row(if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+                // 할 일 카드 하나. 근무 페이지([dutyPage])는 시각 지난 항목을 빨갛게, 메모 버튼은 할 일 페이지에만.
+                val card: @Composable (List<Task>, LazyListState, Boolean, Modifier) -> Unit = { list, state, dutyPage, cardModifier ->
                         Surface(
                             color = Glass,
                             contentColor = Color.White,
                             shape = RoundedCornerShape(28.dp),
                             border = GlassEdge,
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(if (preset) Modifier.fillMaxHeight() else Modifier),
+                            modifier = cardModifier.then(if (preset) Modifier.fillMaxHeight() else Modifier),
                         ) {
                             BoxWithConstraints {
                                 if (preset && !typing) SideEffect { fitHeight = maxHeight.value }
                                 val (sp, gap) = if (preset) {
-                                    val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, tasks.size)
+                                    val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, list.size)
                                     with(LocalDensity.current) { textDp.dp.toSp().value } to fitGap
                                 } else {
                                     settings.cardTextSp() to settings.rowGap
                                 }
-                                if (tasks.isEmpty()) {
+                                if (list.isEmpty()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            if (anyDone) "다 했어요!" else "오늘 할 일이 없어요",
+                                            when {
+                                                anyDone -> "다 했어요!"
+                                                dutyPage -> "이번 근무 할 일이 없어요"
+                                                else -> "오늘 할 일이 없어요"
+                                            },
                                             fontSize = sp.sp,
                                             color = Color.White.copy(alpha = 0.6f),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .padding(horizontal = 24.dp, vertical = 22.dp),
                                         )
-                                        if (addInCard) Box(Modifier.padding(end = 9.dp)) { memo() }
+                                        if (addInCard && !dutyPage) Box(Modifier.padding(end = 9.dp)) { memo() }
                                     }
                                 } else {
-                                    LazyColumn(state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
-                                        items(tasks, key = { it.id }) {
+                                    LazyColumn(state = state, contentPadding = PaddingValues(vertical = 8.dp)) {
+                                        items(list, key = { it.id }) {
                                             Box(Modifier.animateItem()) {
                                                 LockRow(
                                                     it, today, sp, gap, settings.checkOnLeft,
                                                     editing = it.id == editingId,
                                                     onEditing = { on -> editingId = if (on) it.id else null },
                                                     onOpenApp = onOpenApp,
+                                                    late = dutyPage && (it.due ?: Long.MAX_VALUE) < now,
                                                     // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
-                                                    trailing = memo.takeIf { _ -> addInCard && it.id == tasks.last().id },
+                                                    trailing = memo.takeIf { _ -> addInCard && !dutyPage && it.id == list.last().id },
                                                 )
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = preset),
+                ) {
+                    Row(if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
+                        if (preset) {
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            ) {
+                                if (pages.size > 1) {
+                                    PageTabs(pages, pager.currentPage) { i -> scope.launch { pager.animateScrollToPage(i) } }
+                                }
+                                HorizontalPager(
+                                    pager,
+                                    Modifier.weight(1f),
+                                    pageSpacing = 16.dp,
+                                    verticalAlignment = Alignment.Top,
+                                ) { i ->
+                                    if (pages[i] == PAGE_DUTY) {
+                                        Column(Modifier.fillMaxSize()) {
+                                            DutyHeader(settings, now)
+                                            card(duty, dutyListState, true, Modifier.weight(1f))
+                                        }
+                                    } else {
+                                        card(todo, listState, false, Modifier.fillMaxSize())
+                                    }
+                                }
+                            }
+                        } else {
+                            card(todo, listState, false, Modifier.weight(1f))
                         }
                         if (preset && notis.isNotEmpty()) {
                             Spacer(Modifier.width(8.dp))
@@ -366,8 +473,8 @@ private fun LockPage(
                 if (askingAlarm || addBar || adding) Spacer(Modifier.height(12.dp))
                 if (askingAlarm) {
                     AlarmAsk(
-                        onStart = { minutes, label ->
-                            Alarms.add(context, minutes, label)
+                        onStart = { at, label ->
+                            Alarms.add(context, at, label)
                             askingAlarm = false
                         },
                         onCancel = { askingAlarm = false },
@@ -378,8 +485,11 @@ private fun LockPage(
                         adding = adding,
                         onAdding = { adding = it },
                         onAdded = { added ->
-                            val index = TaskStore.tasksFor(today, today).indexOfFirst { it.id == added.id }
-                            if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                            val index = TaskStore.tasksFor(today, today).filter { !preset || it.shift == null }.indexOfFirst { it.id == added.id }
+                            scope.launch {
+                                pages.indexOf(PAGE_TODO).takeIf { it >= 0 && it != pager.currentPage }?.let { pager.animateScrollToPage(it) }
+                                if (index >= 0) listState.animateScrollToItem(index)
+                            }
                         },
                     )
                 }
@@ -566,6 +676,94 @@ private fun NotiList(items: List<Noti>, onTap: (Noti) -> Unit) {
     }
 }
 
+/** 페이지 이름 줄: 지금 페이지만 밝게. 눌러도 넘어갑니다. */
+@Composable
+private fun PageTabs(pages: List<Int>, current: Int, onTap: (Int) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        pages.forEachIndexed { i, page ->
+            Text(
+                if (page == PAGE_DUTY) "근무" else "할 일",
+                fontSize = 15.sp,
+                fontWeight = if (i == current) FontWeight.Bold else FontWeight.Medium,
+                color = Color.White.copy(alpha = if (i == current) 1f else 0.5f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable { onTap(i) }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 근무 페이지 맨 위: '근무 교대 받았습니다'를 누르면 이 폰에서 그 교대의 근무 루틴 알림이 켜집니다. 인계는 교대 전에 받으므로
+ * 다음 교대 1시간 전부터는 다음 교대를 받습니다. 시각 붙은 항목이 없거나 설정에서 알림을 끄면 줄이 없습니다.
+ */
+@Composable
+private fun DutyHeader(s: Settings, now: Long) {
+    if (!s.routineAlarm) return
+    val (p, shift) = remember(s.presets, now / 60_000) { s.presets.dutyTarget(LocalDateTime.now()) } ?: return
+    if (p.items.none { itemMinute(it) != null && it !in p.quiet }) return
+    val armed = s.dutyShift == shift
+    Surface(
+        color = Glass,
+        contentColor = Color.White,
+        shape = RoundedCornerShape(50),
+        border = GlassEdge,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+    ) {
+        Row(Modifier.padding(start = 20.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(p.name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(
+                when {
+                    !armed -> " 근무"
+                    shift > now -> " 근무 받음 · ${hhmm(shift)}부터"
+                    else -> s.reminders(now).firstOrNull()?.let { " 근무 중 · 다음 ${hhmm(it.at)}" } ?: " 근무 중"
+                },
+                fontSize = 15.sp,
+                color = Color.White.copy(alpha = 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (armed) {
+                Text(
+                    "알림 끄기",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable { TaskStore.setDuty(0) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            } else {
+                Surface(
+                    onClick = { TaskStore.setDuty(shift) },
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(50),
+                ) {
+                    Text(
+                        "근무 교대 받았습니다",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun hhmm(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
+
 /** 맞춰 둔 알람마다 남은 시간을 초 단위로. ✕ 로 취소. */
 @Composable
 private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
@@ -616,11 +814,15 @@ private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
     }
 }
 
-/** '몇 분 뒤?' — 숫자만 받습니다. 이름은 '+ 이름 붙이기'를 눌렀을 때만 적습니다. */
+/**
+ * 직접 맞추는 알람: '몇 분 뒤'(타이머) 또는 '몇 시에'(1430 → 14:30, 지난 시각이면 내일). 숫자만 받습니다.
+ * 이름은 '+ 이름 붙이기'를 눌렀을 때만 적고, 안 적으면 '30분 알람'·'14:30 알람'.
+ */
 @Composable
-private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
+private fun AlarmAsk(onStart: (Long, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
     val context = LocalContext.current
     val exactAlarm = remember { Setup.exactAlarmAllowed(context) }
+    var atClock by remember { mutableStateOf(false) }
     var minutes by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var withLabel by remember { mutableStateOf(false) }
@@ -629,8 +831,9 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
     val windowFocused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
     LaunchedEffect(withLabel) { if (withLabel) labelFocus.requestFocus() }
-    val ready = (minutes.toIntOrNull() ?: 0) > 0
-    val start = { if (ready) onStart(minutes.toInt(), label) }
+    val target = if (atClock) clockTarget(minutes) else minutes.toIntOrNull()?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 60_000L }
+    val ready = target != null
+    val start: () -> Unit = { if (target != null) onStart(target, label.ifBlank { if (atClock) "${hhmm(target)} 알람" else "" }) }
     val accent = MaterialTheme.colorScheme.primary
 
     Surface(
@@ -641,7 +844,26 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("몇 분 뒤?", fontSize = 17.sp, color = Color.White.copy(alpha = 0.8f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("몇 분 뒤", "몇 시에").forEachIndexed { i, name ->
+                    val on = atClock == (i == 1)
+                    Text(
+                        name,
+                        fontSize = 16.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                        color = Color.White.copy(alpha = if (on) 1f else 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(if (on) Color.White.copy(alpha = 0.16f) else Color.Transparent)
+                            .clickable {
+                                if (atClock != (i == 1)) minutes = ""
+                                atClock = i == 1
+                                focus.requestFocus()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                    )
+                }
+            }
             // 항암 끝 같은 시각을 맞추는 곳이라 늦을 수 있으면 여기서 바로 알립니다. 허용하면 맞춰 둔 알람도 제시간으로 다시 맞춰집니다.
             if (!exactAlarm) {
                 Text(
@@ -657,7 +879,8 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
             Row(verticalAlignment = Alignment.Bottom) {
                 BasicTextField(
                     value = minutes,
-                    onValueChange = { minutes = it.filter(Char::isDigit).take(3) },
+                    onValueChange = { minutes = it.filter(Char::isDigit).take(if (atClock) 4 else 3) },
+                    visualTransformation = if (atClock) ClockDigits else VisualTransformation.None,
                     singleLine = true,
                     textStyle = TextStyle(color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Medium),
                     cursorBrush = SolidColor(accent),
@@ -666,7 +889,7 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
                     keyboardActions = KeyboardActions(onDone = { start() }),
                     decorationBox = { inner ->
                         Box {
-                            if (minutes.isEmpty()) Text("0", fontSize = 44.sp, color = Color.White.copy(alpha = 0.3f))
+                            if (minutes.isEmpty()) Text(if (atClock) "00:00" else "0", fontSize = 44.sp, color = Color.White.copy(alpha = 0.3f))
                             inner()
                         }
                     },
@@ -676,7 +899,17 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
                         .widthIn(min = 28.dp)
                         .focusRequester(focus),
                 )
-                Text("분", fontSize = 22.sp, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(start = 6.dp, bottom = 10.dp))
+                Text(
+                    when {
+                        !atClock -> "분"
+                        target == null -> ""
+                        Day.of(target) == Day.today() -> "오늘"
+                        else -> "내일"
+                    },
+                    fontSize = 22.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(start = 6.dp, bottom = 10.dp),
+                )
             }
             if (withLabel) {
                 BasicTextField(
@@ -735,6 +968,37 @@ private fun AlarmAsk(onStart: (Int, String) -> Unit, onCancel: () -> Unit, onAll
     }
 }
 
+/** '몇 시에' 숫자(9 → 9:00, 930 → 9:30, 1430 → 14:30)의 다음 그 시각(ms). 지난 시각이면 내일, 틀린 시각이면 null. */
+internal fun clockTarget(digits: String, now: LocalDateTime = LocalDateTime.now()): Long? {
+    if (digits.isEmpty()) return null
+    val (h, m) = when (digits.length) {
+        1, 2 -> digits.toInt() to 0
+        3 -> digits.take(1).toInt() to digits.drop(1).toInt()
+        else -> digits.take(2).toInt() to digits.drop(2).take(2).toInt()
+    }
+    if (h > 23 || m > 59) return null
+    val today = now.toLocalDate().atTime(h, m)
+    val at = if (today.isAfter(now)) today else today.plusDays(1)
+    return at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+}
+
+/** '몇 시에' 칸: 숫자 3~4개면 가운데 쌍점을 보여 줍니다(입력은 숫자만). */
+private val ClockDigits = VisualTransformation { text ->
+    val d = text.text
+    val colon = when (d.length) {
+        3 -> 1
+        4 -> 2
+        else -> return@VisualTransformation TransformedText(text, OffsetMapping.Identity)
+    }
+    TransformedText(
+        AnnotatedString(d.take(colon) + ":" + d.drop(colon)),
+        object : OffsetMapping {
+            override fun originalToTransformed(offset: Int) = if (offset <= colon) offset else offset + 1
+            override fun transformedToOriginal(offset: Int) = if (offset <= colon) offset else offset - 1
+        },
+    )
+}
+
 /** 잠금화면을 가리는 대신 시계는 그대로 보여 줍니다. 분이 바뀔 때마다 다시 그립니다. */
 @Composable
 private fun Clock(modifier: Modifier) {
@@ -779,6 +1043,7 @@ private fun LockRow(
     editing: Boolean,
     onEditing: (Boolean) -> Unit,
     onOpenApp: () -> Unit,
+    late: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     var done by remember(task.id) { mutableStateOf(false) }
@@ -830,7 +1095,7 @@ private fun LockRow(
         } else {
             Text(
                 task.title,
-                color = Color.White.copy(alpha = if (done) 0.45f else 1f),
+                color = (if (late) Late else Color.White).copy(alpha = if (done) 0.45f else 1f),
                 fontSize = sp.sp,
                 // 큰 글씨가 두 줄로 넘어가도 줄끼리 겹치지 않게 (기본 줄 높이는 글자 크기와 상관없이 24sp)
                 lineHeight = 1.25.em,

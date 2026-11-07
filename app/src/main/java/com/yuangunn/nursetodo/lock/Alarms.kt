@@ -13,8 +13,8 @@ import com.yuangunn.nursetodo.data.Alarm
 import com.yuangunn.nursetodo.data.TaskStore
 
 /**
- * 'N분 뒤' 알람 (병동 타이머). 정확한 알람([AlarmManager.setExactAndAllowWhileIdle])으로 맞춰서 잠자기 중에도 울립니다.
- * 시계 앱 방식(setAlarmClock)은 상태바에 ⏰ 가 늘 떠서 쓰지 않습니다 — 대신 깊은 절전 중 연달아 울릴 땐 몇 분 늦을 수 있습니다.
+ * 직접 맞춘 알람('몇 분 뒤'·'몇 시에'). 시계 앱 방식([AlarmManager.setAlarmClock])으로 맞춰 깊은 절전 중에도 제시간에 울립니다.
+ * 상태바에 ⏰ 가 뜹니다. setExactAndAllowWhileIdle 은 깊은 절전 중 앱마다 몇 분에 한 번만 울릴 수 있어서 바꿨습니다.
  * 울리면 [AlarmRingService] 가 설정한 알람음·크기·방식으로 울리고 잠금 위에 알람 화면([AlarmActivity])을 띄웁니다.
  * 부팅·업데이트·'알람 및 리마인더' 허용 뒤에는 [scheduleAll] 이 다시 맞춥니다.
  */
@@ -40,7 +40,7 @@ object Alarms {
         nm.createNotificationChannel(channel)
     }
 
-    fun add(context: Context, minutes: Int, label: String) = schedule(context, TaskStore.addAlarm(minutes, label))
+    fun add(context: Context, at: Long, label: String) = schedule(context, TaskStore.addAlarm(at, label))
 
     fun cancel(context: Context, id: Long) {
         TaskStore.removeAlarm(id)
@@ -67,15 +67,27 @@ object Alarms {
 
     private fun requestCode(id: Long): Int = 1000 + (id % 100_000).toInt()
 
-    private fun schedule(context: Context, alarm: Alarm) {
+    private fun schedule(context: Context, alarm: Alarm) = setClock(context, alarm.at, fireIntent(context, alarm.id))
+
+    /**
+     * 시계 앱 방식으로 [at] 에 [operation]. 상태바 ⏰ 를 누르면 할 일 화면이 열립니다.
+     * '알람 및 리마인더'가 꺼져 있으면(안드로이드 14+ 는 새로 깔면 꺼짐) 늦을 수 있는 방식으로라도 맞춥니다.
+     */
+    internal fun setClock(context: Context, at: Long, operation: PendingIntent) {
         val am = context.getSystemService(AlarmManager::class.java)
         try {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.at, fireIntent(context, alarm.id))
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(at, showIntent(context)), operation)
         } catch (_: SecurityException) {
-            // '알람 및 리마인더'가 꺼져 있으면(안드로이드 14+ 는 새로 깔면 꺼짐) 늦을 수 있는 방식으로라도
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.at, fireIntent(context, alarm.id))
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, operation)
         }
     }
+
+    private fun showIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+        context, 6,
+        Intent(context, QuickAddActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(QuickAddActivity.EXTRA_LOOK_FIRST, true),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     private fun fireIntent(context: Context, id: Long): PendingIntent = PendingIntent.getBroadcast(
         context, requestCode(id),
