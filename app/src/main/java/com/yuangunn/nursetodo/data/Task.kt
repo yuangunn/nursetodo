@@ -154,6 +154,9 @@ fun itemMinute(text: String): Int? {
     return (h.toInt() * 60 + m.toInt()).takeIf { h.toInt() < 24 && m.toInt() < 60 }
 }
 
+/** 맨 앞 시각을 뺀 내용('07:00 정규 라운딩' → '정규 라운딩'). 근무 페이지는 시각을 따로 한 칸에 보여 줍니다. */
+fun itemText(text: String): String = text.trim().replaceFirst(Regex("""^\d{1,2}:\d{2}\s*"""), "")
+
 /** 교대([shift] 시작 ms) 안의 [minute] 시각(ms). 교대 시작보다 이른 시각은 자정을 넘긴 다음 날입니다(Night 의 01:00). */
 fun shiftTime(shift: Long, minute: Int): Long {
     val start = Instant.ofEpochMilli(shift).atZone(ZoneId.systemDefault()).toLocalDateTime()

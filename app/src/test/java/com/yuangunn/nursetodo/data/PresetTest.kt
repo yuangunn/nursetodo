@@ -124,6 +124,8 @@ class PresetTest {
         assertEquals(7 * 60, itemMinute("07:00 정규 라운딩"))
         assertEquals(null, itemMinute("인계 준비"))
         assertEquals(null, itemMinute("25:00 틀린 시각"))
+        assertEquals("정규 라운딩(V/S)", itemText("7:00 정규 라운딩(V/S)"))
+        assertEquals("인계 준비", itemText("인계 준비"))
         // 인계는 교대 전에 받으므로 Day 1시간 전부터는 Day 를 받음
         assertEquals("Night" to ms(at(23, plusDays = -1)), list.dutyTarget(at(5, 59))?.let { it.first.name to it.second })
         assertEquals("Day" to ms(at(7)), list.dutyTarget(at(6, 0))?.let { it.first.name to it.second })

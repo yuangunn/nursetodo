@@ -118,6 +118,7 @@ import com.yuangunn.nursetodo.data.cardTextSp
 import com.yuangunn.nursetodo.data.due
 import com.yuangunn.nursetodo.data.dutyTarget
 import com.yuangunn.nursetodo.data.itemMinute
+import com.yuangunn.nursetodo.data.itemText
 import com.yuangunn.nursetodo.data.reminders
 import com.yuangunn.nursetodo.data.shortcutSlots
 import com.yuangunn.nursetodo.ui.MainActivity
@@ -229,6 +230,10 @@ class QuickAddActivity : ComponentActivity() {
 private const val PAGE_TODO = 0
 private const val PAGE_DUTY = 1
 private val Late = Color(0xFFFF8A80)
+
+// 근무 페이지는 정보 전달이 먼저라 개수에 맞춰 키우지 않고 작은 글씨·좁은 줄로 (할 일 페이지는 크게 그대로)
+private const val DUTY_SP = 15f
+private const val DUTY_GAP = 2
 
 internal val Glass = Color.Black.copy(alpha = 0.32f)
 internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
@@ -369,12 +374,16 @@ private fun LockPage(
                         ) {
                             BoxWithConstraints {
                                 if (preset && !typing) SideEffect { fitHeight = maxHeight.value }
-                                val (sp, gap) = if (preset) {
-                                    val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, list.size)
-                                    with(LocalDensity.current) { textDp.dp.toSp().value } to fitGap
-                                } else {
-                                    settings.cardTextSp() to settings.rowGap
+                                val (sp, gap) = when {
+                                    dutyPage -> DUTY_SP to DUTY_GAP
+                                    preset -> {
+                                        val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, list.size)
+                                        with(LocalDensity.current) { textDp.dp.toSp().value } to fitGap
+                                    }
+                                    else -> settings.cardTextSp() to settings.rowGap
                                 }
+                                // 근무 페이지에서 다음에 할 시각 (진하게)
+                                val nextId = if (dutyPage) list.firstOrNull { (it.due ?: Long.MIN_VALUE) >= now }?.id else null
                                 if (list.isEmpty()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
@@ -401,6 +410,8 @@ private fun LockPage(
                                                     onEditing = { on -> editingId = if (on) it.id else null },
                                                     onOpenApp = onOpenApp,
                                                     late = dutyPage && (it.due ?: Long.MAX_VALUE) < now,
+                                                    timeColumn = dutyPage,
+                                                    next = it.id == nextId,
                                                     // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
                                                     trailing = memo.takeIf { _ -> addInCard && !dutyPage && it.id == list.last().id },
                                                 )
@@ -1031,6 +1042,7 @@ private fun Clock(modifier: Modifier) {
 /**
  * 동그라미 + 큰 글씨 한 줄. 동그라미를 눌러야만 체크되고(체크 표시를 잠깐 보여 준 뒤 사라짐),
  * 글씨를 누르면 앱으로, 글씨를 길게 누르면 그 자리에서 이름을 고칩니다.
+ * [timeColumn] 이면(근무 페이지) 맨 앞 시각을 왼쪽 한 칸에 따로: 지났는데 안 했으면 빨강([late]), 다음 것은 진하게([next]).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1044,6 +1056,8 @@ private fun LockRow(
     onEditing: (Boolean) -> Unit,
     onOpenApp: () -> Unit,
     late: Boolean = false,
+    timeColumn: Boolean = false,
+    next: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     var done by remember(task.id) { mutableStateOf(false) }
@@ -1056,10 +1070,10 @@ private fun LockRow(
         }
     }
     val circle = @Composable {
-        // 손가락 폭만큼(48dp) 눌리고, 보이는 동그라미는 26dp
+        // 손가락 폭만큼(48dp, 근무 페이지는 40dp) 눌리고, 보이는 동그라미는 26dp(근무 페이지 22dp)
         Box(
             Modifier
-                .size(48.dp, circleBoxHeight(gap))
+                .size(if (timeColumn) 40.dp else 48.dp, circleBoxHeight(gap))
                 .clip(CircleShape)
                 .clickable(enabled = !done && !editing) {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -1069,39 +1083,58 @@ private fun LockRow(
         ) {
             Box(
                 Modifier
-                    .size(26.dp)
+                    .size(if (timeColumn) 22.dp else 26.dp)
                     .then(
                         if (done) Modifier.background(accent, CircleShape)
                         else Modifier.border(2.dp, Color.White.copy(alpha = 0.75f), CircleShape),
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(18.dp))
+                if (done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(if (timeColumn) 15.dp else 18.dp))
             }
         }
     }
+    // 여러 줄이어도 시각·동그라미가 첫 줄에 맞게 근무 페이지는 위로 맞춥니다.
+    val textPad = if (timeColumn) (gap + 6).dp else gap.dp
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 9.dp, vertical = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (timeColumn) Alignment.Top else Alignment.CenterVertically,
     ) {
         if (checkOnLeft) circle()
+        if (timeColumn && !editing) {
+            Text(
+                itemMinute(task.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: "",
+                color = when {
+                    late -> Late
+                    next -> Color.White
+                    else -> Color.White.copy(alpha = 0.55f)
+                }.copy(alpha = if (done) 0.45f else if (late || next) 1f else 0.55f),
+                fontSize = sp.sp,
+                lineHeight = 1.25.em,
+                fontWeight = if (late || next) FontWeight.Bold else FontWeight.Medium,
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                modifier = Modifier
+                    .padding(start = 2.dp, top = textPad)
+                    .width((sp * 2.9f).dp),
+            )
+        }
         val textModifier = Modifier
             .weight(1f)
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = if (timeColumn) 0.dp else 6.dp)
         if (editing) {
             RenameField(task, sp, gap, onDone = { onEditing(false) }, modifier = textModifier)
         } else {
             Text(
-                task.title,
+                if (timeColumn) itemText(task.title) else task.title,
                 color = (if (late) Late else Color.White).copy(alpha = if (done) 0.45f else 1f),
                 fontSize = sp.sp,
                 // 큰 글씨가 두 줄로 넘어가도 줄끼리 겹치지 않게 (기본 줄 높이는 글자 크기와 상관없이 24sp)
                 lineHeight = 1.25.em,
                 fontWeight = FontWeight.Medium,
                 textDecoration = if (done) TextDecoration.LineThrough else null,
-                maxLines = 2,
+                maxLines = if (timeColumn) 3 else 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = textModifier
                     .clip(RoundedCornerShape(10.dp))
@@ -1113,7 +1146,7 @@ private fun LockRow(
                             onEditing(true)
                         },
                     )
-                    .padding(horizontal = 6.dp, vertical = gap.dp),
+                    .padding(horizontal = 6.dp, vertical = textPad),
             )
         }
         // 오른쪽 체크일 때도 동그라미 줄이 다른 줄과 맞도록 메모 버튼은 동그라미 앞에
