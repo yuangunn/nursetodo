@@ -114,17 +114,87 @@ data class Settings(
     val presetApplied: Long = 0,
     /** 마지막으로 불러온 프리셋([Preset.id]). '지금 불러오기'로 시각과 다른 프리셋을 불렀을 수 있습니다. */
     val presetLoaded: Long = 0,
+    /** 근무 루틴 알림 전체 켜기. 시각이 붙은 프리셋 항목을 '근무 교대 받았습니다'를 누른 폰에서만 진동·팝업으로 알립니다. */
+    val routineAlarm: Boolean = true,
+    /** '근무 교대 받았습니다'를 누른 교대의 시작 시각(ms). 0 이면 아무 교대도 받지 않음(알림 꺼짐). */
+    val dutyShift: Long = 0,
+    /** 교대 프리셋을 쓸 때 할 일 화면: 0 할 일·근무를 좌우로 넘겨 보기, 1 할 일만, 2 근무만. */
+    val lockPages: Int = 0,
 )
 
-/** 교대 프리셋 하나. [start] 는 매일 불러올 시각(자정부터 분), null 이면 자동으로 불러오지 않습니다. */
-data class Preset(val id: Long, val name: String, val start: Int?, val items: List<String>) {
+/**
+ * 교대 프리셋 하나. [start] 는 매일 불러올 시각(자정부터 분), null 이면 자동으로 불러오지 않습니다.
+ * [items] 는 한 줄에 하나, '07:00 정규 라운딩'처럼 앞에 시각이 있으면 그 시각에 근무 루틴 알림. [quiet] 는 알림을 끈 줄.
+ */
+data class Preset(val id: Long, val name: String, val start: Int?, val items: List<String>, val quiet: Set<String> = emptySet()) {
     companion object {
         val Defaults = listOf(
             Preset(1, "Day", 7 * 60, emptyList()),
             Preset(2, "Evening", 15 * 60, emptyList()),
             Preset(3, "Night", 23 * 60, emptyList()),
         )
+
+        /** 설정의 '예시 불러오기' (외과 병동 Day). */
+        val DayExample = listOf(
+            "07:00 정규 라운딩(환자상태 확인, V/S check, 아침식전약, 주사약, 혈당측정, 수술부위, 주사부위)",
+            "08:00 아침식후약 투여",
+            "09:00 정규 라운딩(환자상태 확인, 수액 라운딩)",
+            "11:00 정규 라운딩(환자상태 확인, 수액 라운딩, V/S check)",
+            "12:00 점심식전약 투여, 혈당측정",
+            "13:00 정규 라운딩(환자상태 확인, 수액 라운딩, I/O check)",
+        )
     }
+}
+
+private val ItemTime = Regex("""^(\d{1,2}):(\d{2})(?=\s|$)""")
+
+/** '07:00 정규 라운딩'처럼 맨 앞에 시각이 있으면 그 시각(자정부터 분). */
+fun itemMinute(text: String): Int? {
+    val (h, m) = ItemTime.find(text.trim())?.destructured ?: return null
+    return (h.toInt() * 60 + m.toInt()).takeIf { h.toInt() < 24 && m.toInt() < 60 }
+}
+
+/** 교대([shift] 시작 ms) 안의 [minute] 시각(ms). 교대 시작보다 이른 시각은 자정을 넘긴 다음 날입니다(Night 의 01:00). */
+fun shiftTime(shift: Long, minute: Int): Long {
+    val start = Instant.ofEpochMilli(shift).atZone(ZoneId.systemDefault()).toLocalDateTime()
+    val day = if (minute < start.hour * 60 + start.minute) start.toLocalDate().plusDays(1) else start.toLocalDate()
+    return day.atStartOfDay().plusMinutes(minute.toLong()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+}
+
+/** 교대 프리셋에서 넣은 할 일 중 시각이 붙은 것이면 그 시각(ms). 지나도록 안 끝내면 빨갛게 보입니다. */
+val Task.due: Long? get() = shift?.let { s -> itemMinute(title)?.let { shiftTime(s, it) } }
+
+/** [shift](시작 ms)에 시작하는 프리셋. */
+fun List<Preset>.forShift(shift: Long): Preset? {
+    val t = Instant.ofEpochMilli(shift).atZone(ZoneId.systemDefault()).toLocalTime()
+    return firstOrNull { it.start == t.hour * 60 + t.minute }
+}
+
+/**
+ * '근무 교대 받았습니다'로 받을 교대와 그 시작 시각(ms). 인계는 교대 시각 전에 받으므로 다음 교대가 [early] 안에 시작하면
+ * 다음 교대를, 아니면 지금 교대를.
+ */
+fun List<Preset>.dutyTarget(now: LocalDateTime, early: Long = 60 * 60_000L): Pair<Preset, Long>? {
+    val ms = now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    nextShift(now)?.takeIf { it - ms <= early }?.let { next -> forShift(next)?.let { return it to next } }
+    return currentShift(now)
+}
+
+/** 근무 루틴 알림 하나: 프리셋 [index] 번째 줄 [text] 를 [at](ms)에. */
+data class Reminder(val index: Int, val at: Long, val text: String)
+
+/**
+ * 받은 교대([Settings.dutyShift])에서 [now] 뒤에 남은 근무 루틴 알림. 전체 알림을 껐거나 받은 교대가 없으면 없음.
+ * 다음 교대가 시작한 뒤의 시각은 빼서, 교대가 끝나면 이 폰의 알림도 저절로 끝납니다.
+ */
+fun Settings.reminders(now: Long): List<Reminder> {
+    if (!presetMode || !routineAlarm || dutyShift == 0L) return emptyList()
+    val p = presets.forShift(dutyShift) ?: return emptyList()
+    val end = presets.nextShift(Instant.ofEpochMilli(dutyShift).atZone(ZoneId.systemDefault()).toLocalDateTime()) ?: Long.MAX_VALUE
+    return p.items.mapIndexedNotNull { i, line ->
+        val m = itemMinute(line) ?: return@mapIndexedNotNull null
+        Reminder(i, shiftTime(dutyShift, m), line).takeIf { line !in p.quiet && it.at > now && it.at < end }
+    }.sortedBy { it.at }
 }
 
 /**

@@ -32,12 +32,12 @@ class AlarmTest {
         val nm = context.getSystemService(NotificationManager::class.java)
         shadowOf(nm).setNotificationsEnabled(true)
 
-        Alarms.add(context, 30, "항암 끝")
+        Alarms.add(context, System.currentTimeMillis() + 30 * 60_000L, "항암 끝")
         val alarm = TaskStore.alarms.value.single { it.label == "항암 끝" }
         assertEquals(30L, alarm.minutes)
         val am = context.getSystemService(AlarmManager::class.java)
-        // 상태바에 ⏰ 가 뜨지 않게 시계 앱 방식이 아닌 정확한 알람으로
-        assertEquals(null, am.nextAlarmClock)
+        // 깊은 절전 중에도 제시간에 울리게 시계 앱 방식으로 (상태바 ⏰)
+        assertEquals(alarm.at, am.nextAlarmClock?.triggerTime)
         val scheduled = shadowOf(am).scheduledAlarms.single { it.triggerAtTime == alarm.at }
         assertEquals(AlarmManager.RTC_WAKEUP, scheduled.type)
 
@@ -69,6 +69,19 @@ class AlarmTest {
             LockActionReceiver::class.java.name,
             context.packageManager.queryBroadcastReceivers(allowed, 0).single().activityInfo.name,
         )
+    }
+
+    @Test
+    fun clockDigitsBecomeNextTime() {
+        val now = java.time.LocalDateTime.of(2026, 11, 8, 13, 0)
+        fun at(d: String) = clockTarget(d, now)?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() }
+        assertEquals(now.withHour(14).withMinute(30), at("1430"))
+        assertEquals(now.withHour(21).withMinute(5), at("2105"))
+        // 지난 시각이면 내일, 숫자 한두 개는 정각, 세 개는 h:mm
+        assertEquals(now.plusDays(1).withHour(9).withMinute(30), at("930"))
+        assertEquals(now.plusDays(1).withHour(7), at("7"))
+        assertEquals(null, at("2460"))
+        assertEquals(null, at(""))
     }
 
     @Test

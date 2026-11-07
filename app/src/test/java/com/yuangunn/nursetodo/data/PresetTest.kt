@@ -117,6 +117,31 @@ class PresetTest {
     }
 
     @Test
+    fun timedItemsBecomeRemindersOnlyAfterHandover() {
+        val day = presets[0].copy(items = listOf("07:00 정규 라운딩", "12:00 점심식전약 투여", "인계 준비"), quiet = setOf("12:00 점심식전약 투여"))
+        val night = presets[2].copy(items = listOf("01:00 수액 라운딩", "07:30 다음 교대 시간"))
+        val list = listOf(day, presets[1], night)
+        assertEquals(7 * 60, itemMinute("07:00 정규 라운딩"))
+        assertEquals(null, itemMinute("인계 준비"))
+        assertEquals(null, itemMinute("25:00 틀린 시각"))
+        // 인계는 교대 전에 받으므로 Day 1시간 전부터는 Day 를 받음
+        assertEquals("Night" to ms(at(23, plusDays = -1)), list.dutyTarget(at(5, 59))?.let { it.first.name to it.second })
+        assertEquals("Day" to ms(at(7)), list.dutyTarget(at(6, 0))?.let { it.first.name to it.second })
+        val s = Settings(presetMode = true, presets = list)
+        // 받기 전엔 알림 없음, 받으면 지나지 않은 시각만(알림 끈 줄·시각 없는 줄 빼고)
+        assertEquals(emptyList<Reminder>(), s.reminders(ms(at(6, 30))))
+        val armed = s.copy(dutyShift = ms(at(7)))
+        assertEquals(listOf(Reminder(0, ms(at(7)), "07:00 정규 라운딩")), armed.reminders(ms(at(6, 30))))
+        assertEquals(emptyList<Reminder>(), armed.reminders(ms(at(7, 1))))
+        assertEquals(emptyList<Reminder>(), armed.copy(routineAlarm = false).reminders(ms(at(6, 30))))
+        // Night 의 01:00 은 자정을 넘긴 다음 날, 다음 교대(Day 07:00)가 시작한 뒤의 07:30 은 이 교대 알림이 아님
+        assertEquals(listOf(ms(at(1, plusDays = 1))), s.copy(dutyShift = ms(at(23))).reminders(ms(at(23))).map { it.at })
+        // 불러온 할 일의 시각
+        assertEquals(ms(at(12)), Task(1, "12:00 점심식전약 투여", 0, shift = ms(at(7))).due)
+        assertEquals(null, Task(2, "12:00 직접 적은 일", 0).due)
+    }
+
+    @Test
     fun fewerTasksGetBiggerText() {
         val sizes = listOf(1, 3, 6, 10, 20).map { autoFit(500f, it).first }
         assertEquals(26f, sizes.first())
