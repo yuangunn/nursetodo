@@ -62,6 +62,8 @@ object Routine {
         if (!s.presetMode || !s.routineAlarm || s.dutyShift != shift) return
         val text = s.presets.forShift(shift)?.items?.getOrNull(index) ?: return
         if (TaskStore.tasks.value.any { it.shift == shift && it.title == text && it.doneOn != null }) return
+        // 같은 이름 포켓북('정규 라운딩')의 체크를 새로 시작합니다.
+        TaskStore.restartPocketsFor(text)
         notify(context, shift, index, text)
         val screenOn = context.getSystemService(PowerManager::class.java).isInteractive
         if (!screenOn && Settings.canDrawOverlays(context) && !Alarms.ringing() && !LockPageService.inCall(context)) {

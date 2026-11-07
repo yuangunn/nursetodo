@@ -12,7 +12,7 @@
 | 테스터 12명 이상의 구글 계정 이메일(넉넉히 15명쯤) | 비공개 테스트 → 테스터 목록 | 계정 주인 |
 | AAB(알림판) | `~/ttaak-play/nursetodo-v<버전>-noti.aab` (`./gradlew bundleNotiRelease -Pplay` 로 만듦) | 저장소 |
 | 앱 아이콘 512×512, 그래픽 이미지 1024×500 | [`docs/play/icon-512.png`](play/icon-512.png), [`docs/play/feature-1024x500.png`](play/feature-1024x500.png) | 저장소 |
-| 휴대전화 스크린샷 4장(1240×2400: 할 일 화면·오늘·교대 프리셋·계산기) | [`docs/play/screen-1.png`](play/screen-1.png) ~ [`screen-4.png`](play/screen-4.png) | 저장소 |
+| 휴대전화 스크린샷 5장(1240×2400: 할 일 화면·오늘·교대 프리셋·계산기·포켓북) | [`docs/play/screen-1.png`](play/screen-1.png) ~ [`screen-5.png`](play/screen-5.png) | 저장소 |
 | 포그라운드 서비스 시연 영상 2개 | `~/ttaak-play/video/lockpage-demo.mp4`(specialUse: 화면 켜면 할 일 화면 → 체크 → 밀어서 잠금 해제), `alarm-demo.mp4`(mediaPlayback: 1분 알람 → 꺼진 화면에서 알람 화면 → 끄기). 유튜브에 **일부 공개**로 올려 링크 | 계정 주인이 올림 |
 | 개인정보처리방침 주소 | https://github.com/yuangunn/nursetodo/blob/main/PRIVACY.md | 저장소 |
 
@@ -63,6 +63,7 @@
   >
   > - 교대 프리셋: 7시·15시·23시마다 Day·Evening·Night 할 일 목록으로 자동 교체 (고치기·복제·추가)
   > - 근무 루틴 알림: '07:00 정규 라운딩'처럼 시각을 붙이면 근무를 받은 폰에서만 조용히 진동과 팝업으로, 놓친 일은 빨갛게
+  > - 포켓북: 진단명·수술명별로 사정할 때 볼 것을 적어 두고 잠금화면에서 펼쳐 보며 체크 (붙여넣기·엑셀 표로 만들기)
   > - 팀즈·문자 같은 다른 앱 알림도 할 일 아래에 최근 3개까지(고른 앱만)
   > - 바로가기: 항암계산기, 알람, 캘린더, 할 일 추가, 자주 쓰는 앱
   > - 매일·요일 루틴, D-day, 홈 화면 위젯
