@@ -2,14 +2,12 @@ package com.yuangunn.nursetodo.widget
 
 import android.content.Context
 import android.content.Intent
-import android.util.TypedValue
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
-import com.yuangunn.nursetodo.data.cardTextSp
 import com.yuangunn.nursetodo.lock.LockActionReceiver
 import java.util.concurrent.CountDownLatch
 import android.os.Handler
@@ -21,7 +19,6 @@ class TaskWidgetService : RemoteViewsService() {
     private class Factory(private val context: Context) : RemoteViewsFactory {
         private var items: List<Task> = emptyList()
         private var today = Day.today()
-        private var sp = 16f
 
         override fun onCreate() {}
 
@@ -32,8 +29,6 @@ class TaskWidgetService : RemoteViewsService() {
                 today = Day.today()
                 // 끝낸 일은 위젯에서 사라지고 앱의 '완료된 할 일'에서만 보입니다.
                 items = TaskStore.tasksFor(today, today).filterNot { it.isDone(today) }
-                val s = TaskStore.settings.value
-                sp = s.cardTextSp()
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 load()
@@ -56,9 +51,7 @@ class TaskWidgetService : RemoteViewsService() {
                 ?: return RemoteViews(context.packageName, R.layout.widget_row)
             return RemoteViews(context.packageName, R.layout.widget_row).apply {
                 setTextViewText(R.id.text, task.title)
-                setTextViewTextSize(R.id.text, TypedValue.COMPLEX_UNIT_SP, sp)
-                setImageViewResource(R.id.check, R.drawable.ic_check_off)
-                setInt(R.id.check, "setColorFilter", 0xFF9E9E9E.toInt())
+                setInt(R.id.check, "setColorFilter", context.getColor(R.color.widget_sub))
                 setOnClickFillInIntent(
                     R.id.row,
                     Intent().putExtra(LockActionReceiver.EXTRA_ID, task.id),

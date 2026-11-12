@@ -1,53 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 위젯 고르기/추가 창의 미리보기. 실제 위젯(widget_tasks)은 목록 어댑터라 미리보기에서 그려지지 않습니다. -->
+<!-- 위젯 고르기/추가 창의 미리보기(실제 위젯 widget_tasks 와 같은 모양). 실제 위젯은 목록 어댑터라 미리보기에서 그려지지 않습니다. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
-    android:orientation="vertical"
-    android:padding="14dp">
+    android:orientation="vertical">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="32dp"
-        android:drawableEnd="@drawable/ic_add"
-        android:drawableTint="@color/accent"
+        android:layout_height="56dp"
         android:gravity="center_vertical"
-        android:text="@string/widget_label"
-        android:textColor="@color/widget_text"
-        android:textSize="15sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/widget_today"
+            android:textColor="@color/widget_text"
+            android:textSize="17sp" />
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_dot"
+            android:backgroundTint="@color/accent"
+            android:importantForAccessibility="no"
+            android:padding="10dp"
+            android:src="@drawable/ic_add" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:drawablePadding="10dp"
-        android:drawableStart="@drawable/ic_check_on"
-        android:drawableTint="@color/accent"
-        android:gravity="center_vertical"
-        android:text="@string/preview_done"
-        android:textColor="@color/widget_sub"
-        android:textSize="14sp" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:drawablePadding="10dp"
-        android:drawableStart="@drawable/ic_check_off"
+        android:layout_height="40dp"
+        android:drawablePadding="12dp"
+        android:drawableStart="@drawable/ic_ring"
         android:drawableTint="@color/widget_sub"
         android:gravity="center_vertical"
+        android:paddingStart="16dp"
         android:text="@string/preview_1"
         android:textColor="@color/widget_text"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:drawablePadding="10dp"
-        android:drawableStart="@drawable/ic_check_off"
+        android:layout_height="40dp"
+        android:drawablePadding="12dp"
+        android:drawableStart="@drawable/ic_ring"
         android:drawableTint="@color/widget_sub"
         android:gravity="center_vertical"
+        android:paddingStart="16dp"
         android:text="@string/preview_2"
         android:textColor="@color/widget_text"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 </LinearLayout>

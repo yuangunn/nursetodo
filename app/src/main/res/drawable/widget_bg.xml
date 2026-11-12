@@ -1,4 +1,5 @@
+<!-- 홈 위젯 바탕: 칸 색 단색(라이트 #F2F2F7 · 다크 #1C1C1E), 흐림·그림자·그라데이션 없음 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/widget_bg" />
-    <corners android:radius="20dp" />
+    <corners android:radius="24dp" />
 </shape>

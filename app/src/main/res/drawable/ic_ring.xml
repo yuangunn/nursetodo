@@ -1,0 +1,6 @@
+<!-- 위젯 할 일 줄 동그라미 20(테두리 2) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="20" android:viewportHeight="20">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2"
+        android:pathData="M10,1A9,9 0,1 1,10 19A9,9 0,1 1,10 1Z" />
+</vector>

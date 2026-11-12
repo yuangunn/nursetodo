@@ -1,48 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 홈 위젯 4×2: 머리 줄(위 8 · 왼쪽 16 · 오른쪽 12, 오늘 17/24 600, 날짜·개수 13/18), + 버튼 48(보이는 원 40),
+     할 일 줄 40(동그라미 20, 사이 12, 15sp 한 줄 말줄임). 목록은 위젯 안 세로 스크롤 하나. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
-    android:orientation="vertical"
-    android:padding="14dp">
+    android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp">
 
-        <TextView
+        <LinearLayout
             android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/widget_text"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/progress"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
             android:layout_weight="1"
-            android:textColor="@color/widget_sub"
-            android:textSize="13sp" />
+            android:orientation="vertical">
 
-        <ImageView
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:baselineAligned="true"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/widget_today"
+                    android:textColor="@color/widget_text"
+                    android:textSize="17sp" />
+
+                <TextView
+                    android:id="@+id/date"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="@color/widget_sub"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/widget_sub"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <FrameLayout
             android:id="@+id/add"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:contentDescription="@string/add"
-            android:padding="4dp"
-            android:src="@drawable/ic_add" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/add">
+
+            <ImageView
+                android:id="@+id/add_dot"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_dot" />
+
+            <ImageView
+                android:id="@+id/add_icon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_add" />
+        </FrameLayout>
     </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="6dp">
+        android:layout_weight="1">
 
         <ListView
             android:id="@+id/list"
@@ -50,14 +91,29 @@
             android:layout_height="match_parent"
             android:divider="@null" />
 
-        <TextView
+        <LinearLayout
             android:id="@+id/empty"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:text="@string/lock_empty"
-            android:textColor="@color/widget_sub"
-            android:textSize="13sp" />
+            android:orientation="vertical"
+            android:paddingBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/widget_empty"
+                android:textColor="@color/widget_text"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/widget_empty_hint"
+                android:textColor="@color/widget_sub"
+                android:textSize="13sp" />
+        </LinearLayout>
     </FrameLayout>
 
     <!-- 위젯을 세로로 키웠을 때만 보입니다 (TaskWidgetProvider) -->
@@ -65,12 +121,13 @@
         android:id="@+id/calc"
         android:layout_width="match_parent"
         android:layout_height="40dp"
-        android:layout_marginTop="6dp"
+        android:layout_marginHorizontal="12dp"
+        android:layout_marginBottom="12dp"
         android:background="@drawable/widget_button_bg"
         android:gravity="center"
         android:text="@string/widget_calc"
         android:textColor="@color/accent"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:textStyle="bold"
         android:visibility="gone" />
 </LinearLayout>
