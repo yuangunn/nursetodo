@@ -51,12 +51,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.NurseTodoApp
 import com.yuangunn.nursetodo.data.Task
+import com.yuangunn.nursetodo.data.PresetShare
 import com.yuangunn.nursetodo.data.TaskStore
+import android.widget.Toast
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     /** 위젯 등 바깥에서 열어 달라고 한 탭. 보여 준 뒤 -1 로 돌립니다. */
     private val requestedTab = mutableIntStateOf(-1)
+
+    /** 다른 앱에서 공유하기로 보낸 글(교대 프리셋이면 가져오기 창). */
+    private val sharedText = mutableStateOf<String?>(null)
+
+    private fun takeShared(intent: Intent) {
+        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            sharedText.value = intent.getStringExtra(Intent.EXTRA_TEXT)
+        }
+    }
 
     private val askNotifications =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -74,6 +85,7 @@ class MainActivity : ComponentActivity() {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
+        takeShared(intent)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             // 앱 테마를 시스템과 다르게 고르면 상태바·내비게이션 바 글씨 색도 앱 테마에 맞춥니다.
@@ -85,6 +97,20 @@ class MainActivity : ComponentActivity() {
             }
             NurseTodoTheme(settings) {
                 if (settings.onboarded) Root(requestedTab.intValue) { requestedTab.intValue = -1 } else Onboarding()
+                sharedText.value?.let { text ->
+                    val got = remember(text) { PresetShare.parse(text) }
+                    if (got == null) {
+                        LaunchedEffect(text) {
+                            Toast.makeText(this@MainActivity, "받은 글에서 교대 프리셋을 찾지 못했어요", Toast.LENGTH_SHORT).show()
+                            sharedText.value = null
+                        }
+                    } else {
+                        PresetImportDialog(got) { msg ->
+                            sharedText.value = null
+                            msg?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }
             }
         }
     }
@@ -92,6 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
+        takeShared(intent)
     }
 
     companion object {

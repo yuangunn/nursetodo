@@ -78,6 +78,7 @@ import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Preset
 import com.yuangunn.nursetodo.data.Settings
+import com.yuangunn.nursetodo.data.PresetShare
 import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.currentShift
@@ -360,6 +361,22 @@ private fun PresetSettings(s: Settings) {
         ) { editing = p }
     }
     AddRow("프리셋 추가") { editing = Preset(System.currentTimeMillis(), "", null, emptyList()) }
+    // 다른 사람과 주고받기: 글로 보내고(카톡·게시판에 붙여도 읽힘), 복사한 글이나 공유하기로 받은 글을 읽어 옴
+    val context = LocalContext.current
+    var importing by remember { mutableStateOf<List<Preset>?>(null) }
+    var sharing by remember { mutableStateOf(false) }
+    SetRow("다른 사람과 공유하기", "프리셋을 글로 보내요. 팀즈 채널·단톡방에 올려도 읽혀요.", onClick = { sharing = true })
+    SetRow("붙여넣어 가져오기", "복사한 프리셋 글을 읽어 와요.", onClick = {
+        val got = PresetShare.parse(clipboardText(context))
+        if (got == null) Toast.makeText(context, "복사한 글에서 교대 프리셋을 찾지 못했어요", Toast.LENGTH_SHORT).show() else importing = got
+    })
+    if (sharing) PresetShareDialog(s.presets) { sharing = false }
+    importing?.let { list ->
+        PresetImportDialog(list) { msg ->
+            importing = null
+            msg?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+        }
+    }
     editing?.let { p -> PresetEditor(p, s, onDone = { editing = it }) }
 }
 
