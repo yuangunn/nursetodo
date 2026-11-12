@@ -66,7 +66,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 33 &&
+        // 처음 안내 중이면 알림 허용은 안내의 권한 단계에서 차례대로 받습니다.
+        if (Build.VERSION.SDK_INT >= 33 && TaskStore.settings.value.onboarded &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -82,7 +83,9 @@ class MainActivity : ComponentActivity() {
                 val style = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
                 enableEdgeToEdge(style, style)
             }
-            NurseTodoTheme(settings) { Root(requestedTab.intValue) { requestedTab.intValue = -1 } }
+            NurseTodoTheme(settings) {
+                if (settings.onboarded) Root(requestedTab.intValue) { requestedTab.intValue = -1 } else Onboarding()
+            }
         }
     }
 

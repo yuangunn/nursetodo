@@ -28,6 +28,15 @@ class StoreJsonTest {
     }
 
     @Test
+    fun onboardingOnlyForNewInstalls() = with(TaskStore) {
+        // 새로 깔면(저장 파일 없음) 처음 안내, 2.1.0 전부터 쓰던 저장 파일(값 없음)은 건너뜀, 저장한 값은 그대로
+        assertEquals(false, Settings().onboarded)
+        assertEquals(true, JSONObject("{}").toSettings().onboarded)
+        assertEquals(false, Settings(onboarded = false).toJson().toSettings().onboarded)
+        assertEquals(true, Settings(onboarded = true).toJson().toSettings().onboarded)
+    }
+
+    @Test
     fun notiAppsRoundTrip() = with(TaskStore) {
         val s = Settings(notiApps = setOf("com.microsoft.teams", "com.samsung.android.messaging"))
         assertEquals(s.notiApps, s.toJson().toSettings().notiApps)

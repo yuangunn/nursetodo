@@ -78,7 +78,7 @@ fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
                                     )
                                 }
                                 Text(
-                                    "${tasks.size}개 중 ${done}개 끝냄",
+                                    "${tasks.size}개 중 ${done}개 완료",
                                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

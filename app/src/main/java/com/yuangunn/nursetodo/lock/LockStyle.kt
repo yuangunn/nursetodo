@@ -6,7 +6,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -56,6 +58,9 @@ internal object Lk {
     val Toast = Color(0xE02C2C2E)
     val Control = Color(0x24FFFFFF)
     val Selected = Color(0x33FFFFFF)
+
+    /** 할 일 페이지 오른쪽 알림 세로 줄 바탕: 카드(검정 72%) 위에서 할 일 줄과 구분되게 */
+    val Rail = Color(0x2EFFFFFF)
     val Divider = Color(0x1FFFFFFF)
     val DividerSoft = Color(0x14FFFFFF)
     val Cover = Color.Black.copy(alpha = 0.72f)
@@ -105,7 +110,9 @@ internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp): Modifier = 
 
 /**
  * 누르면 0.96배로 줄었다 돌아오는 버튼 바탕. [color] 를 [shape] 로 칠하고, [label] 은 화면 낭독기 이름.
+ * [onLongClick] 이 있으면 길게 누르기도 받습니다(바로가기 편집).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun Press(
     onClick: () -> Unit,
@@ -115,6 +122,8 @@ internal fun Press(
     enabled: Boolean = true,
     border: BorderStroke? = null,
     contentAlignment: Alignment = Alignment.Center,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -129,7 +138,21 @@ internal fun Press(
             .clip(shape)
             .background(color, shape)
             .then(if (border != null) Modifier.border(border, shape) else Modifier)
-            .clickable(source, ripple(color = Color.White), enabled = enabled, role = Role.Button, onClick = onClick),
+            .then(
+                if (onLongClick == null) {
+                    Modifier.clickable(source, ripple(color = Color.White), enabled = enabled, role = Role.Button, onClick = onClick)
+                } else {
+                    Modifier.combinedClickable(
+                        interactionSource = source,
+                        indication = ripple(color = Color.White),
+                        enabled = enabled,
+                        role = Role.Button,
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                }
+            ),
         contentAlignment = contentAlignment,
         content = content,
     )

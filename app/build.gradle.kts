@@ -13,8 +13,8 @@ android {
         applicationId = "com.yuangunn.nursetodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "2.0.0"
+        versionCode = 19
+        versionName = "2.1.0"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
@@ -76,4 +76,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core-ktx:1.6.1")
+    // 화면 조작 시험(길게 눌러 끌기 등)을 Robolectric 에서
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

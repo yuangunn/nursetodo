@@ -146,6 +146,8 @@ data class Settings(
     val rateLimit: Int = 1000,
     /** 키워드 알림을 볼 앱(패키지 이름). 처음엔 삼성 메시지·구글 메시지·팀즈. 비우면 울리지 않음. */
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
+    /** 첫 실행 안내를 끝냈거나 건너뜀. 새로 깔면 false, 2.1.0 전부터 쓰던 설치(저장 파일에 이 값이 없음)는 true. */
+    val onboarded: Boolean = false,
 )
 
 /** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */

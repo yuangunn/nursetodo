@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.lock
 
+import com.yuangunn.nursetodo.data.Day
+import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Task
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -31,6 +33,31 @@ class LockLogicTest {
         // 다 지나면 모두 미체크, 시각 없는 줄은 그대로
         val late = dutyStates(rows, ms(5, 0, plusDays = 1))
         assertEquals(listOf(Duty.DONE, Duty.MISSED, Duty.MISSED, Duty.MISSED, Duty.REST), rows.map { late[it.id] })
+    }
+
+    @Test
+    fun doneSectionInOrderOfFinishing() {
+        val today = 20_000L
+        val tasks = listOf(
+            Task(1, "늦게 끝냄", 0, doneOn = today, doneAt = 3_000),
+            Task(2, "먼저 끝냄", 0, doneOn = today, doneAt = 1_000),
+            Task(3, "아직", 0),
+            Task(4, "방금 끝냄(토스트 중)", 0, doneOn = today, doneAt = 5_000),
+            Task(5, "근무 할 일", 0, doneOn = today, doneAt = 2_000, shift = 9),
+        )
+        // 끝낸 순서대로, 되돌리기 토스트가 떠 있는 것은 아직 제자리
+        assertEquals(listOf(2L, 5L, 1L), doneToday(tasks, today, recent = setOf(4L)).map { it.id })
+        // 교대 프리셋이면 근무 할 일은 근무 페이지에만
+        assertEquals(listOf(2L, 1L), doneToday(tasks, today, recent = setOf(4L), preset = true).map { it.id })
+    }
+
+    @Test
+    fun rowTimeIsShortClock() {
+        fun ms(d: Int, h: Int, m: Int) = LocalDateTime.of(2026, 11, d, h, m).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val today = Day.of(ms(12, 12, 0))
+        assertEquals("09:05", Fmt.clock(ms(12, 9, 5), today))
+        assertEquals("어제", Fmt.clock(ms(11, 23, 59), today))
+        assertEquals("11/10", Fmt.clock(ms(10, 8, 0), today))
     }
 
     @Test

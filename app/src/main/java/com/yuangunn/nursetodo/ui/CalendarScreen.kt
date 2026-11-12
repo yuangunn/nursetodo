@@ -86,7 +86,7 @@ fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
                             Text(
                                 when {
                                     tasks.isEmpty() -> ""
-                                    selected == today -> "${tasks.size}개 중 ${done}개 끝냄"
+                                    selected == today -> "${tasks.size}개 중 ${done}개 완료"
                                     else -> "할 일 ${tasks.size}개"
                                 },
                                 style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),

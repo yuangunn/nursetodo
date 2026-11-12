@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -49,6 +50,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -56,10 +58,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -73,6 +78,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,9 +108,14 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuangunn.nursetodo.data.Alarm
 import com.yuangunn.nursetodo.data.Day
+import com.yuangunn.nursetodo.data.DutyHead
+import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Pocket
 import com.yuangunn.nursetodo.data.PocketKind
 import com.yuangunn.nursetodo.data.PocketNode
@@ -114,20 +125,17 @@ import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.doneCount
 import com.yuangunn.nursetodo.data.due
-import com.yuangunn.nursetodo.data.DutyHead
 import com.yuangunn.nursetodo.data.dutyHead
 import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.itemMinute
 import com.yuangunn.nursetodo.data.itemText
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.yuangunn.nursetodo.data.shortcutSlots
 import com.yuangunn.nursetodo.ui.MainActivity
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
 import com.yuangunn.nursetodo.ui.lockAccent
+import java.time.LocalDateTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
 
 /**
  * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 배경화면 위 어두운 그라데이션에 위에서 아래로
@@ -193,6 +201,20 @@ class QuickAddActivity : ComponentActivity() {
         handleDuty(intent)
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideNavigationBar()
+    }
+
+    /**
+     * 잠금화면 위에서는 아래 내비게이션 바(제스처 막대·버튼)를 숨겨, 위로 밀어 잠금 해제하려다 홈 제스처를 건드리지 않게 합니다.
+     * 가장자리에서 밀면 잠깐 다시 나타납니다.
+     */
+    private fun hideNavigationBar() = WindowCompat.getInsetsController(window, window.decorView).run {
+        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        hide(WindowInsetsCompat.Type.navigationBars())
+    }
+
     override fun onStop() {
         super.onStop()
         // 다음에 늦게 열릴 때 꺼진 화면을 다시 켜지 않게 되돌립니다.
@@ -247,7 +269,10 @@ private const val PAGE_POCKET = 2
 /** 근무 항목은 시각이 지나고 이만큼 지나도록 안 하면 미체크(빨강). 그 전에는 '다음'처럼 진하게. ponytail: 임시값, 기관 투약 지침으로 확인할 것 */
 internal const val GRACE_MS = 30 * 60_000L
 
-private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF }
+/** 이만큼 위로 밀고 떼면 잠금 해제 */
+private val UNLOCK_DRAG = 120.dp
+
+private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF, SHORTCUTS }
 
 @Composable
 private fun LockPage(
@@ -278,6 +303,8 @@ private fun LockPage(
             .filter { (!preset || it.shift == null) && (!it.isDone(today) || it.id in recent) }
             .sortedBy { it.order }
     }
+    // 오늘 끝낸 할 일: 카드 맨 아래 접힌 '완료' 묶음에 끝낸 순서대로
+    val done = remember(all, today, recent, preset) { doneToday(TaskStore.tasksFor(today, today), today, recent, preset) }
     // 근무: 지금 불러온 교대의 항목 전부(끝낸 것도 체크 시각과 함께).
     val duty = remember(all, settings.presetApplied, preset) {
         if (!preset) emptyList() else dutyOrder(all.filter { it.shift != null && it.shift == settings.presetApplied })
@@ -328,6 +355,13 @@ private fun LockPage(
         }
     }
     var drag by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    // 위로 미는 만큼 화면이 따라 올라가고 흐려집니다. 손을 떼면 제자리로.
+    val lift by animateFloatAsState(
+        if (dragging) drag.coerceAtMost(0f) else 0f,
+        if (dragging) snap() else spring(dampingRatio = 0.8f, stiffness = 400f),
+        label = "lift",
+    )
     // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
     val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
     // '할 일'(직접 적은 일), 교대 프리셋이면 '근무'(프리셋에서 온 일), 포켓북이 있으면 '포켓북'을 좌우로 넘겨 봅니다.
@@ -377,7 +411,7 @@ private fun LockPage(
             recent = recent + t.id
             show(
                 Undo(
-                    "‘${t.title}’ 끝냄", PAGE_TODO, tag = t.id,
+                    "‘${t.title}’ 완료", PAGE_TODO, tag = t.id,
                     onUndo = {
                         TaskStore.toggle(t.id, today)
                         recent = recent - t.id
@@ -436,11 +470,16 @@ private fun LockPage(
             .pointerInput(Unit) {
                 // 위로 밀면 잠금 해제
                 detectVerticalDragGestures(
+                    onDragStart = { dragging = true },
                     onDragEnd = {
-                        if (drag < -120.dp.toPx()) onUnlock()
+                        if (drag < -UNLOCK_DRAG.toPx()) onUnlock()
                         drag = 0f
+                        dragging = false
                     },
-                    onDragCancel = { drag = 0f },
+                    onDragCancel = {
+                        drag = 0f
+                        dragging = false
+                    },
                 ) { _, dy -> drag += dy }
             }
             .systemBarsPadding()
@@ -449,6 +488,10 @@ private fun LockPage(
         Column(
             Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    translationY = lift * 0.5f
+                    alpha = 1f - (-lift / UNLOCK_DRAG.toPx()).coerceIn(0f, 1f) * 0.5f
+                }
                 .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -522,7 +565,7 @@ private fun LockPage(
                             show(Undo("체크 ${old.size}개 지움", PAGE_POCKET, onUndo = { TaskStore.setPocketChecks(p.id, old) }))
                         }
                         else -> TodoPage(
-                            todo, today, recent, listState, editingId, { editingId = it }, onOpenApp, toggleTodo,
+                            todo, done, today, listState, editingId, { editingId = it }, onOpenApp, toggleTodo,
                             notis = notis,
                             rail = NotiListener.available(context),
                             onRail = { panel = Panel.NOTIS },
@@ -539,6 +582,9 @@ private fun LockPage(
                 }
                 Reveal(panel == Panel.ALARMS && alarms.isNotEmpty(), enter = enter, exit = exit) {
                     AlarmPanel(alarms, onOff = offAlarm, onClose = closePanel)
+                }
+                Reveal(panel == Panel.SHORTCUTS, enter = enter, exit = exit) {
+                    ShortcutPanel(settings, onClose = closePanel)
                 }
                 Reveal(panel == Panel.HANDOFF && handoff != null && page == PAGE_DUTY, enter = enter, exit = exit) {
                     handoff?.let { h ->
@@ -608,7 +654,7 @@ private fun LockPage(
                     )
                 }
                 if (!typing) {
-                    if (shortcuts.isNotEmpty()) ShortcutGrid(shortcuts, settings.shortcutStyle, onShortcut)
+                    if (shortcuts.isNotEmpty()) ShortcutGrid(shortcuts, settings.shortcutStyle, onShortcut, onEdit = { panel = Panel.SHORTCUTS })
                     UnlockHint(locked, onUnlock)
                 }
             }
@@ -616,12 +662,15 @@ private fun LockPage(
     }
 }
 
-/** 할 일 페이지: 동그라미 · 글자, 오른쪽에 알림 세로 줄(알림판). 아이콘은 카드 아래쪽에 모아 위쪽 할 일 줄에 붙어 읽히지 않게 합니다. */
+/**
+ * 할 일 페이지: 동그라미 · 글자 · 오른쪽 만든 시각, 맨 아래 접힌 '완료' 묶음(끝낸 순서, 끝낸 시각).
+ * 알림이 있으면 오른쪽 아래에 알림 세로 줄(알림판) — 그 폭만큼 줄을 비워 글자와 겹치지 않게 하고, 빈 안내는 카드 전체의 가운데.
+ */
 @Composable
 private fun TodoPage(
     list: List<Task>,
+    done: List<Task>,
     today: Long,
-    recent: Set<Long>,
     state: LazyListState,
     editingId: Long?,
     onEditing: (Long?) -> Unit,
@@ -634,53 +683,124 @@ private fun TodoPage(
     onAdd: () -> Unit,
     dutyPage: Boolean,
 ) {
-    Row(Modifier.fillMaxSize()) {
-        if (list.isEmpty()) {
-            EmptyState(
-                Icons.Default.CheckCircle,
-                "할 일이 없어요",
-                if (dutyPage) "아래 할 일 추가로 적거나, 근무로 넘겨 교대 할 일을 보세요." else "아래 할 일 추가로 적어요.",
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-            )
-        } else {
-            LazyColumn(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .fadeEdges(),
-                state = state,
-                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
-            ) {
-                items(list, key = { it.id }) { t ->
-                    Box(Modifier.animateItem()) {
-                        TodoRow(
-                            t, on = t.isDone(today),
-                            editing = t.id == editingId,
-                            onEditing = { on -> onEditing(if (on) t.id else null) },
-                            onOpenApp = onOpenApp,
-                            onToggle = { onToggle(t) },
-                        )
+    val showRail = rail && notis.isNotEmpty()
+    // 알림 줄 44 + 사이 12
+    val side = if (showRail) 56.dp else 0.dp
+    var doneOpen by rememberSaveable { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier
+                .fillMaxSize()
+                .fadeEdges(),
+            state = state,
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+        ) {
+            if (list.isEmpty()) {
+                item(key = "empty") {
+                    EmptyState(
+                        Icons.Default.CheckCircle,
+                        if (done.isEmpty()) "할 일이 없어요" else "오늘 할 일을 다 끝냈어요",
+                        when {
+                            done.isNotEmpty() -> "끝낸 일은 아래 완료에 있어요."
+                            dutyPage -> "아래 할 일 추가로 적거나, 근무로 넘겨 교대 할 일을 보세요."
+                            else -> "아래 할 일 추가로 적어요."
+                        },
+                        Modifier
+                            .fillParentMaxHeight(if (done.isEmpty()) 1f else 0.8f)
+                            .fillMaxWidth()
+                            .padding(horizontal = side),
+                    )
+                }
+            }
+            items(list, key = { it.id }) { t ->
+                Box(Modifier.animateItem().padding(end = side)) {
+                    TodoRow(
+                        t, on = t.isDone(today), today = today,
+                        editing = t.id == editingId,
+                        onEditing = { on -> onEditing(if (on) t.id else null) },
+                        onOpenApp = onOpenApp,
+                        onToggle = { onToggle(t) },
+                    )
+                }
+            }
+            if (done.isNotEmpty()) {
+                item(key = "done") {
+                    DoneHeader(done.size, doneOpen, Modifier.animateItem().padding(end = side)) { doneOpen = !doneOpen }
+                }
+                if (doneOpen) {
+                    items(done, key = { "d" + it.id }) { t ->
+                        Box(Modifier.animateItem().padding(end = side)) { DoneRow(t, today) { onToggle(t) } }
                     }
                 }
             }
         }
         if (addInCard) {
-            Box(Modifier.fillMaxHeight().padding(bottom = 8.dp), contentAlignment = Alignment.BottomEnd) { MemoButton(onAdd) }
+            Box(Modifier.align(Alignment.BottomEnd).padding(end = side, bottom = 8.dp)) { MemoButton(onAdd) }
         }
-        // 알림이 없어도 44 자리를 비워 두어 글자 줄바꿈이 바뀌지 않게 (알림판만)
-        if (rail) {
-            Box(
-                Modifier
-                    .width(44.dp)
-                    .fillMaxHeight()
-                    .padding(bottom = 52.dp),
-                contentAlignment = Alignment.BottomCenter,
-            ) { if (notis.isNotEmpty()) NotiRail(notis, onRail) }
-            Spacer(Modifier.width(12.dp))
-        }
+        if (showRail) NotiRail(notis, onRail, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 52.dp))
     }
+}
+
+/** 오늘 끝낸 할 일(교대 프리셋이면 직접 적은 것만), 끝낸 순서대로. 방금 체크해 되돌리기 토스트가 떠 있는 것은 아직 제자리에 둡니다. */
+internal fun doneToday(tasks: List<Task>, today: Long, recent: Set<Long> = emptySet(), preset: Boolean = false): List<Task> =
+    tasks.filter { (!preset || it.shift == null) && it.isDone(today) && it.id !in recent }
+        .sortedBy { it.doneAtOn(today) ?: 0L }
+
+/** '완료 3' 접기·펼치기 줄. */
+@Composable
+private fun DoneHeader(count: Int, open: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "완료 ${count}개"
+                stateDescription = if (open) "펼침" else "접힘"
+            }
+            .heightIn(min = 40.dp)
+            .padding(start = 14.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("완료 $count", style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Body, modifier = Modifier.weight(1f))
+        Icon(
+            if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = Lk.Muted,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/** 완료 묶음의 한 줄: 채운 동그라미(누르면 다시 할 일로) · 흐린 취소선 글자 · 오른쪽 끝낸 시각. */
+@Composable
+private fun DoneRow(task: Task, today: Long, onToggle: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .padding(start = 6.dp, end = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        CheckCircle(true, Lk.Body, "체크 풀기: " + task.title, onClick = onToggle)
+        Text(
+            task.title,
+            style = Lk.Body15,
+            color = Lk.Muted,
+            textDecoration = TextDecoration.LineThrough,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 2.dp, top = 10.dp, bottom = 10.dp),
+        )
+        task.doneAtOn(today)?.let { RowTime(Fmt.clock(it, today)) }
+    }
+}
+
+/** 줄 오른쪽 작은 시각(13/18, 흐리게), 첫 줄 글자에 맞춰. */
+@Composable
+private fun RowTime(text: String) {
+    Text(text, style = Lk.Caption.merge(Tnum), color = Lk.Muted, modifier = Modifier.padding(start = 8.dp, top = 11.dp))
 }
 
 /** 카드 안 '할 일 추가' 버튼(설정에서 '카드 안'): 강조색 동그라미. */
@@ -700,7 +820,7 @@ private fun MemoButton(onClick: () -> Unit) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TodoRow(task: Task, on: Boolean, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit, onToggle: () -> Unit) {
+private fun TodoRow(task: Task, on: Boolean, today: Long, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit, onToggle: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Row(
         Modifier
@@ -709,7 +829,7 @@ private fun TodoRow(task: Task, on: Boolean, editing: Boolean, onEditing: (Boole
             .padding(start = 6.dp, end = 8.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        CheckCircle(on, Lk.Body, (if (on) "체크 풀기: " else "끝냄: ") + task.title, onClick = {
+        CheckCircle(on, Lk.Body, (if (on) "체크 풀기: " else "완료: ") + task.title, onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onToggle()
         }, enabled = !editing)
@@ -736,6 +856,8 @@ private fun TodoRow(task: Task, on: Boolean, editing: Boolean, onEditing: (Boole
                     )
                     .padding(top = 10.dp, bottom = 10.dp),
             )
+            // 만든 시각(오늘이면 시:분, 어제, 그 전은 월/일)
+            RowTime(Fmt.clock(task.createdAt, today))
         }
     }
 }
@@ -904,7 +1026,7 @@ private fun DutyRow(
             CheckCircle(
                 on,
                 if (st == Duty.MISSED) Lk.Missed else Lk.Body,
-                (if (on) "체크 풀기: " else "끝냄: ") + listOf(time, text).filter { it.isNotEmpty() }.joinToString(" ") +
+                (if (on) "체크 풀기: " else "완료: ") + listOf(time, text).filter { it.isNotEmpty() }.joinToString(" ") +
                     (if (subs.isNotEmpty()) ", 하위 항목 ${subs.size}개 모두" else "") +
                     when (st) {
                         Duty.MISSED -> ", 미체크"
@@ -978,7 +1100,7 @@ private fun DutyRow(
                 Box(Modifier.padding(start = 8.dp)) {
                     ChevronChip(
                         "${task.subsDone.size}/${subs.size}", subsOpen,
-                        "$text 하위 항목 ${subs.size}개 중 ${task.subsDone.size}개 끝냄, ${if (subsOpen) "접기" else "펼치기"}",
+                        "$text 하위 항목 ${subs.size}개 중 ${task.subsDone.size}개 완료, ${if (subsOpen) "접기" else "펼치기"}",
                         onSubs,
                     )
                 }
@@ -989,7 +1111,7 @@ private fun DutyRow(
                 val sOn = i in task.subsDone
                 // 하위 줄은 근무 내용 칸에 맞춰(동그라미 104), 시각·체크 시각은 따로 두지 않습니다.
                 Row(Modifier.fillMaxWidth().padding(start = 94.dp, end = 16.dp), verticalAlignment = Alignment.Top) {
-                    CheckCircle(sOn, Lk.Body, (if (sOn) "체크 풀기: " else "끝냄: ") + "$sub ($time $text)".replace("( ", "("), onClick = {
+                    CheckCircle(sOn, Lk.Body, (if (sOn) "체크 풀기: " else "완료: ") + "$sub ($time $text)".replace("( ", "("), onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         TaskStore.toggleSub(task.id, i, task.doneOn ?: today)
                     })
@@ -1238,7 +1360,7 @@ private fun PocketPage(pockets: List<Pocket>, onClear: (Pocket) -> Unit) {
                     }
                 }
                 line.kind == PocketKind.ITEM -> Row(Modifier.fillMaxWidth().padding(start = (line.left - 10).dp, end = 16.dp), verticalAlignment = Alignment.Top) {
-                    CheckCircle(line.done, Lk.Body, (if (line.done) "체크 풀기: " else "끝냄: ") + line.text, onClick = {
+                    CheckCircle(line.done, Lk.Body, (if (line.done) "체크 풀기: " else "완료: ") + line.text, onClick = {
                         TaskStore.togglePocketCheck(line.pocket.id, line.path)
                     })
                     Text(

@@ -4,6 +4,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.Drawable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -38,7 +42,23 @@ object Shortcuts {
 
     /** 앱 아이콘. 계산기·알람·할 일 추가거나 지워진 앱이면 null. */
     fun icon(context: Context, s: Shortcut): ImageBitmap? = component(s)?.let { c ->
-        runCatching { context.packageManager.getActivityIcon(c).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+        runCatching { iconBitmap(context.packageManager.getActivityIcon(c), 96).asImageBitmap() }.getOrNull()
+    }
+
+    /**
+     * 앱 아이콘을 [px] 정사각형으로. 적응형 아이콘은 바탕·앞 그림을 가득 채워 그려서 화면에서 둥글게 잘라도 모서리가 비지 않습니다
+     * (층은 108 중 가운데 72가 보이는 부분이라 1.5배로 그림). 옛 아이콘은 그대로.
+     */
+    fun iconBitmap(d: Drawable, px: Int): Bitmap {
+        if (d !is AdaptiveIconDrawable) return d.toBitmap(px, px)
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val inset = px / 4
+        listOfNotNull(d.background, d.foreground).forEach {
+            it.setBounds(-inset, -inset, px + inset, px + inset)
+            it.draw(canvas)
+        }
+        return bmp
     }
 
     fun launchIntent(s: Shortcut): Intent? = component(s)?.let {

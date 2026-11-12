@@ -401,6 +401,7 @@ object TaskStore {
         put("theme", theme)
         put("rateLimit", rateLimit)
         put("keywordApps", JSONArray(keywordApps.sorted()))
+        put("onboarded", onboarded)
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -464,6 +465,8 @@ object TaskStore {
             theme = optInt("theme", d.theme).coerceIn(0, 2),
             rateLimit = optInt("rateLimit", d.rateLimit).coerceIn(1, 99_999),
             keywordApps = optJSONArray("keywordApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.keywordApps,
+            // 2.1.0 전 저장 파일엔 없음 = 이미 쓰던 사람이라 안내를 건너뜀
+            onboarded = optBoolean("onboarded", true),
         )
     }
 }

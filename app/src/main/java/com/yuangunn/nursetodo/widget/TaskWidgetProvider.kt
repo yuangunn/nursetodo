@@ -69,7 +69,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
-                setTextViewText(R.id.progress, if (all.isEmpty()) "" else "${all.size}개 중 ${all.count { it.isDone(today) }}개 끝냄")
+                setTextViewText(R.id.progress, if (all.isEmpty()) "" else "${all.size}개 중 ${all.count { it.isDone(today) }}개 완료")
                 setViewVisibility(R.id.progress, if (all.isEmpty()) View.GONE else View.VISIBLE)
                 setInt(R.id.add_dot, "setColorFilter", accent)
                 setInt(R.id.add_icon, "setColorFilter", if (night && i == 0) 0xFF001B3D.toInt() else if (night) 0xFF0A0A0A.toInt() else 0xFFFFFFFF.toInt())

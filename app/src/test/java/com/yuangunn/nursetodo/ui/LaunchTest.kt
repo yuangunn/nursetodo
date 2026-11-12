@@ -30,7 +30,16 @@ class LaunchTest {
     }
 
     @Test
+    fun onboardingLaunches() {
+        // 새로 깐 상태: 처음 안내가 뜸
+        TaskStore.updateSettings { it.copy(onboarded = false) }
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        shot(controller.get().window.decorView, "onboarding")
+    }
+
+    @Test
     fun mainActivityLaunches() {
+        TaskStore.updateSettings { it.copy(onboarded = true) }
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         TaskStore.add("보고서 제출")
         TaskStore.add("팀 회의 자료 정리")

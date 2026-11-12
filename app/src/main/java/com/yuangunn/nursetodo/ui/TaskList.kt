@@ -186,7 +186,7 @@ fun TaskList(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        "끝낸 할 일 ${done.size}",
+                        "완료 ${done.size}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -252,7 +252,7 @@ fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
                 .padding(start = 4.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AppCheck(done, (if (done) "체크 풀기: " else "끝냄: ") + task.title) {
+            AppCheck(done, (if (done) "체크 풀기: " else "완료: ") + task.title) {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 TaskStore.toggle(task.id, day)
             }
@@ -272,8 +272,7 @@ fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
                 val sub = when {
                     done -> listOfNotNull(
                         ("↻ " + Fmt.repeat(task.repeatMask)).takeIf { task.isRoutine },
-                        task.doneAtOn(day)?.let { "끝냄 " + Fmt.stamp(it, today) },
-                        "만듦 " + Fmt.stamp(task.createdAt, today),
+                        task.doneAtOn(day)?.let { Fmt.stamp(it, today) + " 완료" },
                     ).joinToString(" · ")
                     task.isRoutine -> "↻ " + Fmt.repeat(task.repeatMask)
                     task.date != null && task.date < today && !done -> "${Fmt.relative(task.date, today)}부터 밀림"
