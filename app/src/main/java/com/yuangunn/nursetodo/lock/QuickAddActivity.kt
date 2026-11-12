@@ -112,14 +112,15 @@ import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
-import com.yuangunn.nursetodo.data.currentShift
 import com.yuangunn.nursetodo.data.doneCount
 import com.yuangunn.nursetodo.data.due
-import com.yuangunn.nursetodo.data.dutyTarget
+import com.yuangunn.nursetodo.data.DutyHead
+import com.yuangunn.nursetodo.data.dutyHead
 import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.itemMinute
 import com.yuangunn.nursetodo.data.itemText
-import com.yuangunn.nursetodo.data.keywordList
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.yuangunn.nursetodo.data.shortcutSlots
 import com.yuangunn.nursetodo.ui.MainActivity
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
@@ -246,7 +247,7 @@ private const val PAGE_POCKET = 2
 /** 근무 항목은 시각이 지나고 이만큼 지나도록 안 하면 미체크(빨강). 그 전에는 '다음'처럼 진하게. ponytail: 임시값, 기관 투약 지침으로 확인할 것 */
 internal const val GRACE_MS = 30 * 60_000L
 
-private enum class Panel { NONE, NOTIS, ALARMS }
+private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF }
 
 @Composable
 private fun LockPage(
@@ -277,9 +278,9 @@ private fun LockPage(
             .filter { (!preset || it.shift == null) && (!it.isDone(today) || it.id in recent) }
             .sortedBy { it.order }
     }
-    // 근무: 지금 불러온 교대의 항목 전부(끝낸 것도 체크 시각과 함께). 자정을 넘는 근무(Night 23:00~)도 시각 순서로, 시각 없는 항목은 맨 아래.
+    // 근무: 지금 불러온 교대의 항목 전부(끝낸 것도 체크 시각과 함께).
     val duty = remember(all, settings.presetApplied, preset) {
-        if (!preset) emptyList() else all.filter { it.shift != null && it.shift == settings.presetApplied }.sortedWith(compareBy({ it.due ?: Long.MAX_VALUE }, { it.order }))
+        if (!preset) emptyList() else dutyOrder(all.filter { it.shift != null && it.shift == settings.presetApplied })
     }
     val listState = rememberLazyListState()
     val dutyListState = rememberLazyListState()
@@ -390,6 +391,42 @@ private fun LockPage(
             )
         }
     }
+    // 교대 받기: 앞 근무에 못 끝낸 항목이 있으면 카드 자리에서 가져올지 고르고, 받으면 10초 되돌리기
+    val head = remember(settings, now) { settings.dutyHead(LocalDateTime.now()) }
+    var handoff by remember { mutableStateOf<DutyHead?>(null) }
+    val pendingDuty = duty.filter { it.doneOn == null }
+    val take: (DutyHead, Boolean) -> Unit = { h, carry ->
+        val switching = h.shift != settings.presetApplied
+        val n = if (switching) pendingDuty.size else 0
+        val snap = TaskStore.snapshot()
+        val (cleared, unmuted) = TaskStore.receive(h.target, h.shift, carry)
+        panel = Panel.NONE
+        handoff = null
+        val verb = if (h.stale != null) "시작했어요" else "받았어요"
+        show(
+            Undo(
+                when {
+                    !switching -> "${h.target.name} 근무를 $verb"
+                    n == 0 -> "${h.target.name} 할 일로 바뀌었어요"
+                    carry -> "미체크 ${n}개를 가져왔어요"
+                    else -> "미체크 ${n}개를 지웠어요"
+                },
+                PAGE_DUTY,
+                sub = listOfNotNull(if (cleared > 0) "포켓북 체크 ${cleared}개 지움" else null, if (unmuted) "루틴 알림 켬" else null).joinToString(" · "),
+                ms = 10_000,
+                onUndo = { TaskStore.restore(snap) },
+            ),
+        )
+        scope.launch { dutyListState.scrollToItem(0) }
+    }
+    val receive: (DutyHead) -> Unit = { h ->
+        if (h.shift != settings.presetApplied && pendingDuty.isNotEmpty()) {
+            handoff = h
+            panel = Panel.HANDOFF
+        } else {
+            take(h, false)
+        }
+    }
     val offAlarm: (Alarm) -> Unit = { a ->
         Alarms.cancel(context, a.id)
         if (alarms.size <= 1 && panel == Panel.ALARMS) panel = Panel.NONE
@@ -482,7 +519,7 @@ private fun LockPage(
                     verticalAlignment = Alignment.Top,
                 ) { i ->
                     when (pages[i]) {
-                        PAGE_DUTY -> DutyPage(duty, settings, now, dutyListState, editingId, { editingId = it }, onOpenApp)
+                        PAGE_DUTY -> DutyPage(duty, head, settings, now, dutyListState, editingId, { editingId = it }, onOpenApp, receive)
                         PAGE_POCKET -> PocketPage(pockets) { p ->
                             val old = p.checks
                             TaskStore.clearPocketChecks(p.id)
@@ -506,6 +543,14 @@ private fun LockPage(
                 }
                 Reveal(panel == Panel.ALARMS && alarms.isNotEmpty(), enter = enter, exit = exit) {
                     AlarmPanel(alarms, onOff = offAlarm, onClose = closePanel)
+                }
+                Reveal(panel == Panel.HANDOFF && handoff != null && page == PAGE_DUTY, enter = enter, exit = exit) {
+                    handoff?.let { h ->
+                        HandoffPanel(h, pendingDuty, onCarry = { take(h, true) }, onDrop = { take(h, false) }, onCancel = {
+                            closePanel()
+                            handoff = null
+                        })
+                    }
                 }
                 // 토스트는 그 페이지에서만 보입니다.
                 val visible = toast?.takeIf { it.page == null || it.page == page }
@@ -743,8 +788,8 @@ private fun RenameField(task: Task, onDone: () -> Unit, modifier: Modifier) {
 internal enum class Duty { MISSED, NEXT, REST, DONE }
 
 /**
- * 시각순 근무 목록의 줄마다 상태: 끝냄, 시각이 지나고 [GRACE_MS] 넘게 안 함 = 미체크, 그 밖의 첫 안 한 시각 항목 = 다음(유예 안의 항목이
- * 여럿이면 가장 빠른 것만), 나머지. 시각 없는 줄은 늘 나머지.
+ * 시각순 근무 목록의 줄마다 상태: 끝냄, 앞 근무에서 가져왔거나 시각이 지나고 [GRACE_MS] 넘게 안 함 = 미체크,
+ * 그 밖의 첫 안 한 시각 항목 = 다음(유예 안의 항목이 여럿이면 가장 빠른 것만), 나머지. 시각 없는 줄은 늘 나머지.
  */
 internal fun dutyStates(list: List<Task>, now: Long): Map<Long, Duty> {
     var next: Long? = null
@@ -752,6 +797,7 @@ internal fun dutyStates(list: List<Task>, now: Long): Map<Long, Duty> {
         val due = t.due
         t.id to when {
             t.doneOn != null -> Duty.DONE
+            t.carried != null -> Duty.MISSED
             due == null -> Duty.REST
             due + GRACE_MS < now -> Duty.MISSED
             next == null -> {
@@ -764,35 +810,70 @@ internal fun dutyStates(list: List<Task>, now: Long): Map<Long, Duty> {
 }
 
 /**
+ * 근무 목록 순서: 앞 근무에서 가져온 것이 맨 위(가져올 때 정한 순서, 새 근무 시각표로 다시 재지 않음),
+ * 그다음 시각순(자정을 넘는 Night 도), 시각 없는 항목은 맨 아래.
+ */
+internal fun dutyOrder(list: List<Task>): List<Task> =
+    list.sortedWith(compareBy({ it.carried == null }, { if (it.carried != null) it.order else it.due ?: Long.MAX_VALUE }, { it.order }))
+
+/** '{이름}로/으로'. 받침(한글)이나 n·m·ng 로 끝나는 영어 이름이면 '으로'. ㄹ 받침은 '로'. */
+internal fun withRo(name: String): String {
+    val c = name.trimEnd().lastOrNull() ?: return name
+    val eu = when (c) {
+        in '가'..'힣' -> ((c - '가') % 28).let { it != 0 && it != 8 }
+        else -> c.lowercaseChar() in "mn" || name.endsWith("ng", ignoreCase = true)
+    }
+    return name + if (eu) "으로" else "로"
+}
+
+/**
  * 근무 페이지: 맨 위 상태(교대 받기 · 근무 중), 아래 시각순 목록. 줄은 동그라미 · 시각 칸 44 · 내용.
  * 시각이 지나고 30분 넘게 안 한 것은 미체크(빨강), 그 밖의 첫 안 한 것은 다음(진하게), 끝낸 것은 체크 시각과 함께 남깁니다.
+ * 앞 근무에서 가져온 항목은 'Evening에서 넘어옴' 아래 맨 위에 둡니다. 하위 항목이 있는 줄은 끝낸 수/전체 칩으로 펼칩니다.
  */
 @Composable
 private fun DutyPage(
     list: List<Task>,
+    head: DutyHead?,
     s: Settings,
     now: Long,
     state: LazyListState,
     editingId: Long?,
     onEditing: (Long?) -> Unit,
     onOpenApp: () -> Unit,
+    onReceive: (DutyHead) -> Unit,
 ) {
     val today = Day.today()
     val states = dutyStates(list, now)
     val missed = states.count { it.value == Duty.MISSED }
     val nextAt = list.firstOrNull { states[it.id] == Duty.NEXT }?.due
+    val pending = list.count { it.doneOn == null }
+    var open by remember { mutableStateOf(setOf<Long>()) }
+    val header = @Composable { DutyHeader(head, s, now, missed, nextAt, pending, onReceive) }
     if (list.isEmpty()) {
         Column(Modifier.fillMaxSize()) {
-            DutyHeader(s, now, missed, nextAt)
+            header()
             EmptyState(Icons.Outlined.DateRange, "이번 근무 할 일이 없어요", "앱 › 설정 › 교대 프리셋에서 적어요.", Modifier.weight(1f).fillMaxWidth())
         }
         return
     }
+    val lastCarried = list.lastOrNull { it.carried != null }?.id
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item(key = "head") { DutyHeader(s, now, missed, nextAt) }
+        item(key = "head") { header() }
         items(list, key = { it.id }) { t ->
-            Box(Modifier.animateItem()) {
-                DutyRow(t, states[t.id] ?: Duty.REST, today, editing = t.id == editingId, onEditing = { on -> onEditing(if (on) t.id else null) }, onOpenApp = onOpenApp)
+            Column(Modifier.animateItem()) {
+                if (t.carried != null && t.id == list.first().id) {
+                    Text("${t.carried}에서 넘어옴", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
+                }
+                DutyRow(
+                    t, states[t.id] ?: Duty.REST, today,
+                    editing = t.id == editingId,
+                    onEditing = { on -> onEditing(if (on) t.id else null) },
+                    onOpenApp = onOpenApp,
+                    subsOpen = t.id in open,
+                    onSubs = { open = if (t.id in open) open - t.id else open + t.id },
+                )
+                if (t.id == lastCarried) Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp).fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
             }
         }
     }
@@ -800,108 +881,149 @@ private fun DutyPage(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DutyRow(task: Task, st: Duty, today: Long, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit) {
+private fun DutyRow(
+    task: Task,
+    st: Duty,
+    today: Long,
+    editing: Boolean,
+    onEditing: (Boolean) -> Unit,
+    onOpenApp: () -> Unit,
+    subsOpen: Boolean,
+    onSubs: () -> Unit,
+) {
     val haptics = LocalHapticFeedback.current
     val time = itemMinute(task.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: ""
     val strong = st == Duty.MISSED || st == Duty.NEXT
     val on = st == Duty.DONE
     val doneAt = task.doneAtOn(task.doneOn ?: today)?.let(::hhmm)
     val text = itemText(task.title)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 6.dp, end = 16.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        CheckCircle(
-            on,
-            if (st == Duty.MISSED) Lk.Missed else Lk.Body,
-            (if (on) "체크 풀기: " else "끝냄: ") + listOf(time, text).filter { it.isNotEmpty() }.joinToString(" ") +
-                when (st) {
-                    Duty.MISSED -> ", 미체크"
-                    Duty.NEXT -> ", 다음"
-                    else -> ""
-                } + (doneAt?.let { ", $it 체크" } ?: ""),
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                TaskStore.toggle(task.id, task.doneOn ?: today)
-            },
-            enabled = !editing,
-        )
-        Column(
+    val subs = task.subs
+    Column {
+        Row(
             Modifier
-                .padding(start = 2.dp, top = 10.dp)
-                .width(44.dp),
+                .fillMaxWidth()
+                .padding(start = 6.dp, end = 16.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Text(
-                time,
-                style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
-                fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
-                color = when (st) {
-                    Duty.MISSED -> Lk.Missed
-                    Duty.NEXT -> Lk.Text
-                    else -> Lk.Muted
+            CheckCircle(
+                on,
+                if (st == Duty.MISSED) Lk.Missed else Lk.Body,
+                (if (on) "체크 풀기: " else "끝냄: ") + listOf(time, text).filter { it.isNotEmpty() }.joinToString(" ") +
+                    (if (subs.isNotEmpty()) ", 하위 항목 ${subs.size}개 모두" else "") +
+                    when (st) {
+                        Duty.MISSED -> ", 미체크"
+                        Duty.NEXT -> ", 다음"
+                        else -> ""
+                    } + (doneAt?.let { ", $it 체크" } ?: ""),
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    TaskStore.toggle(task.id, task.doneOn ?: today)
                 },
+                enabled = !editing,
             )
-            if (strong) {
-                Text(
-                    if (st == Duty.MISSED) "미체크" else "다음",
-                    style = Lk.Caption,
-                    fontWeight = Lk.Strong,
-                    color = if (st == Duty.MISSED) Lk.Missed else Lk.Text,
-                )
-            }
-        }
-        if (editing) {
-            RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f).padding(start = 10.dp))
-        } else {
             Column(
                 Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .combinedClickable(
-                        onClick = onOpenApp,
-                        onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onEditing(true)
-                        },
-                        onLongClickLabel = "이름 고치기",
-                    )
-                    .padding(vertical = 10.dp),
+                    .padding(start = 2.dp, top = 10.dp)
+                    .width(44.dp),
             ) {
                 Text(
-                    text,
-                    style = Lk.Body15,
+                    time,
+                    style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
                     fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
                     color = when (st) {
                         Duty.MISSED -> Lk.Missed
                         Duty.NEXT -> Lk.Text
-                        Duty.DONE -> Lk.Muted
-                        Duty.REST -> Lk.Body
+                        else -> Lk.Muted
                     },
-                    textDecoration = if (on) TextDecoration.LineThrough else null,
                 )
-                if (doneAt != null) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
+                if (strong) {
+                    Text(
+                        if (st == Duty.MISSED) "미체크" else "다음",
+                        style = Lk.Caption,
+                        fontWeight = Lk.Strong,
+                        color = if (st == Duty.MISSED) Lk.Missed else Lk.Text,
+                    )
+                }
+            }
+            if (editing) {
+                RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f).padding(start = 10.dp))
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .combinedClickable(
+                            onClick = onOpenApp,
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onEditing(true)
+                            },
+                            onLongClickLabel = "이름 고치기",
+                        )
+                        .padding(vertical = 10.dp),
+                ) {
+                    Text(
+                        text,
+                        style = Lk.Body15,
+                        fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
+                        color = when (st) {
+                            Duty.MISSED -> Lk.Missed
+                            Duty.NEXT -> Lk.Text
+                            Duty.DONE -> Lk.Muted
+                            Duty.REST -> Lk.Body
+                        },
+                        textDecoration = if (on) TextDecoration.LineThrough else null,
+                    )
+                    if (doneAt != null) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
+                }
+            }
+            if (subs.isNotEmpty() && !editing) {
+                Box(Modifier.padding(start = 8.dp)) {
+                    ChevronChip(
+                        "${task.subsDone.size}/${subs.size}", subsOpen,
+                        "$text 하위 항목 ${subs.size}개 중 ${task.subsDone.size}개 끝냄, ${if (subsOpen) "접기" else "펼치기"}",
+                        onSubs,
+                    )
+                }
+            }
+        }
+        if (subsOpen) {
+            subs.forEachIndexed { i, sub ->
+                val sOn = i in task.subsDone
+                // 하위 줄은 근무 내용 칸에 맞춰(동그라미 104), 시각·체크 시각은 따로 두지 않습니다.
+                Row(Modifier.fillMaxWidth().padding(start = 94.dp, end = 16.dp), verticalAlignment = Alignment.Top) {
+                    CheckCircle(sOn, Lk.Body, (if (sOn) "체크 풀기: " else "끝냄: ") + "$sub ($time $text)".replace("( ", "("), onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        TaskStore.toggleSub(task.id, i, task.doneOn ?: today)
+                    })
+                    Text(
+                        sub,
+                        style = Lk.Body15,
+                        color = if (sOn) Lk.Muted else Lk.Body,
+                        textDecoration = if (sOn) TextDecoration.LineThrough else null,
+                        modifier = Modifier.weight(1f).padding(start = 2.dp, top = 10.dp, bottom = 10.dp),
+                    )
+                }
             }
         }
     }
 }
 
 /**
- * 근무 페이지 맨 위. '근무 교대 받았습니다'를 누르면 이 폰에서 그 교대의 근무 루틴 알림(과 키워드 알림)이 켜집니다.
- * 인계는 교대 전에 받으므로 다음 교대 1시간 전부터는 다음 교대를 받습니다. 받은 뒤엔 '근무 중 · 다음 시각'과 루틴 알림 끄기.
+ * 근무 페이지 맨 위. 교대는 '근무 교대 받았습니다'를 눌러야 바뀝니다(그때 이 폰에서 루틴·키워드 알림이 켜짐).
+ * 교대 1시간 전부터 다음 근무를 받을 수 있고, 시작 시각이 지나도 안 받으면 지난 시간을 진하게, 다음 근무도 끝나도록 안 받으면
+ * 지금 시각에 맞는 근무를 시작할지 묻습니다. 받은 뒤엔 '근무 중 · 다음 시각'과 루틴 알림 끄기·켜기.
  */
 @Composable
-private fun DutyHeader(s: Settings, now: Long, missed: Int, nextAt: Long?) {
-    val keyword = s.keywordList.isNotEmpty()
-    val cur = remember(s.presets, now / 60_000) { s.presets.currentShift(LocalDateTime.now())?.first?.name }
-    val target = if (s.routineAlarm || keyword) remember(s.presets, now / 60_000) { s.presets.dutyTarget(LocalDateTime.now()) } else null
-    val (p, shift) = target ?: (null to 0L)
-    val hasRoutine = p != null && p.items.any { itemMinute(it) != null && it !in p.quiet }
+private fun DutyHeader(head: DutyHead?, s: Settings, now: Long, missed: Int, nextAt: Long?, pending: Int, onReceive: (DutyHead) -> Unit) {
     val bold = androidx.compose.ui.text.SpanStyle(color = Lk.Text, fontWeight = FontWeight.SemiBold)
-    if (p != null && (hasRoutine || keyword) && s.dutyShift != shift) {
-        // 아직 안 받음
+    val divider = @Composable { Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Lk.Divider).heightIn(min = 1.dp, max = 1.dp)) }
+    head ?: return
+    val loaded = head.loaded?.name ?: ""
+    val name = head.target.name
+    if (!head.received) {
+        val switching = head.loaded != null && head.shift != s.presetApplied
         Column {
             Column(
                 Modifier
@@ -911,30 +1033,50 @@ private fun DutyHeader(s: Settings, now: Long, missed: Int, nextAt: Long?) {
             ) {
                 Text(
                     buildAnnotatedString {
-                        if (shift <= now) {
-                            withStyle(bold) { append("${p.name} ${hhmm(shift)} 시작, ${fmtLeft(now - shift)} 지남") }
-                        } else {
-                            append("지금 ")
-                            withStyle(bold) { append(cur ?: "") }
-                            append(" 근무 · ${p.name} ${hhmm(shift)} 시작")
+                        when {
+                            head.stale != null -> {
+                                append("아직 ")
+                                withStyle(bold) { append(loaded) }
+                                append(" 할 일 · ")
+                                withStyle(bold) { append("${head.stale.first}도 ${hhmm(head.stale.second)}에 끝남") }
+                            }
+                            head.late -> withStyle(bold) { append("$name ${hhmm(head.shift)} 시작, ${fmtLeft(now - head.shift)} 지남") }
+                            switching -> {
+                                append("지금 ")
+                                withStyle(bold) { append(loaded) }
+                                append(" 근무 · $name ${hhmm(head.shift)} 시작")
+                            }
+                            else -> {
+                                append("지금 ")
+                                withStyle(bold) { append(name) }
+                                append(" 근무")
+                            }
                         }
                     },
                     style = Lk.Caption,
                     color = Lk.Muted,
                 )
-                PillButton("${p.name} 근무 교대 받았습니다", { TaskStore.setDuty(shift) }, Modifier.fillMaxWidth(), filled = true)
-                Text(
-                    if (keyword) "받으면 이 폰에서 ${p.name} 루틴 알림과 키워드 알림이 울려요." else "받으면 이 폰에서 ${p.name} 루틴 알림이 울려요.",
-                    style = Lk.Caption,
-                    color = Lk.Muted,
-                )
+                if (head.stale != null) Text("지금 시각에 맞는 $name 근무를 시작할까요?", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text)
+                PillButton(if (head.stale != null) "$name 근무 시작" else "$name 근무 교대 받았습니다", { onReceive(head) }, Modifier.fillMaxWidth(), filled = true)
+                Column {
+                    Text(
+                        when {
+                            !switching -> "받으면 이 폰에서 루틴 알림과 키워드 알림이 울려요."
+                            head.stale != null -> "시작하면 $name 할 일로 바뀌어요."
+                            else -> "받으면 $name 할 일로 바뀌어요."
+                        },
+                        style = Lk.Caption,
+                        color = Lk.Muted,
+                    )
+                    if (switching && pending > 0) Text("미체크 ${pending}개는 가져올지 고를 수 있어요.", style = Lk.Caption, color = Lk.Muted)
+                }
             }
-            Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Lk.Divider).heightIn(min = 1.dp, max = 1.dp))
+            divider()
         }
         return
     }
-    // 받았음(또는 알림을 안 쓰는 폰): 상태 줄
-    val armed = p != null && s.dutyShift == shift
+    // 받은 근무 중: 상태 줄
+    val routineOff = s.routineMuted
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Row(
             Modifier
@@ -947,21 +1089,65 @@ private fun DutyHeader(s: Settings, now: Long, missed: Int, nextAt: Long?) {
             Column(Modifier.weight(1f)) {
                 Text(
                     buildAnnotatedString {
-                        withStyle(bold) { append((if (armed) p?.name else cur) ?: "") }
-                        when {
-                            armed && shift > now -> append(" 근무 받음 · ${hhmm(shift)}부터")
-                            armed -> append(" 근무 중 · " + (nextAt?.let { "다음 ${hhmm(it)}" } ?: "남은 알림 없음"))
-                            else -> append(" 근무" + (nextAt?.let { " · 다음 ${hhmm(it)}" } ?: ""))
-                        }
+                        withStyle(bold) { append(name) }
+                        append(" 근무 중 · ")
+                        if (routineOff && s.routineAlarm) withStyle(bold) { append("루틴 알림 꺼짐") } else append(nextAt?.let { "다음 ${hhmm(it)}" } ?: "남은 알림 없음")
                     },
                     style = Lk.Caption,
                     color = Lk.Muted,
                 )
                 if (missed > 0) Text("미체크 $missed", style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Missed)
             }
-            if (armed) SmallButton("루틴 알림 끄기", { TaskStore.setDuty(0) })
+            if (s.routineAlarm) SmallButton(if (routineOff) "켜기" else "루틴 알림 끄기", { TaskStore.muteRoutine(!routineOff) })
         }
-        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Lk.Divider).heightIn(min = 1.dp, max = 1.dp))
+        divider()
+    }
+}
+
+/** 교대 받을 때 앞 근무의 미체크 항목: 카드 자리에 항목, 아래에 가져오기 · 취소 · 지우고 받기(목록만 스크롤). */
+@Composable
+private fun HandoffPanel(head: DutyHead, items: List<Task>, onCarry: () -> Unit, onDrop: () -> Unit, onCancel: () -> Unit) {
+    val name = head.target.name
+    Column(Modifier.fillMaxSize().semantics { contentDescription = "미체크 항목 처리" }) {
+        Column(
+            Modifier
+                .weight(1f)
+                .fadeEdges()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 8.dp),
+        ) {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+                Text("미체크 ${items.size}개가 있어요", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text)
+                Text("가져오면 $name 목록 맨 위에 남아요.", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(top = 4.dp))
+            }
+            Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
+            items.forEach { t ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        itemMinute(t.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: "",
+                        style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
+                        fontWeight = Lk.Strong,
+                        color = Lk.Missed,
+                        modifier = Modifier.width(44.dp),
+                    )
+                    Text(
+                        itemText(t.title) + if (t.subs.isNotEmpty()) " (${t.subsDone.size}/${t.subs.size})" else "",
+                        style = Lk.Body15,
+                        fontWeight = Lk.Strong,
+                        color = Lk.Missed,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.DividerSoft))
+            }
+        }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("${withRo(name)} 가져오기", onCarry, Modifier.fillMaxWidth(), filled = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PillButton("취소", onCancel, Modifier.weight(1f))
+                PillButton(if (head.stale != null) "지우고 시작" else "지우고 받기", onDrop, Modifier.weight(1f))
+            }
+        }
     }
 }
 

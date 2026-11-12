@@ -41,4 +41,22 @@ class LockLogicTest {
         assertEquals(40, KeywordAlert.todoText(hit("가".repeat(60))).length)
         assertEquals("병동", KeywordAlert.todoText(hit("")))
     }
+
+    @Test
+    fun carriedRowsStayOnTopInHandoverOrder() {
+        val shift = LocalDateTime.of(2026, 11, 12, 17, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val rows = listOf(
+            Task(1, "18:00 라운딩", 0, order = 5, shift = shift),
+            Task(2, "16:00 라운딩", 0, order = 1, shift = shift, carried = "Evening"),
+            Task(3, "15:30 수액", 0, order = 0, shift = shift, carried = "Evening"),
+            Task(4, "17:00 인계", 0, order = 4, shift = shift),
+            Task(5, "물품", 0, order = 3, shift = shift),
+        )
+        assertEquals(listOf(3L, 2L, 4L, 1L, 5L), dutyOrder(rows).map { it.id })
+        assertEquals("Night로", withRo("Night"))
+        assertEquals("Evening으로", withRo("Evening"))
+        assertEquals("데이로", withRo("데이"))
+        assertEquals("야간으로", withRo("야간"))
+        assertEquals("오후 근무로", withRo("오후 근무"))
+    }
 }

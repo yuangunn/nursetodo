@@ -15,7 +15,9 @@ import java.time.ZoneId
  * - [doneOn] 은 일반 할 일을 체크한 날(epochDay).
  * - [doneDays] 는 루틴을 체크한 날들. 날마다 따로 기록해서 캘린더에서 지난 날도 맞게 보입니다.
  * - [doneAt] 은 마지막으로 체크한 시각(ms). 앱의 '완료된 할 일'에 보여 줍니다. 1.2 이전에 체크한 것은 없습니다.
- * - [shift] 는 교대 프리셋에서 넣은 할 일이면 그 교대가 시작된 시각(ms). 다음 교대까지 못 끝내면 사라집니다.
+ * - [shift] 는 교대 프리셋에서 넣은 할 일이면 그 교대가 시작된 시각(ms). 교대를 받을 때 못 끝낸 것은 가져오거나 지웁니다.
+ * - [subs] 는 프리셋에서 두 칸 들여 쓴 하위 항목, [subsDone] 은 그중 끝낸 자리. 하위 항목이 있으면 모두 끝냈을 때만 끝낸 것입니다.
+ * - [carried] 는 앞 근무에서 못 끝내 가져온 항목이면 그 근무 이름. 새 근무 시각표와 상관없이 미체크로 보입니다.
  */
 data class Task(
     val id: Long,
@@ -29,6 +31,9 @@ data class Task(
     val doneDays: Set<Long> = emptySet(),
     val doneAt: Long? = null,
     val shift: Long? = null,
+    val subs: List<String> = emptyList(),
+    val subsDone: Set<Int> = emptySet(),
+    val carried: String? = null,
 ) {
     val isRoutine: Boolean get() = repeatMask != 0
 
@@ -40,11 +45,18 @@ data class Task(
 
     fun isDone(day: Long): Boolean = if (isRoutine) day in doneDays else doneOn != null
 
-    /** [day] 에 체크/체크 해제한 결과. */
+    /** [day] 에 체크/체크 해제한 결과. 하위 항목이 있으면 모두 체크하거나 모두 풉니다. */
     fun toggled(day: Long, now: Long = System.currentTimeMillis()): Task = when {
         isRoutine -> if (day in doneDays) copy(doneDays = doneDays - day) else copy(doneDays = doneDays + day, doneAt = now)
-        doneOn != null -> copy(doneOn = null, doneAt = null)
-        else -> copy(doneOn = day, doneAt = now)
+        doneOn != null -> copy(doneOn = null, doneAt = null, subsDone = emptySet())
+        else -> copy(doneOn = day, doneAt = now, subsDone = subs.indices.toSet())
+    }
+
+    /** 하위 항목 [index] 를 체크/해제한 결과. 모두 끝나면 위 항목도 그 시각에 끝냄. */
+    fun toggledSub(index: Int, day: Long, now: Long = System.currentTimeMillis()): Task {
+        val done = if (index in subsDone) subsDone - index else subsDone + index
+        val all = subs.isNotEmpty() && done.size == subs.size
+        return copy(subsDone = done, doneOn = if (all) day else null, doneAt = if (all) now else null)
     }
 
     fun repeatsOn(day: Long): Boolean = repeatMask and weekdayBit(day) != 0
@@ -116,6 +128,8 @@ data class Settings(
     val presetLoaded: Long = 0,
     /** 근무 루틴 알림 전체 켜기. 시각이 붙은 프리셋 항목을 '근무 교대 받았습니다'를 누른 폰에서만 진동·팝업으로 알립니다. */
     val routineAlarm: Boolean = true,
+    /** 받은 근무에서 '루틴 알림 끄기'를 눌렀음. 다음에 교대를 받으면 다시 켜집니다. */
+    val routineMuted: Boolean = false,
     /** '근무 교대 받았습니다'를 누른 교대의 시작 시각(ms). 0 이면 아무 교대도 받지 않음(알림 꺼짐). */
     val dutyShift: Long = 0,
     /** 할 일 화면 페이지: 0 할 일·근무(교대 프리셋)·포켓북을 좌우로 넘겨 보기, 1 할 일만, 2 근무만, 3 포켓북만. */
@@ -196,6 +210,50 @@ fun List<Preset>.dutyTarget(now: LocalDateTime, early: Long = 60 * 60_000L): Pai
     return currentShift(now)
 }
 
+/** 두 칸(또는 탭) 들여 쓴 프리셋 줄: 위 줄의 하위 항목. */
+fun isSubLine(line: String): Boolean = line.startsWith("  ") || line.startsWith("\t")
+
+/** 프리셋 줄을 (항목, 하위 항목들)로 묶습니다. 빈 줄은 빼고, 위에 항목이 없는 하위 줄은 항목으로. */
+fun presetRows(items: List<String>): List<Pair<String, List<String>>> {
+    val rows = mutableListOf<Pair<String, MutableList<String>>>()
+    items.filter { it.isNotBlank() }.forEach { line ->
+        if (isSubLine(line) && rows.isNotEmpty()) rows.last().second += line.trim() else rows += line.trim() to mutableListOf()
+    }
+    return rows
+}
+
+/**
+ * 근무 페이지 맨 위에 보일 것. [loaded] 는 지금 목록의 근무(안 받았으면 앞 근무가 그대로 남음).
+ * [target] 을 [shift] 근무로 받을 차례면 [received] 가 false: 교대 1시간 전부터 다음 근무, 시작 시각이 지나면 [late].
+ * 받은 근무 뒤로 근무 시작 시각이 두 번 지나면(다음 근무도 끝남) 지금 시각에 맞는 근무를 시작할지 묻고([stale] = 끝난 근무 이름과 끝난 시각).
+ */
+data class DutyHead(
+    val loaded: Preset?,
+    val target: Preset,
+    val shift: Long,
+    val received: Boolean,
+    val late: Boolean = false,
+    val stale: Pair<String, Long>? = null,
+)
+
+fun Settings.dutyHead(now: LocalDateTime, early: Long = 60 * 60_000L): DutyHead? {
+    if (!presetMode) return null
+    val nowMs = now.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val loaded = presets.firstOrNull { it.id == presetLoaded } ?: presets.forShift(presetApplied)
+    val current = presets.currentShift(now)
+    if (presetApplied == 0L || loaded == null) return current?.let { (p, at) -> DutyHead(null, p, at, received = false) }
+    val toLocal = { ms: Long -> Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDateTime() }
+    val n1 = presets.nextShift(toLocal(presetApplied)) ?: return DutyHead(loaded, loaded, presetApplied, dutyShift == presetApplied)
+    val n2 = presets.nextShift(toLocal(n1)) ?: n1
+    return when {
+        nowMs >= n2 && current != null && current.second != presetApplied ->
+            DutyHead(loaded, current.first, current.second, received = false, stale = (presets.forShift(n1)?.name ?: "") to n2)
+        nowMs >= n1 - early -> presets.forShift(n1)?.let { DutyHead(loaded, it, n1, received = dutyShift == n1 && presetApplied == n1, late = nowMs >= n1) }
+            ?: DutyHead(loaded, loaded, presetApplied, dutyShift == presetApplied)
+        else -> DutyHead(loaded, loaded, presetApplied, received = dutyShift == presetApplied)
+    }
+}
+
 /** 근무 루틴 알림 하나: 프리셋 [index] 번째 줄 [text] 를 [at](ms)에. */
 data class Reminder(val index: Int, val at: Long, val text: String)
 
@@ -204,10 +262,12 @@ data class Reminder(val index: Int, val at: Long, val text: String)
  * 다음 교대가 시작한 뒤의 시각은 빼서, 교대가 끝나면 이 폰의 알림도 저절로 끝납니다.
  */
 fun Settings.reminders(now: Long): List<Reminder> {
-    if (!presetMode || !routineAlarm || dutyShift == 0L) return emptyList()
+    if (!presetMode || !routineAlarm || routineMuted || dutyShift == 0L) return emptyList()
     val p = presets.forShift(dutyShift) ?: return emptyList()
     val end = dutyEnd()
     return p.items.mapIndexedNotNull { i, line ->
+        // 하위 항목(두 칸 들여 씀)은 시각을 따로 두지 않습니다.
+        if (isSubLine(line)) return@mapIndexedNotNull null
         val m = itemMinute(line) ?: return@mapIndexedNotNull null
         Reminder(i, shiftTime(dutyShift, m), line).takeIf { line !in p.quiet && it.at > now && it.at < end }
     }.sortedBy { it.at }

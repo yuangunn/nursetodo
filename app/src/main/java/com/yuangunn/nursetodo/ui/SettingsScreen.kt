@@ -84,7 +84,9 @@ import com.yuangunn.nursetodo.data.Preset
 import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.parsePocket
 import com.yuangunn.nursetodo.data.splitPockets
+import com.yuangunn.nursetodo.data.isSubLine
 import com.yuangunn.nursetodo.data.itemMinute
+import com.yuangunn.nursetodo.data.presetRows
 import com.yuangunn.nursetodo.data.RowGapRange
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
@@ -307,7 +309,7 @@ private fun PresetSettings(s: Settings) {
             Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "${p.start?.let(::clock) ?: "자동으로 안 불러옴"} · 할 일 ${p.items.size}개",
+                    "${p.start?.let(::clock) ?: "시작 시각 없음"} · 할 일 ${presetRows(p.items).size}개",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -320,12 +322,11 @@ private fun PresetSettings(s: Settings) {
         modifier = Modifier.padding(start = 12.dp),
     ) { Text("+ 프리셋 추가") }
     Hint(
-        "켜면 매일 정한 시각에 할 일 목록이 그 프리셋으로 바뀌어요. 프리셋에서 온 할 일 중 못 끝낸 것은 다음 교대에 사라지고, " +
-            "직접 추가한 할 일은 그대로예요. 할 일 화면은 시계와 바로가기 사이를 할 일이 다 채우고, 개수에 맞춰 글자 크기와 줄 간격이 바뀌어요. " +
-            "다른 앱 알림은 오른쪽에 앱 아이콘으로 보이고, 누르면 내용을 펼쳐요.\n" +
-            "할 일 앞에 '07:00 정규 라운딩'처럼 시각을 쓰면 근무 루틴 알림이 돼요. 할 일 화면의 근무 페이지에서 '근무 교대 받았습니다'를 " +
-            "누른 폰에서만 그 시각에 소리 없이 진동과 팝업으로 알리고(꺼진 화면은 잠깐 켜짐), 놓친 항목은 빨갛게 보여요. " +
-            "다음 교대가 되면 저절로 꺼지고, 다음 교대 1시간 전부터는 다음 교대를 받을 수 있어요.",
+        "잠금화면에서 교대를 받으면 근무 할 일로 바뀌어요. 이때 못 끝낸 할 일은 가져올지 고르고, 포켓북 체크는 지우고, " +
+            "꺼 둔 루틴 알림은 다시 켜요. 다음 근무 시작 1시간 전부터 받을 수 있고, 직접 추가한 할 일은 그대로예요.\n" +
+            "할 일 앞에 '07:00 정규 라운딩'처럼 시각을 쓰면 근무 루틴 알림이 돼요. 교대를 받은 폰에서만 그 시각에 소리 없이 진동과 " +
+            "팝업으로 알리고(꺼진 화면은 잠깐 켜짐), 시각이 지나고 30분 넘게 안 한 항목은 미체크로 빨갛게 보여요. " +
+            "두 칸 들여 쓴 줄은 위 줄의 하위 항목이에요.",
     )
     editing?.let { p -> PresetEditor(p, s, onDone = { editing = it }) }
 }
@@ -338,7 +339,8 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
     var start by remember(p.id) { mutableStateOf(p.start) }
     var items by remember(p.id) { mutableStateOf(p.items.joinToString("\n")) }
     var quiet by remember(p.id) { mutableStateOf(p.quiet) }
-    val lines = items.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    // 두 칸 들여 쓴 줄(하위 항목)은 들여쓰기를 남깁니다.
+    val lines = items.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
     var deleting by remember(p.id) { mutableStateOf(false) }
     val isNew = s.presets.none { it.id == p.id }
     val edited = { Preset(p.id, name.trim().ifEmpty { "프리셋" }, start, lines, quiet.filter { it in lines }.toSet()) }
@@ -356,19 +358,19 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("매일 불러올 시각", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text("근무 시작 시각", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
                         val t = start ?: (7 * 60)
                         TimePickerDialog(context, { _, h, m -> start = h * 60 + m }, t / 60, t % 60, true).apply {
-                            setButton(DialogInterface.BUTTON_NEUTRAL, "안 불러옴") { _, _ -> start = null }
+                            setButton(DialogInterface.BUTTON_NEUTRAL, "없음") { _, _ -> start = null }
                         }.show()
-                    }) { Text(start?.let(::clock) ?: "안 불러옴") }
+                    }) { Text(start?.let(::clock) ?: "없음") }
                 }
                 OutlinedTextField(
                     value = items,
                     onValueChange = { items = it },
                     label = { Text("할 일 (한 줄에 하나)") },
-                    supportingText = { Text("07:00 처럼 시각을 앞에 쓰면 그 시각에 근무 루틴 알림") },
+                    supportingText = { Text("07:00 처럼 시각을 앞에 쓰면 그 시각에 근무 루틴 알림. 두 칸 들여 쓰면 위 줄의 하위 항목") },
                     minLines = 6,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -377,7 +379,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     items = (lines + Preset.DayExample).joinToString("\n")
                 }) { Text("예시 불러오기 (Day)") }
                 // 시각 붙은 줄마다 근무 루틴 알림을 따로 끄고 켭니다.
-                val timed = lines.filter { itemMinute(it) != null }
+                val timed = lines.filter { !isSubLine(it) && itemMinute(it) != null }
                 if (timed.isNotEmpty()) {
                     Text("근무 루틴 알림", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
                     timed.forEach { line ->
@@ -411,7 +413,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                         }) { Text(if (deleting) "정말 삭제" else "삭제", color = MaterialTheme.colorScheme.error) }
                     }
                     if (s.presetMode) {
-                        // 시각과 상관없이 지금 이 프리셋으로 바꿉니다. 다음 교대 시각엔 그 시각 프리셋으로 다시 바뀝니다.
+                        // 시각과 상관없이 지금 목록을 이 프리셋으로 바꿉니다(교대 받기와 달리 알림은 그대로).
                         TextButton(onClick = {
                             val list = withEdits()
                             TaskStore.savePresets(list)

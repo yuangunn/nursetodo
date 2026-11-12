@@ -76,6 +76,11 @@ object TaskStore {
         commit(_tasks.value.map { if (it.id == id) it.toggled(day) else it })
     }
 
+    /** 하위 항목 하나 체크/해제. 모두 끝나면 위 항목도 끝냄. */
+    fun toggleSub(id: Long, index: Int, day: Long = Day.today()) {
+        commit(_tasks.value.map { if (it.id == id) it.toggledSub(index, day) else it })
+    }
+
     fun update(task: Task) {
         commit(_tasks.value.map { if (it.id == task.id) task else it })
     }
@@ -108,33 +113,74 @@ object TaskStore {
     }
 
     /**
-     * 교대 프리셋 불러오기: 프리셋에서 넣었다가 못 끝낸 할 일은 지우고 [preset] 항목을 맨 위에 새로 넣습니다.
-     * 이번 교대([shift])에 이미 끝낸 항목은 다시 넣지 않습니다. 직접 추가한 할 일은 그대로 둡니다.
+     * 교대 프리셋 불러오기: 프리셋에서 넣었다가 못 끝낸 할 일은 지우고 [preset] 항목을 맨 위에 새로 넣습니다(두 칸 들여 쓴 줄은 하위 항목).
+     * 이번 교대([shift])에 이미 끝낸 항목과 이번 교대로 가져온 항목은 그대로 둡니다. 직접 추가한 할 일도 그대로.
      */
     fun loadPreset(preset: Preset, shift: Long) {
-        val kept = _tasks.value.filterNot { it.shift != null && it.doneOn == null }
+        val kept = _tasks.value.filterNot { it.shift != null && it.doneOn == null && !(it.carried != null && it.shift == shift) }
         val done = kept.filter { it.shift == shift }.map { it.title }.toSet()
-        val titles = preset.items.map { it.trim() }.filter { it.isNotEmpty() && it !in done }
-        val top = (kept.minOfOrNull { it.order } ?: 0) - titles.size
+        val rows = presetRows(preset.items).filter { it.first !in done }
+        val top = (kept.minOfOrNull { it.order } ?: 0) - rows.size
         val firstId = System.currentTimeMillis().coerceAtLeast((_tasks.value.maxOfOrNull { it.id } ?: 0) + 1)
         val today = Day.today()
-        val added = titles.mapIndexed { i, t -> Task(id = firstId + i, title = t, createdDay = today, order = top + i, shift = shift) }
+        val added = rows.mapIndexed { i, (t, subs) -> Task(id = firstId + i, title = t, createdDay = today, order = top + i, shift = shift, subs = subs) }
         _settings.value = _settings.value.copy(presetApplied = shift, presetLoaded = preset.id)
         commit(kept + added)
     }
 
     /**
-     * 교대 프리셋을 켜 두었고 교대가 바뀌었으면 새 교대의 프리셋을 불러옵니다. 화면이 켜질 때·앱을 열 때·교대 시각 알람에서 부릅니다.
-     * 공용폰을 다음 근무자가 받으므로 포켓북 체크도 새로 시작합니다.
+     * 교대는 잠금화면에서 '근무 교대 받았습니다'를 눌러야 바뀝니다([receive]). 여기서는 교대 프리셋을 켰는데 아직 아무 근무도
+     * 불러오지 않았을 때만 지금 시각의 근무를 불러옵니다. 화면이 켜질 때·앱을 열 때 부릅니다.
      */
     fun refreshPreset(now: LocalDateTime = LocalDateTime.now()) {
         val s = _settings.value
-        if (!s.presetMode) return
+        if (!s.presetMode || s.presetApplied != 0L) return
         val (preset, shift) = s.presets.currentShift(now) ?: return
+        loadPreset(preset, shift)
+    }
+
+    /** 교대 받기 전의 할 일·설정·포켓북(10초 되돌리기용). */
+    class Snapshot internal constructor(internal val tasks: List<Task>, internal val settings: Settings, internal val pockets: List<Pocket>)
+
+    fun snapshot() = Snapshot(_tasks.value, _settings.value, _pockets.value)
+
+    fun restore(snap: Snapshot) {
+        _tasks.value = snap.tasks
+        _pockets.value = snap.pockets
+        _settings.value = snap.settings
+        save()
+        onChanged?.invoke()
+    }
+
+    /**
+     * '근무 교대 받았습니다'(또는 지금 시각의 근무 시작): [preset] 을 [shift] 근무로 불러오고 이 폰에서 그 근무의 루틴·키워드 알림을 켭니다.
+     * 지금 목록과 다른 근무면 앞 근무에서 못 끝낸 항목은 [carry] 면 새 목록 맨 위로 가져오고(하위 체크 그대로), 아니면 지웁니다.
+     * 공용폰을 다음 근무자가 받으므로 포켓북 체크를 지우고, 꺼 둔 루틴 알림을 다시 켭니다. 지운 포켓북 체크 수와 루틴 알림을 다시 켰는지.
+     */
+    fun receive(preset: Preset, shift: Long, carry: Boolean): Pair<Int, Boolean> {
+        val s = _settings.value
         if (shift != s.presetApplied) {
-            _pockets.value = _pockets.value.map { it.copy(checks = emptySet()) }
-            loadPreset(preset, shift)
+            val from = s.presets.firstOrNull { it.id == s.presetLoaded }?.name ?: s.presets.forShift(s.presetApplied)?.name ?: ""
+            val pending = _tasks.value.filter { it.shift != null && it.shift == s.presetApplied && it.doneOn == null }
+            val kept = _tasks.value.filterNot { it.shift != null && it.doneOn == null }
+            val rows = presetRows(preset.items)
+            val carried = if (carry) pending.sortedWith(compareBy({ it.carried == null }, { it.due ?: Long.MAX_VALUE }, { it.order })) else emptyList()
+            val top = (kept.minOfOrNull { it.order } ?: 0) - rows.size - carried.size
+            val firstId = System.currentTimeMillis().coerceAtLeast((_tasks.value.maxOfOrNull { it.id } ?: 0) + 1)
+            val today = Day.today()
+            val moved = carried.mapIndexed { i, t -> t.copy(shift = shift, carried = from, order = top + i) }
+            val added = rows.mapIndexed { i, (t, subs) ->
+                Task(id = firstId + i, title = t, createdDay = today, order = top + carried.size + i, shift = shift, subs = subs)
+            }
+            _tasks.value = kept + moved + added
         }
+        val cleared = _pockets.value.sumOf { it.checks.size }
+        if (cleared > 0) _pockets.value = _pockets.value.map { it.copy(checks = emptySet()) }
+        val unmuted = s.routineMuted
+        _settings.value = s.copy(presetApplied = shift, presetLoaded = preset.id, dutyShift = shift, routineMuted = false)
+        save()
+        onChanged?.invoke()
+        return cleared to unmuted
     }
 
     /** 붙여넣은 글로 포켓북을 만듭니다(여러 개면 여러 개). 만든 수. */
@@ -178,20 +224,17 @@ object TaskStore {
         if (on) refreshPreset() else commit(_tasks.value.filterNot { it.shift != null && it.doneOn == null })
     }
 
-    /** 프리셋 목록 저장. 시각을 바꿔 교대가 달라졌거나 지금 불러와 둔 프리셋([changed])을 고쳤으면 바로 다시 불러옵니다. */
+    /** 프리셋 목록 저장. 지금 불러와 둔 프리셋([changed])을 고쳤으면 그 근무로 다시 불러옵니다(끝낸 것·가져온 것은 그대로). */
     fun savePresets(list: List<Preset>, changed: Long? = null, now: LocalDateTime = LocalDateTime.now()) {
         updateSettings { it.copy(presets = list) }
         val s = _settings.value
         if (!s.presetMode) return
-        val (scheduled, shift) = list.currentShift(now) ?: return
-        when {
-            shift != s.presetApplied -> loadPreset(scheduled, shift)
-            changed == s.presetLoaded -> list.firstOrNull { it.id == changed }?.let { loadPreset(it, shift) }
-        }
+        if (s.presetApplied == 0L) return refreshPreset(now)
+        if (changed == s.presetLoaded) list.firstOrNull { it.id == changed }?.let { loadPreset(it, s.presetApplied) }
     }
 
-    /** '근무 교대 받았습니다': 이 폰에서 [shift] 교대의 근무 루틴 알림을 켭니다. 0 이면 끕니다. */
-    fun setDuty(shift: Long) = updateSettings { it.copy(dutyShift = shift) }
+    /** 받은 근무의 루틴 알림 끄기·켜기. 다음에 교대를 받으면 다시 켜집니다. */
+    fun muteRoutine(muted: Boolean) = updateSettings { it.copy(routineMuted = muted) }
 
     /** [at](ms)에 울릴 알람. '몇 분 뒤'도 '몇 시에'도 시각으로 받습니다. */
     fun addAlarm(at: Long, label: String): Alarm {
@@ -277,6 +320,9 @@ object TaskStore {
         if (doneDays.isNotEmpty()) put("doneDays", JSONArray(doneDays.sorted()))
         doneAt?.let { put("doneAt", it) }
         shift?.let { put("shift", it) }
+        if (subs.isNotEmpty()) put("subs", JSONArray(subs))
+        if (subsDone.isNotEmpty()) put("subsDone", JSONArray(subsDone.sorted()))
+        carried?.let { put("carried", it) }
     }
 
     internal fun JSONObject.toTask(): Task {
@@ -295,6 +341,9 @@ object TaskStore {
             doneDays = doneDays ?: if (repeat != 0 && doneOn != null) setOf(doneOn) else emptySet(),
             doneAt = if (has("doneAt")) getLong("doneAt") else null,
             shift = if (has("shift")) getLong("shift") else null,
+            subs = optJSONArray("subs")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+            subsDone = optJSONArray("subsDone")?.let { a -> (0 until a.length()).map { a.getInt(it) }.toSet() } ?: emptySet(),
+            carried = if (has("carried")) getString("carried") else null,
         )
     }
 
@@ -336,6 +385,7 @@ object TaskStore {
         put("presetApplied", presetApplied)
         put("presetLoaded", presetLoaded)
         put("routineAlarm", routineAlarm)
+        put("routineMuted", routineMuted)
         put("dutyShift", dutyShift)
         put("lockPages", lockPages)
         put("keywords", keywords)
@@ -393,6 +443,7 @@ object TaskStore {
             presetApplied = optLong("presetApplied", d.presetApplied),
             presetLoaded = optLong("presetLoaded", d.presetLoaded),
             routineAlarm = optBoolean("routineAlarm", d.routineAlarm),
+            routineMuted = optBoolean("routineMuted", d.routineMuted),
             dutyShift = optLong("dutyShift", d.dutyShift),
             lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 3),
             keywords = optString("keywords", d.keywords),
