@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,9 +15,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -27,6 +33,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -68,6 +75,13 @@ class MainActivity : ComponentActivity() {
         requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
+            // 앱 테마를 시스템과 다르게 고르면 상태바·내비게이션 바 글씨 색도 앱 테마에 맞춥니다.
+            val dark = settings.isDark()
+            LaunchedEffect(dark) {
+                val t = android.graphics.Color.TRANSPARENT
+                val style = if (dark) SystemBarStyle.dark(t) else SystemBarStyle.light(t, t)
+                enableEdgeToEdge(style, style)
+            }
             NurseTodoTheme(settings) { Root(requestedTab.intValue) { requestedTab.intValue = -1 } }
         }
     }
@@ -80,9 +94,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_TAB = "tab"
 
-        fun calcIntent(context: Context): Intent = tabIntent(context, 2)
+        // 탭: 0 오늘, 1 포켓북, 2 캘린더, 3 계산기, 4 설정
+        fun calcIntent(context: Context): Intent = tabIntent(context, 3)
 
-        fun calendarIntent(context: Context): Intent = tabIntent(context, 1)
+        fun calendarIntent(context: Context): Intent = tabIntent(context, 2)
+
+        fun settingsIntent(context: Context): Intent = tabIntent(context, 4)
 
         private fun tabIntent(context: Context, tab: Int) = Intent(context, MainActivity::class.java)
             .putExtra(EXTRA_TAB, tab)
@@ -119,21 +136,35 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
         }
     }
 
+    // 전체 화면 편집기(프리셋 고치기, 포켓북 붙여넣기)는 아래 탭 위에 덮어 그립니다.
+    val overlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
+    CompositionLocalProvider(LocalOverlay provides overlay) {
+    Box {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar {
+            // 아래 탭 5칸: 표시 56×32 primaryContainer, 아이콘 22, 이름 13/18
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 listOf(
-                    Triple("오늘", rememberVectorPainter(Icons.Default.Home), 0),
-                    Triple("캘린더", rememberVectorPainter(Icons.Default.DateRange), 1),
-                    Triple("계산기", painterResource(R.drawable.ic_calc), 2), // 기본 아이콘 묶음에 계산기가 없음
-                    Triple("설정", rememberVectorPainter(Icons.Default.Settings), 3),
+                    Triple("오늘", rememberVectorPainter(Icons.Outlined.Home), 0),
+                    Triple("포켓북", painterResource(R.drawable.ic_memo), 1),
+                    Triple("캘린더", rememberVectorPainter(Icons.Outlined.DateRange), 2),
+                    Triple("계산기", painterResource(R.drawable.ic_calc), 3), // 기본 아이콘 묶음에 계산기가 없음
+                    Triple("설정", rememberVectorPainter(Icons.Outlined.Settings), 4),
                 ).forEach { (label, icon, index) ->
+                    val on = tab == index
                     NavigationBarItem(
-                        selected = tab == index,
+                        selected = on,
                         onClick = { tab = index },
-                        icon = { Icon(icon, label) },
-                        label = { Text(label) },
+                        icon = { Icon(icon, null, modifier = Modifier.size(22.dp)) },
+                        label = { Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) },
+                        colors = NavigationBarItemDefaults.colors(
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -143,12 +174,17 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
             tabState.SaveableStateProvider(tab) {
                 when (tab) {
                     0 -> TodayScreen(onEdit = { editing = it }, onDelete = delete)
-                    1 -> CalendarScreen(onEdit = { editing = it }, onDelete = delete)
-                    2 -> CalcScreen()
+                    1 -> PocketScreen()
+                    2 -> CalendarScreen(onEdit = { editing = it }, onDelete = delete)
+                    3 -> CalcScreen()
                     else -> SettingsScreen()
                 }
             }
         }
+    }
+
+    overlay.value?.invoke()
+    }
     }
 
     editing?.let { task -> TaskEditSheet(task, onDismiss = { editing = null }, onDelete = delete) }

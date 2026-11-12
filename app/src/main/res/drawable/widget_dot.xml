@@ -1,0 +1,4 @@
+<!-- 위젯 + 버튼의 원(40). 색은 고른 강조색으로 칠합니다(TaskWidgetProvider). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="#FFFFFFFF" />
+</shape>

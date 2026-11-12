@@ -71,4 +71,16 @@ class InfusionTest {
         assertEquals("12.5", Infusion.num(12.5))
         assertEquals("1.67", Infusion.num(100 / 60.0))
     }
+
+    @Test
+    fun hoursAndMinutesFields() {
+        // 1시간 30분을 그대로: 370 cc ÷ 1.5 h
+        val r = Infusion.calc("100", "250", "20", "1", "30") as Infusion.Rate
+        assertEquals("246.7", r.ccPerHr.toPlainString())
+        // 한 칸만 적어도 됨, 둘 다 비면 아직 안 적은 것
+        assertEquals("370.0", (Infusion.calc("100", "250", "20", "1", "") as Infusion.Rate).ccPerHr.toPlainString())
+        assertEquals("740.0", (Infusion.calc("100", "250", "20", "", "30") as Infusion.Rate).ccPerHr.toPlainString())
+        assertEquals(Infusion.Invalid("투여시간을 입력하세요"), Infusion.calc("100", "250", "20", "", ""))
+        assertEquals(Infusion.Invalid("투여시간(분): 숫자만 입력하세요"), Infusion.calc("100", "250", "20", "1", "3o"))
+    }
 }

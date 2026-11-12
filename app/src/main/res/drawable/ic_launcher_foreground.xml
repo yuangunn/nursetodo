@@ -1,7 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp 캔버스: 고리 중심 (54,54) 선 중심 반지름 21, 선 6 → 바깥 지름 48(선은 지름의 1/8), 체크도 선 6, 끝·꺾임 둥글게.
+     배경은 남색 #003876, 단색(테마 아이콘)은 이 모양의 알파만 씁니다. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M54,30a24,24 0,1 0,0.01 0zM54,35a19,19 0,1 1,-0.01 0z" />
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M48.5,62.5L40.5,54.5l3.5,-3.5 4.5,4.5 15.5,-15.5 3.5,3.5z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="6"
+        android:pathData="M54,33A21,21 0,1 1,54 75A21,21 0,1 1,54 33Z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="6"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M44.75,54.5L50.75,60.5L63.25,48" />
 </vector>

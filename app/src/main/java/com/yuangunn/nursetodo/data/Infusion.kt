@@ -44,6 +44,16 @@ object Infusion {
         return Rate(total, hours, rate)
     }
 
+    /**
+     * 투여시간을 시간·분 두 칸으로 받는 판: 1시간 30분을 그대로 넣고, 빈 칸은 0으로 봅니다(둘 다 비면 아직 안 적은 것).
+     */
+    fun calc(base: String, chemo: String, priming: String, hours: String, minutes: String, includePriming: Boolean = true): Result {
+        if (hours.isBlank() && minutes.isBlank()) return calc(base, chemo, priming, "", false, includePriming)
+        val h = if (hours.isBlank()) 0.0 else parse(hours) ?: return Invalid("투여시간(시간): 숫자만 입력하세요")
+        val m = if (minutes.isBlank()) 0.0 else parse(minutes) ?: return Invalid("투여시간(분): 숫자만 입력하세요")
+        return calc(base, chemo, priming, num(h * 60 + m), false, includePriming)
+    }
+
     /** 0 이상의 숫자만 받습니다. "1,000" 같은 쉼표는 소수점으로 오해할 수 있어서 받지 않습니다. */
     private fun parse(text: String): Double? =
         text.trim().takeIf { it.matches(Regex("""\d+(\.\d+)?|\.\d+""")) }?.toDoubleOrNull()

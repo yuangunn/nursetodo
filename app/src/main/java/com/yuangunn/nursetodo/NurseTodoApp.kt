@@ -3,6 +3,7 @@ package com.yuangunn.nursetodo
 import android.app.Application
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.lock.Alarms
+import com.yuangunn.nursetodo.lock.KeywordAlert
 import com.yuangunn.nursetodo.lock.LockCard
 import com.yuangunn.nursetodo.lock.LockPageService
 import com.yuangunn.nursetodo.lock.Routine
@@ -15,6 +16,7 @@ class NurseTodoApp : Application() {
         LockCard.createChannel(this)
         Alarms.createChannel(this)
         Routine.createChannel(this)
+        KeywordAlert.createChannel(this)
         TaskStore.onChanged = { refreshSurfaces() }
         refreshSurfaces()
     }

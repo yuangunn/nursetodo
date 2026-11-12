@@ -59,12 +59,17 @@ object Routine {
     /** 시각이 됐을 때: 이미 끝낸 항목이면 넘어가고, 아니면 진동·팝업, 화면이 꺼져 있으면 잠깐 켭니다. */
     internal fun fire(context: Context, shift: Long, index: Int) {
         val s = TaskStore.settings.value
-        if (!s.presetMode || !s.routineAlarm || s.dutyShift != shift) return
+        if (!s.presetMode || !s.routineAlarm || s.routineMuted || s.dutyShift != shift) return
         val text = s.presets.forShift(shift)?.items?.getOrNull(index) ?: return
         if (TaskStore.tasks.value.any { it.shift == shift && it.title == text && it.doneOn != null }) return
         // 같은 이름 포켓북('정규 라운딩')의 체크를 새로 시작합니다.
         TaskStore.restartPocketsFor(text)
         notify(context, shift, index, text)
+        wake(context)
+    }
+
+    /** 화면이 꺼져 있으면 잠깐 켜서 할 일 화면의 근무 페이지를 보여 줍니다. 알람이 울리거나 통화 중이면 그대로. 키워드 알림도 씁니다. */
+    internal fun wake(context: Context) {
         val screenOn = context.getSystemService(PowerManager::class.java).isInteractive
         if (!screenOn && Settings.canDrawOverlays(context) && !Alarms.ringing() && !LockPageService.inCall(context)) {
             try {

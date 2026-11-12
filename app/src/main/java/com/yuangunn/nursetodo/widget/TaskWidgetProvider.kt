@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.toArgb
@@ -16,10 +15,11 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.TaskStore
-import com.yuangunn.nursetodo.data.cardTextSp
 import com.yuangunn.nursetodo.lock.LockActionReceiver
 import com.yuangunn.nursetodo.lock.LockCard
-import com.yuangunn.nursetodo.ui.Accents
+import android.content.res.Configuration
+import com.yuangunn.nursetodo.ui.AccentDark
+import com.yuangunn.nursetodo.ui.AccentLight
 import com.yuangunn.nursetodo.ui.MainActivity
 
 /** 홈 화면 위젯 — 오늘 할 일 목록, 탭하면 바로 체크. */
@@ -52,15 +52,15 @@ class TaskWidgetProvider : AppWidgetProvider() {
             val today = Day.today()
             val settings = TaskStore.settings.value
             val all = TaskStore.tasksFor(today, today)
-            val accent = Accents[settings.accent.coerceIn(Accents.indices)].toArgb()
-            val sp = settings.cardTextSp()
+            // + 원은 고른 강조색(다크 바탕이면 밝은 값), 글씨 크기는 시안 그대로(17 · 13 · 15)
+            val night = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            val i = settings.accent.coerceIn(AccentLight.indices)
+            val accent = (if (night) AccentDark[i] else AccentLight[i]).toArgb()
             val height = AppWidgetManager.getInstance(context).getAppWidgetOptions(widgetId)
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
 
             return RemoteViews(context.packageName, R.layout.widget_tasks).apply {
-                setTextViewText(R.id.title, Fmt.date(today))
-                setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, sp - 1)
-                setTextViewTextSize(R.id.progress, TypedValue.COMPLEX_UNIT_SP, sp - 3)
+                setTextViewText(R.id.date, Fmt.date(today))
                 setViewVisibility(R.id.calc, if (height >= CALC_MIN_HEIGHT_DP) View.VISIBLE else View.GONE)
                 setOnClickPendingIntent(
                     R.id.calc,
@@ -69,8 +69,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
-                setTextViewText(R.id.progress, if (all.isEmpty()) "" else "${all.count { it.isDone(today) }}/${all.size}")
-                setInt(R.id.add, "setColorFilter", accent)
+                setTextViewText(R.id.progress, if (all.isEmpty()) "" else "${all.size}개 중 ${all.count { it.isDone(today) }}개 끝냄")
+                setViewVisibility(R.id.progress, if (all.isEmpty()) View.GONE else View.VISIBLE)
+                setInt(R.id.add_dot, "setColorFilter", accent)
+                setInt(R.id.add_icon, "setColorFilter", if (night && i == 0) 0xFF001B3D.toInt() else if (night) 0xFF0A0A0A.toInt() else 0xFFFFFFFF.toInt())
                 setOnClickPendingIntent(R.id.add, LockCard.addIntent(context))
                 setOnClickPendingIntent(
                     R.id.title,

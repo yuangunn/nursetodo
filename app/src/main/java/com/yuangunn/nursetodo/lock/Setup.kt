@@ -103,11 +103,11 @@ object Setup {
         context.getSystemService(NotificationManager::class.java)
             .getNotificationChannel(LockCard.PAGE_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE
 
-    fun openPageChannelSettings(context: Context) = open(
+    fun openChannelSettings(context: Context, channel: String = LockCard.PAGE_CHANNEL_ID) = open(
         context,
         Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            .putExtra(Settings.EXTRA_CHANNEL_ID, LockCard.PAGE_CHANNEL_ID),
+            .putExtra(Settings.EXTRA_CHANNEL_ID, channel),
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
     )
