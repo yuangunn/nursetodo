@@ -120,7 +120,20 @@ data class Settings(
     val dutyShift: Long = 0,
     /** 할 일 화면 페이지: 0 할 일·근무(교대 프리셋)·포켓북을 좌우로 넘겨 보기, 1 할 일만, 2 근무만, 3 포켓북만. */
     val lockPages: Int = 0,
+    /** 키워드 알림(알림판): 쉼표로 나눈 낱말. [keywordApps] 의 새 알림에 들어 있으면 진동·팝업으로 알립니다. 비우면 꺼짐. */
+    val keywords: String = "",
+    /** 키워드 알림을 볼 앱(패키지 이름). 처음엔 삼성 메시지·구글 메시지·팀즈. 비우면 울리지 않음. */
+    val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
 )
+
+/** [Settings.keywords] 를 쉼표로 나눈 목록. */
+val Settings.keywordList: List<String> get() = keywords.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+/** [text] 에 들어 있는 첫 키워드. 띄어쓰기는 빼고 대소문자 없이 비교합니다('배정 되었습니다'도 '배정되었습니다'로). */
+fun keywordHit(keywords: List<String>, text: String): String? {
+    val squeezed = text.filterNot(Char::isWhitespace)
+    return keywords.firstOrNull { k -> k.filterNot(Char::isWhitespace).let { it.isNotEmpty() && squeezed.contains(it, ignoreCase = true) } }
+}
 
 /**
  * 교대 프리셋 하나. [start] 는 매일 불러올 시각(자정부터 분), null 이면 자동으로 불러오지 않습니다.
@@ -193,12 +206,19 @@ data class Reminder(val index: Int, val at: Long, val text: String)
 fun Settings.reminders(now: Long): List<Reminder> {
     if (!presetMode || !routineAlarm || dutyShift == 0L) return emptyList()
     val p = presets.forShift(dutyShift) ?: return emptyList()
-    val end = presets.nextShift(Instant.ofEpochMilli(dutyShift).atZone(ZoneId.systemDefault()).toLocalDateTime()) ?: Long.MAX_VALUE
+    val end = dutyEnd()
     return p.items.mapIndexedNotNull { i, line ->
         val m = itemMinute(line) ?: return@mapIndexedNotNull null
         Reminder(i, shiftTime(dutyShift, m), line).takeIf { line !in p.quiet && it.at > now && it.at < end }
     }.sortedBy { it.at }
 }
+
+/** 받은 교대가 끝나는 시각(다음 교대 시작, ms). */
+private fun Settings.dutyEnd(): Long =
+    presets.nextShift(Instant.ofEpochMilli(dutyShift).atZone(ZoneId.systemDefault()).toLocalDateTime()) ?: Long.MAX_VALUE
+
+/** 이 폰이 [now] 에 근무를 받은 상태인지: '근무 교대 받았습니다'를 누른 교대가 끝나기 전. 키워드 알림은 이때만 울립니다. */
+fun Settings.onDuty(now: Long): Boolean = presetMode && dutyShift != 0L && now < dutyEnd()
 
 /**
  * [now] 가 속한 교대: 시작 시각이 지난 프리셋 중 가장 늦은 것과 그 시작 시각(ms). 오늘 아직 아무것도 시작 안 했으면

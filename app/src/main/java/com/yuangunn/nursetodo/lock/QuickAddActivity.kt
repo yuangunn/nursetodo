@@ -63,6 +63,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -125,6 +126,7 @@ import com.yuangunn.nursetodo.data.cardTextSp
 import com.yuangunn.nursetodo.data.due
 import com.yuangunn.nursetodo.data.dutyTarget
 import com.yuangunn.nursetodo.data.itemMinute
+import com.yuangunn.nursetodo.data.keywordList
 import com.yuangunn.nursetodo.data.itemText
 import com.yuangunn.nursetodo.data.reminders
 import com.yuangunn.nursetodo.data.shortcutSlots
@@ -173,6 +175,7 @@ class QuickAddActivity : ComponentActivity() {
                     onUnlock = { unlockThen {} },
                     onOpen = ::openApp,
                     onOpenNoti = ::openNoti,
+                    onOpenHit = ::openHit,
                     onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
                 )
             }
@@ -204,6 +207,12 @@ class QuickAddActivity : ComponentActivity() {
 
     /** 다른 앱 알림을 누르면 잠금을 풀고 그 알림의 화면으로. */
     private fun openNoti(n: Noti) = unlockThen { NotiListener.open(this, n) }
+
+    /** 키워드 카드의 '열기': 잠금을 풀고 원래 알림(문자·팀즈)의 화면으로. */
+    private fun openHit(h: KeywordAlert.Hit) = unlockThen {
+        KeywordAlert.dismiss(this, h.key)
+        NotiListener.open(this, Noti(h.key, h.pkg, h.title, h.text, 0, h.open, autoCancel = false))
+    }
 
     private fun unlockThen(action: () -> Unit) {
         val go = {
@@ -256,6 +265,7 @@ private fun LockPage(
     onUnlock: () -> Unit,
     onOpen: (Intent) -> Unit,
     onOpenNoti: (Noti) -> Unit,
+    onOpenHit: (KeywordAlert.Hit) -> Unit,
     onAllowAlarm: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -265,6 +275,8 @@ private fun LockPage(
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val allNotis by NotiListener.notis.collectAsStateWithLifecycle()
     val notis = allNotis.filter { settings.notiApps.isEmpty() || it.pkg in settings.notiApps }
+    val hitsVersion by KeywordAlert.version.collectAsStateWithLifecycle()
+    val hits = remember(hitsVersion) { KeywordAlert.active(context) }
     val today = Day.today()
     // 끝낸 일은 사라지고 앱의 '완료된 할 일'에서만 보입니다.
     val tasks = remember(all, today) { TaskStore.tasksFor(today, today).filterNot { it.isDone(today) } }
@@ -379,6 +391,7 @@ private fun LockPage(
                     Timers(alarms) { Alarms.cancel(context, it) }
                     Spacer(Modifier.height(12.dp))
                 }
+                if (hits.isNotEmpty() && !typing) KeywordCards(hits, onOpenHit)
 
                 // 할 일 카드 하나. 근무 페이지([dutyPage])는 시각 지난 항목을 빨갛게, 메모 버튼은 할 일 페이지에만.
                 val card: @Composable (List<Task>, LazyListState, Boolean, Modifier) -> Unit = { list, state, dutyPage, cardModifier ->
@@ -616,6 +629,43 @@ internal fun autoFit(height: Float, count: Int): Pair<Float, Int> {
 }
 
 /** 교대 프리셋 화면 오른쪽 줄: 알림이 온 앱 아이콘(최근 것부터, 2개 이상이면 숫자). 누르면 그 앱 알림을 펼쳐 봅니다. */
+/** 키워드 알림 카드. 시스템 팝업은 몇 초면 접혀서 '확인'할 때까지 여기 남깁니다. */
+@Composable
+private fun KeywordCards(hits: List<KeywordAlert.Hit>, onOpen: (KeywordAlert.Hit) -> Unit) {
+    val context = LocalContext.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // ponytail: 최근 2건만, 나머지는 알림창에
+        hits.take(2).forEach { h ->
+            Surface(
+                color = Color.Black.copy(alpha = 0.55f),
+                contentColor = Color.White,
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Late),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(start = 18.dp, end = 6.dp, top = 10.dp)) {
+                    Text(h.label, fontSize = 12.sp, color = Late, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(h.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(h.text, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { KeywordAlert.dismiss(context, h.key) }) { Text("확인", color = Color.White) }
+                        if (h.open != null) TextButton(onClick = { onOpen(h) }) { Text("열기", color = Color.White) }
+                        TextButton(onClick = {
+                            TaskStore.add(h.text.ifBlank { h.title })
+                            KeywordAlert.dismiss(context, h.key)
+                        }) { Text("할 일로 추가", color = Color.White) }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun NotiRail(items: List<Noti>, onTap: (String) -> Unit) {
     val context = LocalContext.current
@@ -738,9 +788,11 @@ private fun PageTabs(pages: List<Int>, current: Int, onTap: (Int) -> Unit) {
  */
 @Composable
 private fun DutyHeader(s: Settings, now: Long) {
-    if (!s.routineAlarm) return
+    // 근무 루틴 알림(시각 붙은 항목)이나 키워드 알림이 있을 때만 근무를 받습니다.
+    val keyword = s.keywordList.isNotEmpty()
+    if (!s.routineAlarm && !keyword) return
     val (p, shift) = remember(s.presets, now / 60_000) { s.presets.dutyTarget(LocalDateTime.now()) } ?: return
-    if (p.items.none { itemMinute(it) != null && it !in p.quiet }) return
+    if (!keyword && p.items.none { itemMinute(it) != null && it !in p.quiet }) return
     val armed = s.dutyShift == shift
     Surface(
         color = Glass,

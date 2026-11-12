@@ -30,7 +30,7 @@ data class Noti(
 )
 
 /**
- * 팀즈 같은 다른 앱 알림을 할 일 화면에 보여 주려고 읽는 서비스. 사용자가 '알림 접근'을 허용해야 붙습니다.
+ * 팀즈 같은 다른 앱 알림을 할 일 화면에 보여 주고 [KeywordAlert] 로 키워드를 찾으려고 읽는 서비스. 사용자가 '알림 접근'을 허용해야 붙습니다.
  * 시스템 잠금화면에 원래 안 뜨는 알림(계속 떠 있는 알림, 조용한 알림, 잠금화면에서 숨긴 앱·종류)은 똑같이 뺍니다.
  * 읽은 알림은 기기 밖으로 나가지 않습니다(인터넷 권한 없음).
  */
@@ -45,9 +45,16 @@ class NotiListener : NotificationListenerService() {
         _notis.value = emptyList()
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification?) = refresh()
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        sbn?.let { KeywordAlert.check(this, it) }
+        refresh()
+    }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) = refresh()
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        // 원래 알림을 읽거나 지우면 키워드 팝업도 지웁니다. 키워드 팝업을 알림창에서 지우면 할 일 화면 카드도.
+        sbn?.let { if (it.packageName == packageName) KeywordAlert.changed() else KeywordAlert.dismiss(this, it.key) }
+        refresh()
+    }
 
     override fun onNotificationRankingUpdate(rankingMap: RankingMap?) = refresh()
 

@@ -327,6 +327,8 @@ object TaskStore {
         put("routineAlarm", routineAlarm)
         put("dutyShift", dutyShift)
         put("lockPages", lockPages)
+        put("keywords", keywords)
+        put("keywordApps", JSONArray(keywordApps.sorted()))
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -382,6 +384,8 @@ object TaskStore {
             routineAlarm = optBoolean("routineAlarm", d.routineAlarm),
             dutyShift = optLong("dutyShift", d.dutyShift),
             lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 3),
+            keywords = optString("keywords", d.keywords),
+            keywordApps = optJSONArray("keywordApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.keywordApps,
         )
     }
 }

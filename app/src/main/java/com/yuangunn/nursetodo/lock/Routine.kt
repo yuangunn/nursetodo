@@ -65,6 +65,11 @@ object Routine {
         // 같은 이름 포켓북('정규 라운딩')의 체크를 새로 시작합니다.
         TaskStore.restartPocketsFor(text)
         notify(context, shift, index, text)
+        wake(context)
+    }
+
+    /** 화면이 꺼져 있으면 잠깐 켜서 할 일 화면의 근무 페이지를 보여 줍니다. 알람이 울리거나 통화 중이면 그대로. 키워드 알림도 씁니다. */
+    internal fun wake(context: Context) {
         val screenOn = context.getSystemService(PowerManager::class.java).isInteractive
         if (!screenOn && Settings.canDrawOverlays(context) && !Alarms.ringing() && !LockPageService.inCall(context)) {
             try {

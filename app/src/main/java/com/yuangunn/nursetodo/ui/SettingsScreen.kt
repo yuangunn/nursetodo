@@ -95,6 +95,7 @@ import com.yuangunn.nursetodo.lock.AlarmRingService
 import com.yuangunn.nursetodo.lock.AlarmSound
 import com.yuangunn.nursetodo.lock.Glass
 import com.yuangunn.nursetodo.lock.GlassEdge
+import com.yuangunn.nursetodo.lock.KeywordAlert
 import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.circleBoxHeight
 import com.yuangunn.nursetodo.lock.Setup
@@ -155,7 +156,7 @@ fun SettingsScreen() {
                 if (hidden) "숨겼어요. 할 일 화면은 그대로 동작해요."
                 else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 할 일 화면은 그대로 동작해요.",
                 if (hidden) "숨김" else "열기",
-            ) { Setup.openPageChannelSettings(context) }
+            ) { Setup.openChannelSettings(context) }
             if (!NotiListener.available(context)) {
                 LinkRow(
                     "할 일 화면에 다른 앱 알림 보기",
@@ -175,7 +176,11 @@ fun SettingsScreen() {
                         else -> "켜기"
                     },
                 ) { Setup.openNotiAccess(context) }
-                if (notiOn) NotiApps(s)
+                if (notiOn) {
+                    AppPicker("알림 볼 앱", s.notiApps, "아무것도 안 고르면 모든 앱 알림을 보여요. 메시지·팀즈처럼 몇 개만 고를 수도 있어요.") { c ->
+                        TaskStore.updateSettings { it.copy(notiApps = c) }
+                    }
+                }
                 if (!notiOn) {
                     LinkRow(
                         "허용이 막혀 있으면",
@@ -225,6 +230,11 @@ fun SettingsScreen() {
 
         Section("교대 프리셋")
         PresetSettings(s)
+
+        if (NotiListener.available(context)) {
+            Section("키워드 알림")
+            KeywordSettings(s)
+        }
 
         Section("포켓북")
         PocketSettings()
@@ -657,20 +667,46 @@ private fun ShortcutSettings(s: Settings) {
     }
 }
 
-/** 할 일 화면에 알림을 보여 줄 앱 고르기. 아무것도 안 고르면 모든 앱. */
+/** 키워드 알림 (알림판): 키워드, 볼 앱, 소리·진동. 근무를 받은 폰에서만 울립니다. */
 @Composable
-private fun NotiApps(s: Settings) {
+private fun KeywordSettings(s: Settings) {
+    val context = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    val notiOn = remember(tick) { NotiListener.allowed(context) }
+    SettingField(
+        value = s.keywords,
+        max = 200,
+        label = "키워드 (쉼표로 나눠요, 예: 배정되었습니다)",
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
+    ) { v -> TaskStore.updateSettings { it.copy(keywords = v) } }
+    AppPicker("볼 앱", s.keywordApps, "아무것도 안 고르면 울리지 않아요.") { c -> TaskStore.updateSettings { it.copy(keywordApps = c) } }
+    LinkRow("소리·진동", "기본은 소리 없이 진동을 몇 번 되풀이해요. 소리를 켜려면 열리는 화면에서 소리를 고르세요.", "열기") {
+        Setup.openChannelSettings(context, KeywordAlert.CHANNEL_ID)
+    }
+    if (!notiOn) {
+        LinkRow("알림 접근이 꺼져 있어요", "다른 앱 알림을 읽어야 키워드를 찾을 수 있어요. 알림은 이 폰 밖으로 나가지 않아요.", "켜기") {
+            Setup.openNotiAccess(context)
+        }
+    }
+    Hint(
+        "고른 앱의 새 알림(보낸 사람·내용)에 키워드가 있으면 화면을 켜고 진동과 팝업(확인 · 열기 · 할 일로 추가)으로 알려요. " +
+            "교대 프리셋을 켜고 근무 페이지에서 '근무 교대 받았습니다'를 누른 폰에서만, 그 교대 동안 울려요. " +
+            "팝업 내용은 잠금화면에도 보여요. 원래 알림을 읽거나 지우면 팝업도 사라져요.",
+    )
+}
+
+/** 앱 고르기(런처에 보이는 앱). [chosenApps] 가 비었을 때 뜻은 [emptyText]. */
+@Composable
+private fun AppPicker(title: String, chosenApps: Set<String>, emptyText: String, onSave: (Set<String>) -> Unit) {
     val context = LocalContext.current
     var picking by remember { mutableStateOf(false) }
-    val names = remember(s.notiApps) {
+    val names = remember(chosenApps) {
         val pm = context.packageManager
-        s.notiApps.map { pkg -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg) }.sorted()
+        // 안 깔린 앱(처음 골라 둔 삼성 메시지 등)은 이름을 못 읽으니 뺍니다.
+        chosenApps.mapNotNull { pkg -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull() }.sorted()
     }
-    LinkRow(
-        "알림 볼 앱",
-        if (names.isEmpty()) "모든 앱 알림을 보여요. 메시지·팀즈처럼 몇 개만 고를 수도 있어요." else names.joinToString(", "),
-        "고르기",
-    ) { picking = true }
+    LinkRow(title, if (names.isEmpty()) emptyText else names.joinToString(", "), "고르기") { picking = true }
 
     if (picking) {
         // 고른 앱이 맨 위, 나머지는 이름순 (런처에 보이는 앱만)
@@ -678,17 +714,17 @@ private fun NotiApps(s: Settings) {
             Shortcuts.installedApps(context)
                 .mapNotNull { (sc, label) -> Shortcuts.component(sc)?.packageName?.let { it to label } }
                 .distinctBy { it.first }
-                .sortedByDescending { it.first in s.notiApps }
+                .sortedByDescending { it.first in chosenApps }
         }
-        var chosen by remember { mutableStateOf(s.notiApps) }
+        var chosen by remember { mutableStateOf(chosenApps) }
         var query by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { picking = false },
-            title = { Text("알림 볼 앱") },
+            title = { Text(title) },
             text = {
                 Column {
                     Text(
-                        "아무것도 고르지 않으면 모든 앱 알림을 보여요.",
+                        emptyText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -722,7 +758,7 @@ private fun NotiApps(s: Settings) {
                 TextButton(onClick = {
                     // 지워진 앱은 목록에 없어서 풀 수도 없으니 저장할 때 뺍니다.
                     val installed = apps.map { it.first }.toSet()
-                    TaskStore.updateSettings { it.copy(notiApps = chosen intersect installed) }
+                    onSave(chosen intersect installed)
                     picking = false
                 }) { Text("저장") }
             },
