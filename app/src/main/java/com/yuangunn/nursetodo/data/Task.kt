@@ -132,16 +132,24 @@ data class Settings(
     val routineMuted: Boolean = false,
     /** '근무 교대 받았습니다'를 누른 교대의 시작 시각(ms). 0 이면 아무 교대도 받지 않음(알림 꺼짐). */
     val dutyShift: Long = 0,
-    /** 할 일 화면 페이지: 0 할 일·근무(교대 프리셋)·포켓북을 좌우로 넘겨 보기, 1 할 일만, 2 근무만, 3 포켓북만. */
-    val lockPages: Int = 0,
-    /** 키워드 알림(알림판): 쉼표로 나눈 낱말. [keywordApps] 의 새 알림에 들어 있으면 진동·팝업으로 알립니다. 비우면 꺼짐. */
+    /** 할 일 화면에 보일 페이지(비트: 1 할 일, 2 근무, 4 포켓북). 하나 이상. 근무는 교대 프리셋, 포켓북은 포켓북이 있을 때만 보입니다. */
+    val pageMask: Int = 7,
+    /** 키워드 알림(알림판): 한 줄에 하나(예전 저장분은 쉼표). [keywordApps] 의 새 알림에 들어 있으면 진동·팝업으로 알립니다. */
     val keywords: String = "",
+    /** 키워드 알림 받기. 꺼도 키워드는 남습니다. */
+    val keywordOn: Boolean = true,
+    /** 키워드 알림을 소리와 진동으로(기본은 진동만). 소리는 휴대폰 알림 설정에서 고릅니다. */
+    val keywordSound: Boolean = false,
+    /** 앱 테마: 0 시스템 따라감, 1 라이트, 2 다크. 잠금화면은 늘 어둡습니다. */
+    val theme: Int = 0,
+    /** 항암계산기 주입속도 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
+    val rateLimit: Int = 1000,
     /** 키워드 알림을 볼 앱(패키지 이름). 처음엔 삼성 메시지·구글 메시지·팀즈. 비우면 울리지 않음. */
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
 )
 
-/** [Settings.keywords] 를 쉼표로 나눈 목록. */
-val Settings.keywordList: List<String> get() = keywords.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+/** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */
+val Settings.keywordList: List<String> get() = keywords.split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
 
 /** [text] 에 들어 있는 첫 키워드. 띄어쓰기는 빼고 대소문자 없이 비교합니다('배정 되었습니다'도 '배정되었습니다'로). */
 fun keywordHit(keywords: List<String>, text: String): String? {

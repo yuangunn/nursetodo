@@ -1,5 +1,13 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,40 +46,43 @@ fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
             modifier = Modifier.weight(1f),
             header = {
                 item(key = "header") {
-                    Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp)) {
-                        Text(
-                            Fmt.date(today),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            "오늘",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                        )
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
+                        Text(Fmt.date(today), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("오늘", style = MaterialTheme.typography.headlineSmall)
                         val headline = Fmt.headline(settings, today)
                         if (headline.isNotEmpty()) {
-                            Text(
-                                headline,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            Text(headline, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
                         if (tasks.isNotEmpty()) {
-                            LinearProgressIndicator(
-                                progress = { done / tasks.size.toFloat() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp)
-                                    .clip(MaterialTheme.shapes.small),
-                                drawStopIndicator = {},
-                            )
-                            Text(
-                                if (done == tasks.size) "다 했어요! 🎉" else "${tasks.size}개 중 ${done}개 완료",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp),
-                            )
+                            // 진행 막대 4 (container 바탕, 강조 채움)와 '6개 중 1개 끝냄'
+                            Row(
+                                Modifier
+                                    .padding(top = 12.dp)
+                                    .semantics(mergeDescendants = true) {},
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth(done / tasks.size.toFloat())
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(MaterialTheme.colorScheme.primary),
+                                    )
+                                }
+                                Text(
+                                    "${tasks.size}개 중 ${done}개 끝냄",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }

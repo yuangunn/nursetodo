@@ -128,4 +128,14 @@ class ShiftTest {
             presetRows(listOf("  c0", "a", "  a1", "\ta2", "", "b")),
         )
     }
+
+    @Test
+    fun oldPageChoiceBecomesMask() = with(TaskStore) {
+        // 1.9 까지의 하나 고르기(0 모두 · 1 할 일 · 2 근무 · 3 포켓북)를 비트로
+        assertEquals(listOf(7, 1, 2, 4), (0..3).map { org.json.JSONObject().put("lockPages", it).toSettings().pageMask })
+        val s = Settings(pageMask = 5, theme = 2, rateLimit = 800, keywordOn = false, keywordSound = true, routineMuted = true)
+        assertEquals(s, s.toJson().toSettings())
+        // 키워드는 한 줄에 하나(예전 쉼표도)
+        assertEquals(listOf("배정되었습니다", "응급", "ICU"), Settings(keywords = "배정되었습니다\n응급, ICU").keywordList)
+    }
 }

@@ -337,12 +337,8 @@ private fun LockPage(
         if (preset) add(PAGE_DUTY)
         if (pockets.isNotEmpty()) add(PAGE_POCKET)
     }
-    val pages = when (settings.lockPages) {
-        1 -> listOf(PAGE_TODO)
-        2 -> if (preset) listOf(PAGE_DUTY) else available
-        3 -> if (pockets.isNotEmpty()) listOf(PAGE_POCKET) else available
-        else -> available
-    }
+    // 설정에서 고른 페이지만(하나도 없으면 할 일)
+    val pages = available.filter { settings.pageMask and (1 shl it) != 0 }.ifEmpty { listOf(available.first()) }
     val pager = rememberPagerState(initialPage = pages.indexOf(PAGE_DUTY).coerceAtLeast(0)) { pages.size }
     LaunchedEffect(dutyRequest) {
         if (dutyRequest > 0) pages.indexOf(PAGE_DUTY).takeIf { it >= 0 }?.let { pager.scrollToPage(it) }

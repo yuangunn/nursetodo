@@ -1,5 +1,15 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -164,14 +174,20 @@ fun TaskList(
                 Row(
                     Modifier
                         .animateItem()
+                        .padding(top = 8.dp)
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                        .padding(top = 1.dp)
+                        .background(MaterialTheme.colorScheme.background)
                         .clickable { showDone = !showDone }
-                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
-                        "완료된 할 일 ${done.size}",
-                        style = MaterialTheme.typography.titleSmall,
+                        "끝낸 할 일 ${done.size}",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
@@ -179,6 +195,7 @@ fun TaskList(
                         if (showDone) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = if (showDone) "접기" else "펼치기",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -220,54 +237,42 @@ private fun SwipeRow(task: Task, day: Long, onEdit: (Task) -> Unit, onDelete: (T
     }
 }
 
+/** 할 일 한 줄(최소 48): 동그라미(누르는 칸 44) · 제목 15/20 · 아래 작은 줄(루틴·밀림·끝낸 시각). 누르면 편집. */
 @Composable
 fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
-    val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     val done = task.isDone(day)
     val today = Day.today()
-
-    val check = @Composable {
-        IconButton(onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            TaskStore.toggle(task.id, day)
-        }) {
-            Icon(
-                painterResource(if (done) R.drawable.ic_check_on else R.drawable.ic_check_off),
-                contentDescription = if (done) "완료 취소" else "완료",
-                tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(26.dp),
-            )
-        }
-    }
-
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable { onEdit(task) }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(start = 4.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (settings.checkOnLeft) check() else Spacer(Modifier.width(16.dp))
+            AppCheck(done, (if (done) "체크 풀기: " else "끝냄: ") + task.title) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                TaskStore.toggle(task.id, day)
+            }
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 6.dp),
             ) {
                 Text(
                     task.title,
-                    style = LocalTaskText.current,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     textDecoration = if (done) TextDecoration.LineThrough else null,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    // 끝낸 일은 제목만 흐리게, 완료·만든 시각은 읽히게 둡니다.
-                    modifier = Modifier.alpha(if (done) 0.4f else 1f),
                 )
                 val sub = when {
                     done -> listOfNotNull(
                         ("↻ " + Fmt.repeat(task.repeatMask)).takeIf { task.isRoutine },
-                        task.doneAtOn(day)?.let { "완료 " + Fmt.stamp(it, today) },
+                        task.doneAtOn(day)?.let { "끝냄 " + Fmt.stamp(it, today) },
                         "만듦 " + Fmt.stamp(task.createdAt, today),
                     ).joinToString(" · ")
                     task.isRoutine -> "↻ " + Fmt.repeat(task.repeatMask)
@@ -278,18 +283,17 @@ fun TaskRow(task: Task, day: Long, onEdit: (Task) -> Unit) {
                 if (sub != null) {
                     Text(
                         sub,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (task.date != null && task.date < today && !done) Color(0xFFFF3B30)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (task.date != null && task.date < today && !done) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            if (!settings.checkOnLeft) check() else Spacer(Modifier.width(16.dp))
         }
     }
 }
 
-/** 화면 아래 입력창 — 적고 엔터 치면 바로 추가, 키보드는 그대로. */
+/** 화면 아래 입력 줄(48, 칸 색 알약) + 추가 버튼(48, 강조 원). 적고 엔터면 바로 추가, 키보드는 그대로. */
 @Composable
 fun AddBar(day: Long, modifier: Modifier = Modifier) {
     var text by rememberSaveable { mutableStateOf("") }
@@ -300,31 +304,47 @@ fun AddBar(day: Long, modifier: Modifier = Modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TextField(
+            BasicTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = {
-                    Text(if (day == Day.today()) "할 일을 적고 엔터" else "${Fmt.relative(day)} 할 일 추가")
-                },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = TextFieldDefaults.colors(
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
+                decorationBox = { inner ->
+                    Box(
+                        Modifier
+                            .height(48.dp)
+                            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(24.dp))
+                            .padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (text.isEmpty()) {
+                            Text(
+                                if (day == Day.today()) "할 일을 적고 엔터" else "${Fmt.relative(day)} 할 일 추가",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        inner()
+                    }
+                },
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = submit, enabled = text.isNotBlank()) {
-                Icon(Icons.Default.Add, "추가", tint = MaterialTheme.colorScheme.primary)
-            }
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable(enabled = text.isNotBlank(), role = Role.Button, onClick = submit)
+                    .semantics { contentDescription = "할 일 추가" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary) }
         }
     }
 }

@@ -1,5 +1,9 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,12 +73,27 @@ fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
                     )
                 }
                 item(key = "dayTitle") {
-                    Text(
-                        Fmt.date(selected) + if (selected == today) " · 오늘" else "",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    )
+                    // 고른 날 제목과 개수 (위에 선)
+                    val done = tasks.count { it.isDone(selected) }
+                    Column(Modifier.padding(top = 8.dp)) {
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                Fmt.date(selected) + if (selected == today) " · 오늘" else "",
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                when {
+                                    tasks.isEmpty() -> ""
+                                    selected == today -> "${tasks.size}개 중 ${done}개 끝냄"
+                                    else -> "할 일 ${tasks.size}개"
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             },
         )
@@ -96,44 +115,38 @@ private fun MonthGrid(
     val days = first.lengthOfMonth()
     val cells = ((lead + days + 6) / 7) * 7
 
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "${first.year}년 ${first.monthValue}월",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 8.dp).weight(1f),
-            )
-            TextButton(onClick = {
-                onMonth(LocalDate.ofEpochDay(today).withDayOfMonth(1).toEpochDay())
-                onSelect(today)
-            }) { Text("오늘") }
-            IconButton(onClick = { onMonth(first.minusMonths(1).toEpochDay()) }) {
+    Column(Modifier.padding(top = 12.dp)) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${first.year}년 ${first.monthValue}월", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            if (LocalDate.ofEpochDay(today).withDayOfMonth(1).toEpochDay() != monthStart || selected != today) {
+                TextButton(onClick = {
+                    onMonth(LocalDate.ofEpochDay(today).withDayOfMonth(1).toEpochDay())
+                    onSelect(today)
+                }) { Text("오늘") }
+            }
+            IconButton(onClick = { onMonth(first.minusMonths(1).toEpochDay()) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "이전 달")
             }
-            IconButton(onClick = { onMonth(first.plusMonths(1).toEpochDay()) }) {
+            IconButton(onClick = { onMonth(first.plusMonths(1).toEpochDay()) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "다음 달")
             }
         }
-        Row(Modifier.padding(top = 8.dp)) {
-            listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, label ->
+        Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp).height(32.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf("일", "월", "화", "수", "목", "금", "토").forEach { label ->
                 Text(
                     label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = when (i) {
-                        0 -> Color(0xFFFF3B30)
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }
         for (week in 0 until cells / 7) {
-            Row {
+            Row(Modifier.padding(horizontal = 12.dp)) {
                 for (col in 0..6) {
                     val index = week * 7 + col - lead
-                    Box(Modifier.weight(1f).aspectRatio(1f), contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(1f).height(44.dp), contentAlignment = Alignment.Center) {
                         if (index in 0 until days) {
                             val day = monthStart + index
                             DayCell(day, day == selected, day == today, all, today, col == 0) { onSelect(day) }
@@ -156,40 +169,51 @@ private fun DayCell(
     onClick: () -> Unit,
 ) {
     val visible = all.filter { it.visibleOn(day, today) }
-    val pending = visible.any { !it.isDone(day) }
-    val primary = MaterialTheme.colorScheme.primary
+    val date = LocalDate.ofEpochDay(day)
+    val wd = listOf("월", "화", "수", "목", "금", "토", "일")[date.dayOfWeek.value - 1]
+    // 날짜 칸 44: 고른 날은 강조 채움 원 32, 오늘은 container, 할 일이 있는 날은 숫자 아래 점 4
     Column(
         Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(if (selected) primary else Color.Transparent)
-            .clickable(onClick = onClick),
+            .fillMaxSize()
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "${date.monthValue}월 ${date.dayOfMonth}일 ${wd}요일" +
+                    (if (visible.isNotEmpty()) ", 할 일 ${visible.size}개" else "") + if (isToday) ", 오늘" else ""
+                this.selected = selected
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            LocalDate.ofEpochDay(day).dayOfMonth.toString(),
-            fontWeight = if (isToday || selected) FontWeight.Bold else FontWeight.Normal,
-            color = when {
-                selected -> Color.White
-                isToday -> primary
-                sunday -> Color(0xFFFF3B30)
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-        )
         Box(
             Modifier
-                .padding(top = 2.dp)
-                .size(5.dp)
+                .size(32.dp)
                 .clip(CircleShape)
                 .background(
                     when {
-                        visible.isEmpty() -> Color.Transparent
-                        selected -> Color.White
-                        pending -> primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        selected -> MaterialTheme.colorScheme.primary
+                        isToday -> MaterialTheme.colorScheme.primaryContainer
+                        else -> Color.Transparent
                     },
                 ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                date.dayOfMonth.toString(),
+                style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+                fontWeight = if (isToday || selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = when {
+                    selected -> MaterialTheme.colorScheme.onPrimary
+                    isToday -> MaterialTheme.colorScheme.onPrimaryContainer
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
+            )
+        }
+        Box(
+            Modifier
+                .padding(top = 2.dp)
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(if (visible.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Transparent),
         )
     }
 }

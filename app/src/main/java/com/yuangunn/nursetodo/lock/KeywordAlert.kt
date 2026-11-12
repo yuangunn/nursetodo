@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 object KeywordAlert {
     const val CHANNEL_ID = "keyword"
+
+    /** '소리와 진동'을 고르면 쓰는 채널. 채널 소리는 만든 뒤 앱이 못 바꿔서 둘로 나눕니다. 소리는 휴대폰 알림 설정에서 고릅니다. */
+    const val SOUND_CHANNEL_ID = "keyword_sound"
     private const val ACTION_OK = "com.yuangunn.nursetodo.KEYWORD_OK"
     private const val ACTION_ADD = "com.yuangunn.nursetodo.KEYWORD_ADD"
     private const val EXTRA_TEXT = "text"
@@ -87,7 +90,14 @@ object KeywordAlert {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             setShowBadge(false)
         }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val sound = NotificationChannel(SOUND_CHANNEL_ID, "키워드 알림 (소리)", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "고른 앱 알림에 키워드가 있을 때, 소리와 진동"
+            enableVibration(true)
+            vibrationPattern = channel.vibrationPattern
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setShowBadge(false)
+        }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, sound))
     }
 
     /** 새로 온 내용과 그 시각: 대화형 알림이면 마지막 메시지만(앞의 지난 메시지로 다시 울리지 않게), 아니면 펼친 글이나 한 줄 글. */
@@ -103,7 +113,7 @@ object KeywordAlert {
     fun check(context: Context, sbn: StatusBarNotification) {
         val s = TaskStore.settings.value
         val n = sbn.notification
-        if (sbn.packageName == context.packageName || sbn.packageName !in s.keywordApps) return
+        if (!s.keywordOn || sbn.packageName == context.packageName || sbn.packageName !in s.keywordApps) return
         if (n.flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT) != 0) return
         if (!s.onDuty(System.currentTimeMillis())) return
         val title = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
@@ -129,7 +139,7 @@ object KeywordAlert {
     fun restore(context: Context, h: Hit) = post(context, h, silent = true)
 
     private fun post(context: Context, h: Hit, silent: Boolean) {
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
+        val n = NotificationCompat.Builder(context, if (TaskStore.settings.value.keywordSound) SOUND_CHANNEL_ID else CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
             .setContentTitle(h.title.ifBlank { h.app })
             .setContentText(h.text)

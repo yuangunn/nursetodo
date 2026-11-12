@@ -197,6 +197,13 @@ object TaskStore {
 
     fun deletePocket(id: Long) = commitPockets(_pockets.value.filterNot { it.id == id })
 
+    /** 포켓북 순서 바꾸기([ids] 순서대로). 잠금화면 포켓북 페이지도 이 순서. */
+    fun reorderPockets(ids: List<Long>) {
+        val byId = _pockets.value.associateBy { it.id }
+        val list = ids.mapNotNull { byId[it] }
+        if (list.size == byId.size) commitPockets(list)
+    }
+
     fun togglePocketCheck(id: Long, path: String) = commitPockets(
         _pockets.value.map { if (it.id == id) it.copy(checks = if (path in it.checks) it.checks - path else it.checks + path) else it },
     )
@@ -387,8 +394,12 @@ object TaskStore {
         put("routineAlarm", routineAlarm)
         put("routineMuted", routineMuted)
         put("dutyShift", dutyShift)
-        put("lockPages", lockPages)
+        put("pageMask", pageMask)
         put("keywords", keywords)
+        put("keywordOn", keywordOn)
+        put("keywordSound", keywordSound)
+        put("theme", theme)
+        put("rateLimit", rateLimit)
         put("keywordApps", JSONArray(keywordApps.sorted()))
     }
 
@@ -445,8 +456,13 @@ object TaskStore {
             routineAlarm = optBoolean("routineAlarm", d.routineAlarm),
             routineMuted = optBoolean("routineMuted", d.routineMuted),
             dutyShift = optLong("dutyShift", d.dutyShift),
-            lockPages = optInt("lockPages", d.lockPages).coerceIn(0, 3),
+            // 1.9 까지는 하나만 고름(0 모두, 1 할 일, 2 근무, 3 포켓북)
+            pageMask = if (has("pageMask")) optInt("pageMask", 7).coerceIn(1, 7) else listOf(7, 1, 2, 4)[optInt("lockPages", 0).coerceIn(0, 3)],
             keywords = optString("keywords", d.keywords),
+            keywordOn = optBoolean("keywordOn", d.keywordOn),
+            keywordSound = optBoolean("keywordSound", d.keywordSound),
+            theme = optInt("theme", d.theme).coerceIn(0, 2),
+            rateLimit = optInt("rateLimit", d.rateLimit).coerceIn(1, 99_999),
             keywordApps = optJSONArray("keywordApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.keywordApps,
         )
     }
