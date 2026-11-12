@@ -42,6 +42,7 @@ class AlarmRingService : Service() {
             if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0,
         )
         AlarmSound.start(this, TaskStore.settings.value)
+        startedAt = System.currentTimeMillis()
         _ringing.value = title
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({ stopSelf() }, MAX_RING_MS)
@@ -66,7 +67,11 @@ class AlarmRingService : Service() {
 
         private val _ringing = MutableStateFlow<String?>(null)
 
-        /** 지금 울리는 알람의 제목. 안 울리면 null. 알람 화면은 이게 null 이 되면 닫힙니다. */
+        /** 울리기 시작한 시각(ms). 알람 화면에 보여 줍니다. */
+        var startedAt = 0L
+            private set
+
+        /** 지금 울리는 알람의 이름(이름 없는 알람은 빈 글). 안 울리면 null. 알람 화면은 이게 null 이 되면 닫힙니다. */
         val ringing: StateFlow<String?> = _ringing.asStateFlow()
 
         private fun notification(context: Context, id: Long, title: String): Notification {
@@ -80,7 +85,7 @@ class AlarmRingService : Service() {
             )
             return NotificationCompat.Builder(context, Alarms.CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_alarm)
-                .setContentTitle(title)
+                .setContentTitle(title.ifEmpty { "알람" })
                 .setContentText("알람")
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setPriority(NotificationCompat.PRIORITY_MAX)

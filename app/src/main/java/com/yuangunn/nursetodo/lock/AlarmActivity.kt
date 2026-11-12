@@ -8,6 +8,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,10 +26,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,20 +37,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
+import com.yuangunn.nursetodo.ui.lockAccent
 
 /**
- * 알람이 울릴 때 잠금 위에 뜨는 화면. '끄기'(또는 뒤로 가기)를 누르면 멈춥니다.
- * 알림의 '끄기'나 10분 경과로 먼저 멈추면 이 화면도 저절로 닫힙니다.
+ * 알람이 울릴 때 잠금 위에 뜨는 화면: 위에 아이콘(뒤로 번지는 원)·시각·이름(48/56, 두 줄까지), 아래에 '5분 뒤 다시 울림'과 '끄기'.
+ * 뒤로 가기는 끄기와 같습니다. 알림의 '끄기'나 10분 경과로 먼저 멈추면 이 화면도 저절로 닫힙니다.
  */
 class AlarmActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,6 +72,7 @@ class AlarmActivity : ComponentActivity() {
         }
         TaskStore.init(this)
         val fallbackTitle = intent.getStringExtra(Alarms.EXTRA_LABEL).orEmpty()
+        val at = AlarmRingService.startedAt.takeIf { it > 0 } ?: System.currentTimeMillis()
         val stop = {
             Alarms.stop(this)
             finish()
@@ -70,49 +85,90 @@ class AlarmActivity : ComponentActivity() {
             LaunchedEffect(ringing) {
                 if (ringing != null) started = true else if (started) finish()
             }
-            val title = ringing ?: fallbackTitle
+            val label = ringing ?: fallbackTitle
             BackHandler(onBack = stop)
+            val accent = lockAccent(settings)
+            // 첫 초점은 끄기
+            val offFocus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { offFocus.requestFocus() } }
+            val fade = remember { Animatable(0f) }
+            LaunchedEffect(Unit) { fade.animateTo(1f, tween(240, easing = Lk.Decel)) }
             NurseTodoTheme(settings) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .systemBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_alarm),
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(72.dp),
-                    )
-                    Spacer(Modifier.height(24.dp))
-                    Text(
-                        title,
-                        color = Color.White,
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Surface(
-                        onClick = stop,
-                        color = Glass,
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(50),
-                        border = GlassEdge,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(72.dp),
+                CompositionLocalProvider(LocalLockAccent provides accent) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = fade.value }
+                            .background(Lk.Cover)
+                            .systemBarsPadding()
+                            .padding(start = 20.dp, end = 20.dp, top = 112.dp, bottom = 40.dp)
+                            .semantics { liveRegion = LiveRegionMode.Assertive },
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("끄기", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Halo(accent)
+                        Text(
+                            hhmm(at),
+                            style = Lk.Title.merge(TextStyle(fontFeatureSettings = "tnum")),
+                            color = Lk.Text,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                        Text(
+                            label.ifEmpty { "알람" },
+                            style = Lk.Display.copy(fontFeatureSettings = null),
+                            fontWeight = Lk.Strong,
+                            color = Lk.Text,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            PillButton(
+                                "5분 뒤 다시 울림",
+                                {
+                                    Alarms.snooze(this@AlarmActivity, label)
+                                    finish()
+                                },
+                                Modifier.fillMaxWidth(),
+                                height = 64.dp,
+                                style = Lk.Title,
+                                weight = androidx.compose.ui.text.font.FontWeight.Normal,
+                            )
+                            PillButton(
+                                "끄기",
+                                stop,
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(offFocus),
+                                filled = true,
+                                height = 64.dp,
+                                style = Lk.Title,
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** 울리는 동안 아이콘 뒤로 번지는 원(1 → 2.2배, 50% → 0, 1.6초마다). 시스템 애니메이션을 끄면 멈춘 채로 보입니다. */
+@androidx.compose.runtime.Composable
+private fun Halo(accent: Color) {
+    val t = rememberInfiniteTransition(label = "halo")
+    val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1600, easing = LinearOutSlowInEasing), RepeatMode.Restart), label = "p")
+    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .graphicsLayer {
+                    scaleX = 1f + 1.2f * p
+                    scaleY = 1f + 1.2f * p
+                    alpha = 0.5f * (1f - p)
+                }
+                .background(accent, CircleShape),
+        )
+        Icon(painterResource(R.drawable.ic_alarm), contentDescription = null, tint = accent, modifier = Modifier.size(32.dp))
     }
 }

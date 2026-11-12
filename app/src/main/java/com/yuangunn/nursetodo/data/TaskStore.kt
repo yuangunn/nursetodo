@@ -50,13 +50,14 @@ object TaskStore {
 
     fun get(id: Long): Task? = _tasks.value.firstOrNull { it.id == id }
 
-    fun add(title: String, day: Long = Day.today()): Task? {
+    /** [top] 이면 설정과 상관없이 맨 위에 (잠금화면에서 넣는 할 일). */
+    fun add(title: String, day: Long = Day.today(), top: Boolean = false): Task? {
         val text = title.trim()
         if (text.isEmpty()) return null
         val list = _tasks.value
         val order = when {
             list.isEmpty() -> 0L
-            _settings.value.newOnTop -> list.minOf { it.order } - 1
+            top || _settings.value.newOnTop -> list.minOf { it.order } - 1
             else -> list.maxOf { it.order } + 1
         }
         val today = Day.today()
@@ -154,7 +155,10 @@ object TaskStore {
         _pockets.value.map { if (it.id == id) it.copy(checks = if (path in it.checks) it.checks - path else it.checks + path) else it },
     )
 
-    fun clearPocketChecks(id: Long) = commitPockets(_pockets.value.map { if (it.id == id) it.copy(checks = emptySet()) else it })
+    fun clearPocketChecks(id: Long) = setPocketChecks(id, emptySet())
+
+    /** 체크를 통째로 바꿉니다('체크 지우기' 되돌리기). */
+    fun setPocketChecks(id: Long, checks: Set<String>) = commitPockets(_pockets.value.map { if (it.id == id) it.copy(checks = checks) else it })
 
     /** 근무 루틴 알림 '09:00 정규 라운딩(…)'이 울리면, 이름이 그렇게 시작하는 포켓북('정규 라운딩')의 체크를 새로 시작합니다. */
     fun restartPocketsFor(routine: String) {
@@ -196,6 +200,13 @@ object TaskStore {
         _alarms.value = (_alarms.value + alarm).sortedBy { it.at }
         save()
         return alarm
+    }
+
+    /** 끈 알람을 그대로 되살립니다(되돌리기). */
+    fun restoreAlarm(alarm: Alarm) {
+        if (_alarms.value.any { it.id == alarm.id }) return
+        _alarms.value = (_alarms.value + alarm).sortedBy { it.at }
+        save()
     }
 
     fun removeAlarm(id: Long) {

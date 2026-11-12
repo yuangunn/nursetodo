@@ -1,7 +1,6 @@
 package com.yuangunn.nursetodo.lock
 
 import android.app.ActivityOptions
-import android.app.KeyguardManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.ComponentName
@@ -27,6 +26,10 @@ data class Noti(
     val time: Long,
     val intent: PendingIntent?,
     val autoCancel: Boolean,
+    /** 보낸 앱 이름. */
+    val app: String = "",
+    /** 휴대폰 설정에서 이 알림의 잠금화면 내용을 숨김. 그러면 앱 이름·시각만 보입니다. */
+    val hidden: Boolean = false,
 )
 
 /**
@@ -60,9 +63,8 @@ class NotiListener : NotificationListenerService() {
 
     private fun refresh() {
         val ranking = Ranking()
-        // PIN 이 걸린 폰이면 시스템처럼 내용은 가리고 앱만 알립니다.
-        // ponytail: '민감한 내용도 표시' 시스템 설정까지는 안 따짐, 필요하면 Settings.Secure 를 읽을 것
-        val secure = getSystemService(KeyguardManager::class.java).isDeviceSecure
+        // 갤럭시 기본처럼 내용까지 보여 주고, 사용자가 앱·알림 종류별로 잠금화면 내용을 숨긴 것만 가립니다.
+        // ponytail: 전체 '민감한 내용 숨기기' 설정은 안드로이드 12+ 에서 앱이 읽을 수 없어 따르지 않음
         _notis.value = runCatching { activeNotifications }.getOrNull().orEmpty()
             .filter { it.packageName != packageName && it.isClearable && it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
             .mapNotNull { sbn ->
@@ -76,16 +78,19 @@ class NotiListener : NotificationListenerService() {
                 val visibility = override ?: sbn.notification.visibility
                 if (visibility == Notification.VISIBILITY_SECRET) return@mapNotNull null
                 val extras = sbn.notification.extras
-                val hide = secure && visibility == Notification.VISIBILITY_PRIVATE
+                val hide = override == Notification.VISIBILITY_PRIVATE
+                val app = appName(sbn.packageName)
                 Noti(
                     key = sbn.key,
                     pkg = sbn.packageName,
-                    title = if (hide) appName(sbn.packageName) else extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
-                    text = if (hide) "새 알림" else extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
+                    title = if (hide) "" else extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+                    text = if (hide) "" else extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty(),
                     time = sbn.postTime,
                     intent = sbn.notification.contentIntent,
                     autoCancel = sbn.notification.flags and Notification.FLAG_AUTO_CANCEL != 0,
-                ).takeIf { it.title.isNotBlank() || it.text.isNotBlank() }
+                    app = app,
+                    hidden = hide,
+                ).takeIf { hide || it.title.isNotBlank() || it.text.isNotBlank() }
             }
             .sortedByDescending { it.time }
     }

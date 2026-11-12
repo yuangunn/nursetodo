@@ -25,6 +25,15 @@ val Accents = listOf(
     Color(0xFF8E8E93), // 그레이
 )
 
+/** 강조색 이름 (순서는 [Settings.accent]). 테마마다 명도만 맞춘 값이 [AccentLight]·[AccentDark] 입니다. */
+val AccentNames = listOf("시그니처 블루", "코랄", "그린", "퍼플", "오렌지", "인디고", "핑크", "그레이")
+val AccentLight = listOf(0xFF0054D1, 0xFFE02900, 0xFF23863C, 0xFFA843DB, 0xFFA66500, 0xFF5E5CE6, 0xFFE9002F, 0xFF74747A).map(::Color)
+
+/** 어두운 바탕(다크 테마·잠금화면) 값. */
+val AccentDark = listOf(0xFF6EA8FF, 0xFFFF6B4A, 0xFF34C759, 0xFFC27BE5, 0xFFFF9F0A, 0xFF908FED, 0xFFFF6080, 0xFF97979C).map(::Color)
+
+fun lockAccent(s: Settings): Color = AccentDark[s.accent.coerceIn(AccentDark.indices)]
+
 val TextSizes = listOf("작게" to 15, "보통" to 17, "크게" to 20)
 
 /** 할 일 제목에 쓰이는 글자 스타일 (설정 → 디자인). */

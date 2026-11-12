@@ -1,7 +1,6 @@
 package com.yuangunn.nursetodo.data
 
 import androidx.test.core.app.ApplicationProvider
-import com.yuangunn.nursetodo.lock.autoFit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -141,13 +140,5 @@ class PresetTest {
         // 불러온 할 일의 시각
         assertEquals(ms(at(12)), Task(1, "12:00 점심식전약 투여", 0, shift = ms(at(7))).due)
         assertEquals(null, Task(2, "12:00 직접 적은 일", 0).due)
-    }
-
-    @Test
-    fun fewerTasksGetBiggerText() {
-        val sizes = listOf(1, 3, 6, 10, 20).map { autoFit(500f, it).first }
-        assertEquals(26f, sizes.first())
-        assertTrue(sizes.zipWithNext().all { (a, b) -> a >= b })
-        assertEquals(15f, sizes.last())
     }
 }

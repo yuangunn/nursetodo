@@ -42,6 +42,18 @@ object Alarms {
 
     fun add(context: Context, at: Long, label: String) = schedule(context, TaskStore.addAlarm(at, label))
 
+    /** 끈 알람을 되살립니다(잠금화면 '되돌리기'). 그새 시각이 지났으면 바로 울립니다. */
+    fun restore(context: Context, alarm: Alarm) {
+        TaskStore.restoreAlarm(alarm)
+        schedule(context, alarm)
+    }
+
+    /** 울리는 알람을 끄고 [label] 그대로 5분 뒤에 다시 맞춥니다. */
+    fun snooze(context: Context, label: String) {
+        add(context, System.currentTimeMillis() + 5 * 60_000L, label)
+        stop(context)
+    }
+
     fun cancel(context: Context, id: Long) {
         TaskStore.removeAlarm(id)
         context.getSystemService(AlarmManager::class.java).cancel(fireIntent(context, id))
@@ -101,7 +113,7 @@ object Alarms {
         TaskStore.removeAlarm(id)
         val intent = Intent(context, AlarmRingService::class.java)
             .putExtra(EXTRA_ID, id)
-            .putExtra(EXTRA_LABEL, alarm.label.ifEmpty { "${alarm.minutes}분 알람" })
+            .putExtra(EXTRA_LABEL, alarm.label)
         try {
             ContextCompat.startForegroundService(context, intent)
         } catch (_: Exception) {

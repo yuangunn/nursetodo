@@ -37,8 +37,20 @@ object KeywordAlert {
     // ponytail: 최근 100건만 기억, 앱이 다시 시작되면 비워짐
     private val seen = LinkedHashSet<String>()
 
-    /** 할 일 화면 카드 하나: 아직 '확인'하지 않은 키워드 팝업. [key] 는 원래 알림, [label] 은 '앱 · 키워드'. */
-    data class Hit(val key: String, val pkg: String, val label: String, val title: String, val text: String, val open: PendingIntent?)
+    private const val EXTRA_APP = "nursetodo.app"
+    private const val EXTRA_HIT = "nursetodo.hit"
+
+    /** 할 일 화면 카드 하나: 아직 '확인'하지 않은 키워드 팝업. [key] 는 원래 알림, [app] 은 앱 이름, [hit] 은 맞은 키워드, [time] 은 받은 시각. */
+    data class Hit(
+        val key: String,
+        val pkg: String,
+        val app: String,
+        val hit: String,
+        val title: String,
+        val text: String,
+        val time: Long,
+        val open: PendingIntent?,
+    )
 
     private val _version = MutableStateFlow(0)
 
@@ -53,12 +65,16 @@ object KeywordAlert {
     fun active(context: Context): List<Hit> =
         runCatching { context.getSystemService(NotificationManager::class.java).activeNotifications }.getOrNull().orEmpty()
             .filter { it.id == NOTIFICATION_ID && it.tag != null }
-            .sortedByDescending { it.postTime }
+            // 되돌려 다시 둔 팝업도 원래 받은 시각과 순서 그대로 (setWhen)
+            .sortedByDescending { it.notification.`when` }
             .map { sbn ->
                 val e = sbn.notification.extras
                 fun get(name: String) = e.getCharSequence(name)?.toString().orEmpty()
                 // 원래 알림 key 는 '사용자|패키지|번호|태그|uid'
-                Hit(sbn.tag, sbn.tag.split('|').getOrElse(1) { "" }, get(Notification.EXTRA_SUB_TEXT), get(Notification.EXTRA_TITLE), get(Notification.EXTRA_TEXT), sbn.notification.contentIntent)
+                Hit(
+                    sbn.tag, sbn.tag.split('|').getOrElse(1) { "" }, e.getString(EXTRA_APP).orEmpty(), e.getString(EXTRA_HIT).orEmpty(),
+                    get(Notification.EXTRA_TITLE), get(Notification.EXTRA_TEXT), sbn.notification.`when`, sbn.notification.contentIntent,
+                )
             }
 
     fun createChannel(context: Context) {
@@ -106,23 +122,43 @@ object KeywordAlert {
         val open = sbn.notification.contentIntent ?: pm.getLaunchIntentForPackage(sbn.packageName)?.let {
             PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE)
         }
+        post(context, Hit(sbn.key, sbn.packageName, app, hit, title, text, System.currentTimeMillis(), open), silent = false)
+    }
+
+    /** 할 일 화면에서 '확인'·'할 일로 추가'를 되돌릴 때 같은 팝업을 소리·진동 없이 다시 둡니다. */
+    fun restore(context: Context, h: Hit) = post(context, h, silent = true)
+
+    private fun post(context: Context, h: Hit, silent: Boolean) {
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_check)
-            .setContentTitle(title.ifBlank { app })
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setSubText("$app · $hit")
+            .setContentTitle(h.title.ifBlank { h.app })
+            .setContentText(h.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(h.text))
+            .setSubText("${h.app} · ${h.hit}")
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
-            .setContentIntent(open)
-            .addAction(0, "확인", action(context, ACTION_OK, sbn.key, text))
-            .apply { open?.let { addAction(0, "열기", it) } }
-            .addAction(0, "할 일로 추가", action(context, ACTION_ADD, sbn.key, text.ifBlank { title }))
+            .setSilent(silent)
+            .setWhen(h.time)
+            .setShowWhen(true)
+            .addExtras(android.os.Bundle().apply {
+                putString(EXTRA_APP, h.app)
+                putString(EXTRA_HIT, h.hit)
+            })
+            .setContentIntent(h.open)
+            .addAction(0, "확인", action(context, ACTION_OK, h.key, h.text))
+            .apply { h.open?.let { addAction(0, "열기", it) } }
+            .addAction(0, "할 일로 추가", action(context, ACTION_ADD, h.key, todoText(h)))
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(sbn.key, NOTIFICATION_ID, n)
+        context.getSystemService(NotificationManager::class.java).notify(h.key, NOTIFICATION_ID, n)
         changed()
+    }
+
+    /** '할 일로 추가'로 넣을 글: 내용의 첫 문장, 최대 40자(내용이 없으면 보낸 사람). */
+    fun todoText(h: Hit): String {
+        val first = h.text.trim().split(Regex("""(?<=[.!?。])\s+|\n""")).firstOrNull().orEmpty().trim().removeSuffix(".")
+        return first.ifBlank { h.title }.take(40)
     }
 
     /** 원래 알림 [key] 에 대한 팝업을 지웁니다(없으면 그대로). */
@@ -143,7 +179,7 @@ object KeywordAlert {
             val key = intent.data?.schemeSpecificPart ?: return
             if (intent.action == ACTION_ADD) {
                 TaskStore.init(context)
-                TaskStore.add(intent.getStringExtra(EXTRA_TEXT).orEmpty())
+                TaskStore.add(intent.getStringExtra(EXTRA_TEXT).orEmpty(), top = true)
             }
             dismiss(context, key)
         }

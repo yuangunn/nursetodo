@@ -84,6 +84,8 @@ class MainActivity : ComponentActivity() {
 
         fun calendarIntent(context: Context): Intent = tabIntent(context, 1)
 
+        fun settingsIntent(context: Context): Intent = tabIntent(context, 3)
+
         private fun tabIntent(context: Context, tab: Int) = Intent(context, MainActivity::class.java)
             .putExtra(EXTRA_TAB, tab)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

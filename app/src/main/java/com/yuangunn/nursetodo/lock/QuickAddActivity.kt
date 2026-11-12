@@ -5,15 +5,24 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,55 +30,45 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -81,71 +80,60 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.Alarm
 import com.yuangunn.nursetodo.data.Day
-import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Pocket
 import com.yuangunn.nursetodo.data.PocketKind
 import com.yuangunn.nursetodo.data.PocketNode
-import com.yuangunn.nursetodo.data.doneCount
-import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
-import com.yuangunn.nursetodo.data.cardTextSp
+import com.yuangunn.nursetodo.data.currentShift
+import com.yuangunn.nursetodo.data.doneCount
 import com.yuangunn.nursetodo.data.due
 import com.yuangunn.nursetodo.data.dutyTarget
+import com.yuangunn.nursetodo.data.itemCount
 import com.yuangunn.nursetodo.data.itemMinute
-import com.yuangunn.nursetodo.data.keywordList
 import com.yuangunn.nursetodo.data.itemText
-import com.yuangunn.nursetodo.data.reminders
+import com.yuangunn.nursetodo.data.keywordList
 import com.yuangunn.nursetodo.data.shortcutSlots
 import com.yuangunn.nursetodo.ui.MainActivity
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
+import com.yuangunn.nursetodo.ui.lockAccent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
- * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 툭의 잠금화면처럼 배경화면 위에 시계와 유리 카드 하나만 둡니다.
- * 잠금화면 카드, 상단바 타일, 위젯 `+`, 그리고 '화면 켜면 할 일 화면 먼저 보기'(LockPageService)에서 열립니다.
+ * 잠금화면 위에 바로 뜨는 할 일 화면 (showWhenLocked). 배경화면 위 어두운 그라데이션에 위에서 아래로
+ * 시계 · 키워드 알림 카드 · 알람 줄 · 페이지 줄(할 일 · 근무 · 포켓북, 알림, 설정) · 카드 · 할 일 추가 · 바로가기 · 잠금 해제 안내를 쌓고,
+ * 카드만 남은 높이를 차지합니다. 잠금화면 카드, 상단바 타일, 위젯 `+`, '화면 켜면 할 일 먼저'(LockPageService)에서 열립니다.
  * 동그라미를 누르면 체크. 위로 밀면 잠금 해제를 요청합니다: 밀어서 잠금이면 바로 홈, PIN 이면 PIN 화면으로
  * (잠금화면을 두 번 넘기지 않게). 얼굴·지문으로 이미 풀렸으면 그냥 닫힙니다. 뒤로 가기는 원래 잠금화면으로 돌아갑니다.
- * 아래 반투명 버튼으로 항암 주입속도 계산기와 '몇 분 뒤' 알람을 열고, 맞춰 둔 알람은 남은 시간이 보입니다.
- * 할 일 추가는 카드 아래 넓은 줄, 카드 안 메모 버튼, 아래 바로가기 중 하나로 합니다(설정).
  */
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -166,18 +154,26 @@ class QuickAddActivity : ComponentActivity() {
         // 화면을 켜거나 카드를 눌러 열면 보고 체크가 먼저라 입력칸을 접어 둡니다. 타일·위젯 `+` 로 열면 바로 입력.
         val adding = !intent.getBooleanExtra(EXTRA_LOOK_FIRST, false) && !intent.getBooleanExtra(EXTRA_DUTY, false)
         handleDuty(intent)
+        val opened = SystemClock.uptimeMillis()
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             NurseTodoTheme(settings) {
-                LockPage(
-                    adding,
-                    dutyRequest = dutyRequest.intValue,
-                    onUnlock = { unlockThen {} },
-                    onOpen = ::openApp,
-                    onOpenNoti = ::openNoti,
-                    onOpenHit = ::openHit,
-                    onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
-                )
+                val accent = lockAccent(settings)
+                CompositionLocalProvider(
+                    LocalLockAccent provides accent,
+                    LocalScreenStart provides opened,
+                    LocalTextSelectionColors provides TextSelectionColors(handleColor = accent, backgroundColor = accent.copy(alpha = 0.4f)),
+                ) {
+                    LockPage(
+                        adding,
+                        dutyRequest = dutyRequest.intValue,
+                        onUnlock = { unlockThen {} },
+                        onOpen = ::openApp,
+                        onOpenNoti = ::openNoti,
+                        onOpenHit = ::openHit,
+                        onAllowAlarm = { unlockThen { Setup.openExactAlarmSettings(this) } },
+                    )
+                }
             }
         }
     }
@@ -208,7 +204,7 @@ class QuickAddActivity : ComponentActivity() {
     /** 다른 앱 알림을 누르면 잠금을 풀고 그 알림의 화면으로. */
     private fun openNoti(n: Noti) = unlockThen { NotiListener.open(this, n) }
 
-    /** 키워드 카드의 '열기': 잠금을 풀고 원래 알림(문자·팀즈)의 화면으로. */
+    /** 키워드 카드의 '열기': 잠금을 풀고 원래 알림(문자·팀즈)의 화면으로. 연 것은 확인한 것으로 봅니다. */
     private fun openHit(h: KeywordAlert.Hit) = unlockThen {
         KeywordAlert.dismiss(this, h.key)
         NotiListener.open(this, Noti(h.key, h.pkg, h.title, h.text, 0, h.open, autoCancel = false))
@@ -246,17 +242,11 @@ class QuickAddActivity : ComponentActivity() {
 private const val PAGE_TODO = 0
 private const val PAGE_DUTY = 1
 private const val PAGE_POCKET = 2
-private val Late = Color(0xFFFF8A80)
 
-// 근무 페이지는 정보 전달이 먼저라 개수에 맞춰 키우지 않고 작은 글씨·좁은 줄로 (할 일 페이지는 크게 그대로)
-private const val DUTY_SP = 15f
-private const val DUTY_GAP = 2
+/** 근무 항목은 시각이 지나고 이만큼 지나도록 안 하면 미체크(빨강). 그 전에는 '다음'처럼 진하게. ponytail: 임시값, 기관 투약 지침으로 확인할 것 */
+internal const val GRACE_MS = 30 * 60_000L
 
-internal val Glass = Color.Black.copy(alpha = 0.32f)
-internal val GlassEdge = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
-
-/** 할 일 줄의 동그라미 누름 칸 높이. 줄 간격을 좁히면 같이 줄어 줄이 촘촘해집니다(최대 손가락 크기 48dp). */
-internal fun circleBoxHeight(rowGap: Int) = (26 + 2 * rowGap).coerceIn(32, 48).dp
+private enum class Panel { NONE, NOTIS, ALARMS }
 
 @Composable
 private fun LockPage(
@@ -277,50 +267,70 @@ private fun LockPage(
     val notis = allNotis.filter { settings.notiApps.isEmpty() || it.pkg in settings.notiApps }
     val hitsVersion by KeywordAlert.version.collectAsStateWithLifecycle()
     val hits = remember(hitsVersion) { KeywordAlert.active(context) }
+    val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
     val today = Day.today()
-    // 끝낸 일은 사라지고 앱의 '완료된 할 일'에서만 보입니다.
-    val tasks = remember(all, today) { TaskStore.tasksFor(today, today).filterNot { it.isDone(today) } }
-    val anyDone = remember(all, today) { TaskStore.tasksFor(today, today).any { it.isDone(today) } }
+    val preset = settings.presetMode
+    // 방금 체크한 할 일은 되돌리기 토스트가 떠 있는 동안 취소선으로 남깁니다.
+    var recent by remember { mutableStateOf(setOf<Long>()) }
+    val todo = remember(all, today, recent, preset) {
+        TaskStore.tasksFor(today, today)
+            .filter { (!preset || it.shift == null) && (!it.isDone(today) || it.id in recent) }
+            .sortedBy { it.order }
+    }
+    // 근무: 지금 불러온 교대의 항목 전부(끝낸 것도 체크 시각과 함께). 자정을 넘는 근무(Night 23:00~)도 시각 순서로, 시각 없는 항목은 맨 아래.
+    val duty = remember(all, settings.presetApplied, preset) {
+        if (!preset) emptyList() else all.filter { it.shift != null && it.shift == settings.presetApplied }.sortedWith(compareBy({ it.due ?: Long.MAX_VALUE }, { it.order }))
+    }
     val listState = rememberLazyListState()
+    val dutyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(startAdding) }
     var editingId by remember { mutableStateOf<Long?>(null) }
     var askingAlarm by remember { mutableStateOf(false) }
+    var panel by remember { mutableStateOf(Panel.NONE) }
+    var kwOpen by remember { mutableStateOf<String?>(null) }
+    // 목록을 닫는 애니메이션과 그 뒤 300ms 는 아래 항목을 못 누르게 (이어서 누른 것이 체크되지 않게)
+    var blocking by remember { mutableStateOf(false) }
+    LaunchedEffect(blocking) {
+        if (blocking) {
+            delay(500)
+            blocking = false
+        }
+    }
+    val closePanel = {
+        panel = Panel.NONE
+        blocking = true
+    }
     BackHandler(enabled = editingId != null) { editingId = null }
     BackHandler(enabled = askingAlarm) { askingAlarm = false }
-    // 키보드를 쓰는 동안엔 시계와 아래 버튼을 접어 자리를 만듭니다.
-    val typing = adding || editingId != null || askingAlarm
+    BackHandler(enabled = panel != Panel.NONE) { closePanel() }
+    // 키보드를 쓰는 동안엔 키워드 카드·알람 줄·바로가기·안내를 접어 자리를 만듭니다.
+    val typing = adding || editingId != null
     // 지워진 앱은 빼고 고른 모양의 칸 수까지
     val shortcuts = remember(settings.shortcuts, settings.shortcutStyle) {
         settings.shortcuts.filter { Shortcuts.defaultName(context, it) != null }.take(settings.shortcutSlots())
     }
-    // 추가 버튼은 한 군데만: 바로가기에 '할 일 추가'가 있으면 위쪽 버튼은 숨기고, 적는 동안엔 메모 버튼도 숨깁니다.
+    // 추가 버튼은 한 군데만: 바로가기에 '할 일 추가'가 있으면 아래 버튼은 숨기고, 적는 동안엔 카드 안 버튼도 숨깁니다.
     val addInShortcuts = shortcuts.any { it.id == Shortcut.ADD }
     val addBar = !addInShortcuts && settings.addButton == 0
     val addInCard = !addInShortcuts && settings.addButton == 1 && !typing
-    val memo = @Composable { MemoButton { adding = true } }
     val onShortcut: (Shortcut) -> Unit = { sc ->
         when (sc.id) {
             Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
-            Shortcut.ALARM -> askingAlarm = true
+            Shortcut.ALARM -> {
+                panel = Panel.NONE
+                askingAlarm = true
+            }
             Shortcut.ADD -> adding = true
             Shortcut.CALENDAR -> onOpen(MainActivity.calendarIntent(context))
             else -> Shortcuts.launchIntent(sc)?.let(onOpen)
         }
     }
     var drag by remember { mutableFloatStateOf(0f) }
-    // 교대 프리셋이면 할 일이 시계와 바로가기 사이를 다 채우고, 다른 앱 알림은 오른쪽 아이콘 줄로 갑니다.
-    val preset = settings.presetMode
-    var peek by remember { mutableStateOf<String?>(null) }
-    val peekNotis = notis.filter { it.pkg == peek }
-    BackHandler(enabled = peekNotis.isNotEmpty()) { peek = null }
-    // 적는 동안 키보드에 밀려 글자가 줄었다 커지지 않게, 마지막으로 다 보일 때의 높이로 맞춥니다.
-    var fitHeight by remember { mutableFloatStateOf(0f) }
     // 화면 잠금이 '없음'이거나 얼굴·지문으로 이미 풀렸으면 풀 잠금이 없습니다.
     val locked = remember { context.getSystemService(KeyguardManager::class.java).isKeyguardLocked }
     // '할 일'(직접 적은 일), 교대 프리셋이면 '근무'(프리셋에서 온 일), 포켓북이 있으면 '포켓북'을 좌우로 넘겨 봅니다.
     // 설정에서 하나만 고를 수 있습니다.
-    val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
     val available = buildList {
         add(PAGE_TODO)
         if (preset) add(PAGE_DUTY)
@@ -332,16 +342,12 @@ private fun LockPage(
         3 -> if (pockets.isNotEmpty()) listOf(PAGE_POCKET) else available
         else -> available
     }
-    val paged = pages != listOf(PAGE_TODO)
     val pager = rememberPagerState(initialPage = pages.indexOf(PAGE_DUTY).coerceAtLeast(0)) { pages.size }
     LaunchedEffect(dutyRequest) {
         if (dutyRequest > 0) pages.indexOf(PAGE_DUTY).takeIf { it >= 0 }?.let { pager.scrollToPage(it) }
     }
-    val todo = if (preset) tasks.filter { it.shift == null } else tasks
-    // 자정을 넘는 근무(Night 23:00~)도 시각 순서로. 시각 없는 항목은 적은 순서대로 맨 아래.
-    val duty = tasks.filter { it.shift != null }.sortedBy { it.due ?: Long.MAX_VALUE }
-    val dutyListState = rememberLazyListState()
-    // 지난 근무 항목을 빨갛게, 근무 줄의 '다음' 시각을 맞추려고 분이 바뀔 때마다
+    val page = pages.getOrElse(pager.currentPage) { PAGE_TODO }
+    // 근무 줄의 미체크·다음을 맞추려고 분이 바뀔 때마다
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -349,17 +355,51 @@ private fun LockPage(
         }
     }
 
+    // 되돌리기 토스트. 새 토스트가 오면 앞의 동작은 확정. 화면 낭독기를 쓰면 읽을 시간만큼 더 둡니다.
+    var toast by remember { mutableStateOf<Undo?>(null) }
+    val a11y = LocalAccessibilityManager.current
+    LaunchedEffect(toast) {
+        val u = toast ?: return@LaunchedEffect
+        delay(a11y?.calculateRecommendedTimeoutMillis(u.ms, containsIcons = false, containsText = true, containsControls = true) ?: u.ms)
+        if (toast === u) {
+            toast = null
+            u.onEnd()
+        }
+    }
+    val show: (Undo) -> Unit = { u ->
+        toast?.onEnd?.invoke()
+        toast = u
+    }
+    val toggleTodo: (Task) -> Unit = { t ->
+        val wasDone = t.isDone(today)
+        TaskStore.toggle(t.id, today)
+        if (wasDone) {
+            recent = recent - t.id
+            if (toast?.tag == t.id) toast = null
+        } else {
+            recent = recent + t.id
+            show(
+                Undo(
+                    "‘${t.title}’ 끝냄", PAGE_TODO, tag = t.id,
+                    onUndo = {
+                        TaskStore.toggle(t.id, today)
+                        recent = recent - t.id
+                    },
+                    onEnd = { recent = recent - t.id },
+                ),
+            )
+        }
+    }
+    val offAlarm: (Alarm) -> Unit = { a ->
+        Alarms.cancel(context, a.id)
+        if (alarms.size <= 1 && panel == Panel.ALARMS) panel = Panel.NONE
+        show(Undo(if (a.label.isNotEmpty()) "‘${a.label}’ 알람 끔" else "${hhmm(a.at)} 알람 끔", page, onUndo = { Alarms.restore(context, a) }))
+    }
+
     Box(
         Modifier
             .fillMaxSize()
-            // 밝은 배경화면에서도 흰 글씨가 보이게 살짝만 어둡게
-            .background(
-                Brush.verticalGradient(
-                    0f to Color.Black.copy(alpha = 0.35f),
-                    0.5f to Color.Black.copy(alpha = 0.15f),
-                    1f to Color.Black.copy(alpha = 0.45f),
-                ),
-            )
+            .background(Lk.Scrim)
             .pointerInput(Unit) {
                 // 위로 밀면 잠금 해제
                 detectVerticalDragGestures(
@@ -376,525 +416,595 @@ private fun LockPage(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 위(시계·타이머·할 일·입력)는 아래 바로가기가 차지하고 남은 자리를 씁니다.
-            Column(
+            if (!askingAlarm) ClockRow()
+            if (!typing && !askingAlarm && hits.isNotEmpty()) {
+                KeywordCards(
+                    hits, kwOpen,
+                    onExpand = { kwOpen = it.key },
+                    onOk = { h ->
+                        KeywordAlert.dismiss(context, h.key)
+                        show(Undo("키워드 알림을 확인했어요", page, onUndo = { KeywordAlert.restore(context, h) }))
+                    },
+                    onOpen = onOpenHit,
+                    onTodo = { h ->
+                        val t = TaskStore.add(KeywordAlert.todoText(h), top = true)
+                        KeywordAlert.dismiss(context, h.key)
+                        show(
+                            Undo("할 일에 추가했어요", page, onUndo = {
+                                t?.let { TaskStore.delete(it.id) }
+                                KeywordAlert.restore(context, h)
+                            }),
+                        )
+                    },
+                )
+            }
+            if (!typing && !askingAlarm && alarms.isNotEmpty()) {
+                AlarmRow(alarms, panel == Panel.ALARMS, onToggleList = { if (panel == Panel.ALARMS) closePanel() else panel = Panel.ALARMS }, onOff = offAlarm)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PageTabs(
+                    pages.map {
+                        when (it) {
+                            PAGE_DUTY -> "근무"
+                            PAGE_POCKET -> "포켓북"
+                            else -> "할 일"
+                        }
+                    },
+                    pager.currentPage + pager.currentPageOffsetFraction,
+                    pager.currentPage,
+                ) { i -> scope.launch { pager.animateScrollToPage(i) } }
+                Spacer(Modifier.weight(1f))
+                if (page != PAGE_TODO && NotiListener.available(context)) {
+                    BellButton(notis, panel == Panel.NOTIS) { if (panel == Panel.NOTIS) closePanel() else panel = Panel.NOTIS }
+                }
+                SettingsButton { onOpen(MainActivity.settingsIntent(context)) }
+            }
+
+            // 카드: 세 페이지의 목록, 그 자리를 채우는 알림·알람 목록, 아래 되돌리기 토스트
+            val cardShape = RoundedCornerShape(24.dp)
+            Box(
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .fillMaxWidth()
+                    .cover(cardShape)
+                    .clip(cardShape),
             ) {
-                if (typing) Spacer(Modifier.height(24.dp)) else Clock(Modifier.padding(top = 24.dp, bottom = 20.dp))
-                if (alarms.isNotEmpty()) {
-                    Timers(alarms) { Alarms.cancel(context, it) }
-                    Spacer(Modifier.height(12.dp))
-                }
-                if (hits.isNotEmpty() && !typing) KeywordCards(hits, onOpenHit)
-
-                // 할 일 카드 하나. 근무 페이지([dutyPage])는 시각 지난 항목을 빨갛게, 메모 버튼은 할 일 페이지에만.
-                val card: @Composable (List<Task>, LazyListState, Boolean, Modifier) -> Unit = { list, state, dutyPage, cardModifier ->
-                        Surface(
-                            color = Glass,
-                            contentColor = Color.White,
-                            shape = RoundedCornerShape(28.dp),
-                            border = GlassEdge,
-                            modifier = cardModifier.then(if (preset) Modifier.fillMaxHeight() else Modifier),
-                        ) {
-                            BoxWithConstraints {
-                                if (preset && !typing) SideEffect { fitHeight = maxHeight.value }
-                                val (sp, gap) = when {
-                                    dutyPage -> DUTY_SP to DUTY_GAP
-                                    preset -> {
-                                        val (textDp, fitGap) = autoFit(if (typing && fitHeight > 0f) fitHeight else maxHeight.value, list.size)
-                                        with(LocalDensity.current) { textDp.dp.toSp().value } to fitGap
-                                    }
-                                    else -> settings.cardTextSp() to settings.rowGap
-                                }
-                                // 근무 페이지에서 다음에 할 시각 (진하게)
-                                val nextId = if (dutyPage) list.firstOrNull { (it.due ?: Long.MIN_VALUE) >= now }?.id else null
-                                if (list.isEmpty()) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            when {
-                                                anyDone -> "다 했어요!"
-                                                dutyPage -> "이번 근무 할 일이 없어요"
-                                                else -> "오늘 할 일이 없어요"
-                                            },
-                                            fontSize = sp.sp,
-                                            color = Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(horizontal = 24.dp, vertical = 22.dp),
-                                        )
-                                        if (addInCard && !dutyPage) Box(Modifier.padding(end = 9.dp)) { memo() }
-                                    }
-                                } else {
-                                    LazyColumn(state = state, contentPadding = PaddingValues(vertical = 8.dp)) {
-                                        items(list, key = { it.id }) {
-                                            Box(Modifier.animateItem()) {
-                                                LockRow(
-                                                    it, today, sp, gap, settings.checkOnLeft,
-                                                    editing = it.id == editingId,
-                                                    onEditing = { on -> editingId = if (on) it.id else null },
-                                                    onOpenApp = onOpenApp,
-                                                    late = dutyPage && (it.due ?: Long.MAX_VALUE) < now,
-                                                    timeColumn = dutyPage,
-                                                    next = it.id == nextId,
-                                                    // 메모 버튼은 맨 아래 할 일의 오른쪽 끝에
-                                                    trailing = memo.takeIf { _ -> addInCard && !dutyPage && it.id == list.last().id },
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                }
-                Box(
+                val listAlpha by animateFloatAsState(if (panel != Panel.NONE) 0f else 1f, tween(200), label = "list")
+                HorizontalPager(
+                    pager,
                     Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = preset || paged),
-                ) {
-                    Row(if (preset || paged) Modifier.fillMaxSize() else Modifier.fillMaxWidth()) {
-                        if (paged) {
-                            Column(
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                            ) {
-                                if (pages.size > 1) {
-                                    PageTabs(pages, pager.currentPage) { i -> scope.launch { pager.animateScrollToPage(i) } }
-                                }
-                                HorizontalPager(
-                                    pager,
-                                    Modifier.weight(1f),
-                                    pageSpacing = 16.dp,
-                                    verticalAlignment = Alignment.Top,
-                                ) { i ->
-                                    when (pages[i]) {
-                                        PAGE_DUTY -> Column(Modifier.fillMaxSize()) {
-                                            DutyHeader(settings, now)
-                                            card(duty, dutyListState, true, Modifier.weight(1f))
-                                        }
-                                        PAGE_POCKET -> PocketCard(pockets, Modifier.fillMaxSize())
-                                        else -> card(todo, listState, false, if (preset) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                        } else {
-                            card(todo, listState, false, Modifier.weight(1f))
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = listAlpha },
+                    userScrollEnabled = panel == Panel.NONE && !typing,
+                    verticalAlignment = Alignment.Top,
+                ) { i ->
+                    when (pages[i]) {
+                        PAGE_DUTY -> DutyPage(duty, settings, now, dutyListState, editingId, { editingId = it }, onOpenApp)
+                        PAGE_POCKET -> PocketPage(pockets) { p ->
+                            val old = p.checks
+                            TaskStore.clearPocketChecks(p.id)
+                            show(Undo("체크 ${old.size}개 지움", PAGE_POCKET, onUndo = { TaskStore.setPocketChecks(p.id, old) }))
                         }
-                        if (preset && notis.isNotEmpty()) {
-                            Spacer(Modifier.width(8.dp))
-                            NotiRail(notis) { peek = it }
-                        }
-                    }
-                    // 아이콘을 누르면 그 앱 알림을 위에 펼쳐 보여 줍니다. 바깥을 누르면 닫힘.
-                    if (peekNotis.isNotEmpty()) {
-                        Box(
-                            Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(28.dp))
-                                .background(Color.Black.copy(alpha = 0.6f))
-                                .clickable { peek = null },
+                        else -> TodoPage(
+                            todo, today, recent, listState, editingId, { editingId = it }, onOpenApp, toggleTodo,
+                            notis = notis,
+                            rail = NotiListener.available(context),
+                            onRail = { panel = Panel.NOTIS },
+                            addInCard = addInCard,
+                            onAdd = { adding = true },
+                            dutyPage = PAGE_DUTY in pages,
                         )
-                        // 뒤의 할 일 글씨가 비치지 않게 진한 바탕 위에
-                        Surface(
-                            color = Color.Black.copy(alpha = 0.92f),
-                            contentColor = Color.White,
-                            shape = RoundedCornerShape(28.dp),
-                            border = GlassEdge,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Box(Modifier.padding(8.dp)) { NotiList(peekNotis, onOpenNoti) } }
                     }
                 }
-
-                if (askingAlarm || addBar || adding) Spacer(Modifier.height(12.dp))
-                if (askingAlarm) {
-                    AlarmAsk(
-                        onStart = { at, label ->
-                            Alarms.add(context, at, label)
-                            askingAlarm = false
-                        },
-                        onCancel = { askingAlarm = false },
-                        onAllow = onAllowAlarm,
+                val enter = expandVertically(tween(280, easing = Lk.Decel), expandFrom = Alignment.Top) + fadeIn(tween(280), initialAlpha = 0.4f)
+                val exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) + fadeOut(tween(200), targetAlpha = 0.4f)
+                Reveal(panel == Panel.NOTIS, enter = enter, exit = exit) {
+                    NotiPanel(notis, onTap = { n -> closePanel(); onOpenNoti(n) }, onClose = closePanel)
+                }
+                Reveal(panel == Panel.ALARMS && alarms.isNotEmpty(), enter = enter, exit = exit) {
+                    AlarmPanel(alarms, onOff = offAlarm, onClose = closePanel)
+                }
+                // 토스트는 그 페이지에서만 보입니다.
+                val visible = toast?.takeIf { it.page == null || it.page == page }
+                var last by remember { mutableStateOf<Undo?>(null) }
+                if (visible != null) last = visible
+                Reveal(
+                    visible != null,
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp),
+                    enter = slideInVertically(spring(dampingRatio = 0.7f, stiffness = 500f)) { it / 3 } + scaleIn(initialScale = 0.96f) + fadeIn(),
+                    exit = slideOutVertically(tween(160)) { it / 3 } + fadeOut(tween(160)),
+                ) {
+                    last?.let { u ->
+                        ToastBar(u) {
+                            toast = null
+                            u.onUndo()
+                        }
+                    }
+                }
+                if (blocking) {
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) awaitPointerEvent().changes.forEach { it.consume() }
+                                }
+                            },
                     )
-                } else if (addBar || adding) {
-                    AddField(
+                }
+            }
+
+            if (askingAlarm) {
+                AlarmSheet(
+                    onStart = { at, label ->
+                        Alarms.add(context, at, label)
+                        askingAlarm = false
+                    },
+                    onCancel = { askingAlarm = false },
+                    onAllow = onAllowAlarm,
+                )
+            } else {
+                if ((addBar && editingId == null) || adding) {
+                    AddBar(
                         adding = adding,
                         onAdding = { adding = it },
-                        onAdded = { added ->
-                            val index = TaskStore.tasksFor(today, today).filter { !preset || it.shift == null }.indexOfFirst { it.id == added.id }
-                            scope.launch {
-                                pages.indexOf(PAGE_TODO).takeIf { it >= 0 && it != pager.currentPage }?.let { pager.animateScrollToPage(it) }
-                                if (index >= 0) listState.animateScrollToItem(index)
+                        onAdd = { text ->
+                            val t = TaskStore.add(text, top = true)
+                            adding = false
+                            if (t != null) {
+                                scope.launch {
+                                    pages.indexOf(PAGE_TODO).takeIf { it >= 0 && it != pager.currentPage }?.let { pager.animateScrollToPage(it) }
+                                    listState.animateScrollToItem(0)
+                                }
+                                show(Undo("‘${t.title}’ 추가", PAGE_TODO, onUndo = { TaskStore.delete(t.id) }))
                             }
                         },
                     )
                 }
-                if (!preset && !typing && notis.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    NotiList(notis, onOpenNoti)
+                if (!typing) {
+                    if (shortcuts.isNotEmpty()) ShortcutGrid(shortcuts, settings.shortcutStyle, onShortcut)
+                    UnlockHint(locked, onUnlock)
                 }
-            }
-            if (!typing) {
-                if (shortcuts.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    ShortcutGrid(shortcuts, iconsOnly = settings.shortcutStyle == 2, onShortcut)
-                }
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    if (locked) "위로 밀어서 잠금 해제" else "위로 밀어서 닫기",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.55f),
-                )
             }
         }
     }
 }
 
-/**
- * 아래쪽 바로가기: 계산기·알람·할 일 추가·고른 앱. 낮은 반투명 타일에 작은 아이콘과 오른쪽 이름(한 줄 3개),
- * 또는 [iconsOnly] 면 아이콘만 한 줄 4개.
- */
+/** 할 일 페이지: 동그라미 · 글자, 오른쪽에 알림 세로 줄(알림판). 아이콘은 카드 아래쪽에 모아 위쪽 할 일 줄에 붙어 읽히지 않게 합니다. */
 @Composable
-private fun ShortcutGrid(items: List<Shortcut>, iconsOnly: Boolean, onTap: (Shortcut) -> Unit) {
-    val perRow = if (iconsOnly) 4 else 3
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(perRow).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { sc -> ShortcutTile(sc, iconsOnly, Modifier.weight(1f)) { onTap(sc) } }
-                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ShortcutTile(sc: Shortcut, iconsOnly: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val name = remember(sc) { Shortcuts.name(context, sc) }
-    val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
-    Surface(
-        onClick = onClick,
-        color = Glass,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(14.dp),
-        border = GlassEdge,
-        modifier = modifier,
-    ) {
-        val iconSize = if (iconsOnly) 24.dp else 20.dp
-        // 아이콘만 보일 땐 이름을 화면 낭독기에 알려 줍니다.
-        val label = name.takeIf { iconsOnly }
-        val iconView = @Composable {
-            when {
-                icon != null -> Image(icon, contentDescription = label, modifier = Modifier.size(iconSize))
-                else -> Icon(
-                    painterResource(Shortcuts.builtInIcon(sc)),
-                    contentDescription = label,
-                    tint = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.size(iconSize),
-                )
-            }
-        }
-        if (iconsOnly) {
-            Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) { iconView() }
+private fun TodoPage(
+    list: List<Task>,
+    today: Long,
+    recent: Set<Long>,
+    state: LazyListState,
+    editingId: Long?,
+    onEditing: (Long?) -> Unit,
+    onOpenApp: () -> Unit,
+    onToggle: (Task) -> Unit,
+    notis: List<Noti>,
+    rail: Boolean,
+    onRail: () -> Unit,
+    addInCard: Boolean,
+    onAdd: () -> Unit,
+    dutyPage: Boolean,
+) {
+    Row(Modifier.fillMaxSize()) {
+        if (list.isEmpty()) {
+            EmptyState(
+                Icons.Default.CheckCircle,
+                "할 일이 없어요",
+                if (dutyPage) "아래 할 일 추가로 적거나, 근무로 넘겨 교대 할 일을 보세요." else "아래 할 일 추가로 적어요.",
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            )
         } else {
-            // 좁은 폰(360dp)에서도 한글 4~5글자가 들어가게 여백을 줄였습니다.
-            Row(
-                Modifier.padding(start = 8.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            LazyColumn(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .fadeEdges(),
+                state = state,
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
             ) {
-                iconView()
-                Spacer(Modifier.width(5.dp))
-                Text(name, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-/**
- * 교대 프리셋 화면: 할 일 [count] 개가 [height](dp)를 고르게 채우도록 글자 크기(dp)와 줄 위아래 여백(dp).
- * 적으면 크고 넉넉하게, 많으면 작고 촘촘하게. 아주 많으면 가장 작은 크기로 두고 넘치는 줄은 밀어서 봅니다.
- */
-internal fun autoFit(height: Float, count: Int): Pair<Float, Int> {
-    // 목록 위아래 8dp, 줄마다 위아래 1dp
-    val row = (height - 16f) / count.coerceAtLeast(1) - 2f
-    val text = (row * 0.36f).coerceIn(15f, 26f)
-    // 줄 높이 = 위아래 여백 + (글자 한 줄과 동그라미 26dp 중 큰 것)
-    val gap = ((row - maxOf(26f, text * 1.4f)) / 2f).toInt().coerceIn(2, 32)
-    return text to gap
-}
-
-/** 교대 프리셋 화면 오른쪽 줄: 알림이 온 앱 아이콘(최근 것부터, 2개 이상이면 숫자). 누르면 그 앱 알림을 펼쳐 봅니다. */
-/** 키워드 알림 카드. 시스템 팝업은 몇 초면 접혀서 '확인'할 때까지 여기 남깁니다. */
-@Composable
-private fun KeywordCards(hits: List<KeywordAlert.Hit>, onOpen: (KeywordAlert.Hit) -> Unit) {
-    val context = LocalContext.current
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // ponytail: 최근 2건만, 나머지는 알림창에
-        hits.take(2).forEach { h ->
-            Surface(
-                color = Color.Black.copy(alpha = 0.55f),
-                contentColor = Color.White,
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, Late),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(start = 18.dp, end = 6.dp, top = 10.dp)) {
-                    Text(h.label, fontSize = 12.sp, color = Late, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(h.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(h.text, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 12.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { KeywordAlert.dismiss(context, h.key) }) { Text("확인", color = Color.White) }
-                        if (h.open != null) TextButton(onClick = { onOpen(h) }) { Text("열기", color = Color.White) }
-                        TextButton(onClick = {
-                            TaskStore.add(h.text.ifBlank { h.title })
-                            KeywordAlert.dismiss(context, h.key)
-                        }) { Text("할 일로 추가", color = Color.White) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NotiRail(items: List<Noti>, onTap: (String) -> Unit) {
-    val context = LocalContext.current
-    Surface(color = Glass, contentColor = Color.White, shape = RoundedCornerShape(28.dp), border = GlassEdge) {
-        Column(
-            Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 6.dp, horizontal = 2.dp),
-        ) {
-            items.groupBy { it.pkg }.forEach { (pkg, list) ->
-                val icon = remember(pkg) { NotiListener.icon(context, pkg) }
-                Box(
-                    Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .clickable { onTap(pkg) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (icon != null) Image(icon, contentDescription = "${list.first().title} 알림", modifier = Modifier.size(34.dp))
-                    if (list.size > 1) {
-                        Text(
-                            "${list.size}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 4.dp, end = 4.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                .widthIn(min = 18.dp)
-                                .padding(horizontal = 4.dp),
-                            textAlign = TextAlign.Center,
+                items(list, key = { it.id }) { t ->
+                    Box(Modifier.animateItem()) {
+                        TodoRow(
+                            t, on = t.isDone(today),
+                            editing = t.id == editingId,
+                            onEditing = { on -> onEditing(if (on) t.id else null) },
+                            onOpenApp = onOpenApp,
+                            onToggle = { onToggle(t) },
                         )
                     }
                 }
             }
         }
-    }
-}
-
-/** 다른 앱 알림 (최근 3개): 앱 아이콘, 제목·시각, 내용 한 줄. 누르면 잠금을 풀고 그 앱으로. */
-@Composable
-private fun NotiList(items: List<Noti>, onTap: (Noti) -> Unit) {
-    val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items.take(3).forEach { n ->
-            val icon = remember(n.pkg) { NotiListener.icon(context, n.pkg) }
-            Surface(
-                onClick = { onTap(n) },
-                color = Glass,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(18.dp),
-                border = GlassEdge,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                n.title,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(Fmt.stamp(n.time).removePrefix("오늘 "), fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
-                        }
-                        if (n.text.isNotBlank()) {
-                            Text(n.text, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
+        if (addInCard) {
+            Box(Modifier.fillMaxHeight().padding(bottom = 8.dp), contentAlignment = Alignment.BottomEnd) { MemoButton(onAdd) }
         }
-        if (items.size > 3) {
-            Text(
-                "알림 ${items.size - 3}개 더",
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
+        // 알림이 없어도 44 자리를 비워 두어 글자 줄바꿈이 바뀌지 않게 (알림판만)
+        if (rail) {
+            Box(
+                Modifier
+                    .width(44.dp)
+                    .fillMaxHeight()
+                    .padding(bottom = 52.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) { if (notis.isNotEmpty()) NotiRail(notis, onRail) }
+            Spacer(Modifier.width(12.dp))
         }
     }
 }
 
-/** 페이지 이름 줄: 지금 페이지만 밝게. 눌러도 넘어갑니다. */
+/** 카드 안 '할 일 추가' 버튼(설정에서 '카드 안'): 강조색 동그라미. */
 @Composable
-private fun PageTabs(pages: List<Int>, current: Int, onTap: (Int) -> Unit) {
+private fun MemoButton(onClick: () -> Unit) {
+    val accent = LocalLockAccent.current
+    Press(onClick, Modifier.size(44.dp).semantics { contentDescription = "할 일 추가" }) {
+        Box(Modifier.size(36.dp).background(accent, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Add, contentDescription = null, tint = Lk.OnAccent, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/**
+ * 할 일 한 줄: 동그라미 · 글자(15/20, 어절 단위 줄바꿈, 말줄임 없음). 동그라미를 눌러야만 체크되고,
+ * 글씨를 누르면 앱으로, 0.5초 길게 누르면 그 자리에서 이름을 고칩니다.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TodoRow(task: Task, on: Boolean, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit, onToggle: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
-        horizontalArrangement = Arrangement.Center,
+            .heightIn(min = 40.dp)
+            .padding(start = 6.dp, end = 8.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        pages.forEachIndexed { i, page ->
+        CheckCircle(on, Lk.Body, (if (on) "체크 풀기: " else "끝냄: ") + task.title, onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onToggle()
+        }, enabled = !editing)
+        if (editing) {
+            RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f))
+        } else {
             Text(
-                when (page) {
-                    PAGE_DUTY -> "근무"
-                    PAGE_POCKET -> "포켓북"
-                    else -> "할 일"
-                },
-                fontSize = 15.sp,
-                fontWeight = if (i == current) FontWeight.Bold else FontWeight.Medium,
-                color = Color.White.copy(alpha = if (i == current) 1f else 0.5f),
+                task.title,
+                style = Lk.Body15,
+                color = if (on) Lk.Muted else Lk.Text,
+                textDecoration = if (on) TextDecoration.LineThrough else null,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable { onTap(i) }
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .weight(1f)
+                    .padding(start = 2.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .combinedClickable(
+                        enabled = !on,
+                        onClick = onOpenApp,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onEditing(true)
+                        },
+                        onLongClickLabel = "이름 고치기",
+                    )
+                    .padding(top = 10.dp, bottom = 10.dp),
             )
+        }
+    }
+}
+
+/** 길게 눌러 여는 이름 고치기 칸(강조 테두리 2, 모서리 12)과 오른쪽 저장. 키보드 완료도 저장, 비우거나 그대로면 저장하지 않고 닫힘. */
+@Composable
+private fun RenameField(task: Task, onDone: () -> Unit, modifier: Modifier) {
+    val accent = LocalLockAccent.current
+    var text by remember { mutableStateOf(TextFieldValue(task.title, TextRange(task.title.length))) }
+    val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
+    // 키보드를 내리면 고치기를 취소합니다.
+    CloseWhenImeHides(onClose = onDone)
+    val save = {
+        val title = text.text.trim()
+        if (title.isNotEmpty() && title != task.title) TaskStore.update(task.copy(title = title))
+        // 포커스를 비워 둬야 남은 키 입력이 옆 줄 동그라미로 넘어가 체크되지 않습니다.
+        focusManager.clearFocus()
+        onDone()
+    }
+    Row(modifier.padding(start = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            textStyle = Lk.Body15.copy(color = Lk.Text),
+            cursorBrush = SolidColor(accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { save() }),
+            modifier = Modifier
+                .weight(1f)
+                .padding(vertical = 4.dp)
+                .background(Lk.Control, RoundedCornerShape(12.dp))
+                .border(2.dp, accent, RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .focusRequester(focus)
+                .semantics { contentDescription = "${task.title} 이름 고치기" },
+        )
+        Spacer(Modifier.width(4.dp))
+        SmallButton("저장", save, filled = true)
+    }
+}
+
+/** 근무 줄 상태. 앱이 아는 것은 체크되지 않았다는 사실뿐이라 '놓침'이 아니라 '미체크'라고 씁니다. */
+internal enum class Duty { MISSED, NEXT, REST, DONE }
+
+/**
+ * 시각순 근무 목록의 줄마다 상태: 끝냄, 시각이 지나고 [GRACE_MS] 넘게 안 함 = 미체크, 그 밖의 첫 안 한 시각 항목 = 다음(유예 안의 항목이
+ * 여럿이면 가장 빠른 것만), 나머지. 시각 없는 줄은 늘 나머지.
+ */
+internal fun dutyStates(list: List<Task>, now: Long): Map<Long, Duty> {
+    var next: Long? = null
+    return list.associate { t ->
+        val due = t.due
+        t.id to when {
+            t.doneOn != null -> Duty.DONE
+            due == null -> Duty.REST
+            due + GRACE_MS < now -> Duty.MISSED
+            next == null -> {
+                next = t.id
+                Duty.NEXT
+            }
+            else -> Duty.REST
         }
     }
 }
 
 /**
- * 근무 페이지 맨 위: '근무 교대 받았습니다'를 누르면 이 폰에서 그 교대의 근무 루틴 알림이 켜집니다. 인계는 교대 전에 받으므로
- * 다음 교대 1시간 전부터는 다음 교대를 받습니다. 시각 붙은 항목이 없거나 설정에서 알림을 끄면 줄이 없습니다.
+ * 근무 페이지: 맨 위 상태(교대 받기 · 근무 중), 아래 시각순 목록. 줄은 동그라미 · 시각 칸 44 · 내용.
+ * 시각이 지나고 30분 넘게 안 한 것은 미체크(빨강), 그 밖의 첫 안 한 것은 다음(진하게), 끝낸 것은 체크 시각과 함께 남깁니다.
  */
 @Composable
-private fun DutyHeader(s: Settings, now: Long) {
-    // 근무 루틴 알림(시각 붙은 항목)이나 키워드 알림이 있을 때만 근무를 받습니다.
-    val keyword = s.keywordList.isNotEmpty()
-    if (!s.routineAlarm && !keyword) return
-    val (p, shift) = remember(s.presets, now / 60_000) { s.presets.dutyTarget(LocalDateTime.now()) } ?: return
-    if (!keyword && p.items.none { itemMinute(it) != null && it !in p.quiet }) return
-    val armed = s.dutyShift == shift
-    Surface(
-        color = Glass,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(50),
-        border = GlassEdge,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-    ) {
-        Row(Modifier.padding(start = 20.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(p.name, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text(
-                when {
-                    !armed -> " 근무"
-                    shift > now -> " 근무 받음 · ${hhmm(shift)}부터"
-                    else -> s.reminders(now).firstOrNull()?.let { " 근무 중 · 다음 ${hhmm(it.at)}" } ?: " 근무 중"
-                },
-                fontSize = 15.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (armed) {
-                Text(
-                    "알림 끄기",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .clickable { TaskStore.setDuty(0) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            } else {
-                Surface(
-                    onClick = { TaskStore.setDuty(shift) },
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(50),
-                ) {
-                    Text(
-                        "근무 교대 받았습니다",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                }
+private fun DutyPage(
+    list: List<Task>,
+    s: Settings,
+    now: Long,
+    state: LazyListState,
+    editingId: Long?,
+    onEditing: (Long?) -> Unit,
+    onOpenApp: () -> Unit,
+) {
+    val today = Day.today()
+    val states = dutyStates(list, now)
+    val missed = states.count { it.value == Duty.MISSED }
+    val nextAt = list.firstOrNull { states[it.id] == Duty.NEXT }?.due
+    if (list.isEmpty()) {
+        Column(Modifier.fillMaxSize()) {
+            DutyHeader(s, now, missed, nextAt)
+            EmptyState(Icons.Outlined.DateRange, "이번 근무 할 일이 없어요", "앱 › 설정 › 교대 프리셋에서 적어요.", Modifier.weight(1f).fillMaxWidth())
+        }
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize().fadeEdges(), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "head") { DutyHeader(s, now, missed, nextAt) }
+        items(list, key = { it.id }) { t ->
+            Box(Modifier.animateItem()) {
+                DutyRow(t, states[t.id] ?: Duty.REST, today, editing = t.id == editingId, onEditing = { on -> onEditing(if (on) t.id else null) }, onOpenApp = onOpenApp)
             }
         }
     }
 }
 
-/** 포켓북 한 줄(펼친 모양 그대로 줄 세운 것). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DutyRow(task: Task, st: Duty, today: Long, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    val time = itemMinute(task.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: ""
+    val strong = st == Duty.MISSED || st == Duty.NEXT
+    val on = st == Duty.DONE
+    val doneAt = task.doneAtOn(task.doneOn ?: today)?.let(::hhmm)
+    val text = itemText(task.title)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 6.dp, end = 16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        CheckCircle(
+            on,
+            if (st == Duty.MISSED) Lk.Missed else Lk.Body,
+            (if (on) "체크 풀기: " else "끝냄: ") + listOf(time, text).filter { it.isNotEmpty() }.joinToString(" ") +
+                when (st) {
+                    Duty.MISSED -> ", 미체크"
+                    Duty.NEXT -> ", 다음"
+                    else -> ""
+                } + (doneAt?.let { ", $it 체크" } ?: ""),
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                TaskStore.toggle(task.id, task.doneOn ?: today)
+            },
+            enabled = !editing,
+        )
+        Column(
+            Modifier
+                .padding(start = 2.dp, top = 10.dp)
+                .width(44.dp),
+        ) {
+            Text(
+                time,
+                style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
+                fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
+                color = when (st) {
+                    Duty.MISSED -> Lk.Missed
+                    Duty.NEXT -> Lk.Text
+                    else -> Lk.Muted
+                },
+            )
+            if (strong) {
+                Text(
+                    if (st == Duty.MISSED) "미체크" else "다음",
+                    style = Lk.Caption,
+                    fontWeight = Lk.Strong,
+                    color = if (st == Duty.MISSED) Lk.Missed else Lk.Text,
+                )
+            }
+        }
+        if (editing) {
+            RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f).padding(start = 10.dp))
+        } else {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .combinedClickable(
+                        onClick = onOpenApp,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onEditing(true)
+                        },
+                        onLongClickLabel = "이름 고치기",
+                    )
+                    .padding(vertical = 10.dp),
+            ) {
+                Text(
+                    text,
+                    style = Lk.Body15,
+                    fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
+                    color = when (st) {
+                        Duty.MISSED -> Lk.Missed
+                        Duty.NEXT -> Lk.Text
+                        Duty.DONE -> Lk.Muted
+                        Duty.REST -> Lk.Body
+                    },
+                    textDecoration = if (on) TextDecoration.LineThrough else null,
+                )
+                if (doneAt != null) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
+            }
+        }
+    }
+}
+
+/**
+ * 근무 페이지 맨 위. '근무 교대 받았습니다'를 누르면 이 폰에서 그 교대의 근무 루틴 알림(과 키워드 알림)이 켜집니다.
+ * 인계는 교대 전에 받으므로 다음 교대 1시간 전부터는 다음 교대를 받습니다. 받은 뒤엔 '근무 중 · 다음 시각'과 루틴 알림 끄기.
+ */
+@Composable
+private fun DutyHeader(s: Settings, now: Long, missed: Int, nextAt: Long?) {
+    val keyword = s.keywordList.isNotEmpty()
+    val cur = remember(s.presets, now / 60_000) { s.presets.currentShift(LocalDateTime.now())?.first?.name }
+    val target = if (s.routineAlarm || keyword) remember(s.presets, now / 60_000) { s.presets.dutyTarget(LocalDateTime.now()) } else null
+    val (p, shift) = target ?: (null to 0L)
+    val hasRoutine = p != null && p.items.any { itemMinute(it) != null && it !in p.quiet }
+    val bold = androidx.compose.ui.text.SpanStyle(color = Lk.Text, fontWeight = FontWeight.SemiBold)
+    if (p != null && (hasRoutine || keyword) && s.dutyShift != shift) {
+        // 아직 안 받음
+        Column {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    buildAnnotatedString {
+                        if (shift <= now) {
+                            withStyle(bold) { append("${p.name} ${hhmm(shift)} 시작, ${fmtLeft(now - shift)} 지남") }
+                        } else {
+                            append("지금 ")
+                            withStyle(bold) { append(cur ?: "") }
+                            append(" 근무 · ${p.name} ${hhmm(shift)} 시작")
+                        }
+                    },
+                    style = Lk.Caption,
+                    color = Lk.Muted,
+                )
+                PillButton("${p.name} 근무 교대 받았습니다", { TaskStore.setDuty(shift) }, Modifier.fillMaxWidth(), filled = true)
+                Text(
+                    if (keyword) "받으면 이 폰에서 ${p.name} 루틴 알림과 키워드 알림이 울려요." else "받으면 이 폰에서 ${p.name} 루틴 알림이 울려요.",
+                    style = Lk.Caption,
+                    color = Lk.Muted,
+                )
+            }
+            Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Lk.Divider).heightIn(min = 1.dp, max = 1.dp))
+        }
+        return
+    }
+    // 받았음(또는 알림을 안 쓰는 폰): 상태 줄
+    val armed = p != null && s.dutyShift == shift
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 40.dp)
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(bold) { append((if (armed) p?.name else cur) ?: "") }
+                        when {
+                            armed && shift > now -> append(" 근무 받음 · ${hhmm(shift)}부터")
+                            armed -> append(" 근무 중 · " + (nextAt?.let { "다음 ${hhmm(it)}" } ?: "남은 알림 없음"))
+                            else -> append(" 근무" + (nextAt?.let { " · 다음 ${hhmm(it)}" } ?: ""))
+                        }
+                    },
+                    style = Lk.Caption,
+                    color = Lk.Muted,
+                )
+                if (missed > 0) Text("미체크 $missed", style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Missed)
+            }
+            if (armed) SmallButton("루틴 알림 끄기", { TaskStore.setDuty(0) })
+        }
+        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Lk.Divider).heightIn(min = 1.dp, max = 1.dp))
+    }
+}
+
+/** 포켓북 한 줄(펼친 모양 그대로 줄 세운 것). [left] 는 카드 안쪽에서 동그라미(항목)·글자(설명)가 시작하는 자리(dp). */
 private class PocketLine(
     val key: String,
-    val depth: Int,
     val kind: PocketKind?, // null = 포켓북 이름 줄
     val text: String,
-    val pocket: Long,
+    val pocket: Pocket,
+    val left: Int = 16,
     val path: String = "",
     val done: Boolean = false,
     val progress: String? = null,
     val open: Boolean = false,
+    val first: Boolean = false,
     val clear: Boolean = false, // 펼친 포켓북 맨 아래 '체크 지우기'
 )
 
+/** 들여쓰기 단계 16 · 48 · 80 · 112: 이름 16, 묶음 48, 항목 동그라미 48(하위 80), 설명 80(바로 아래면 48). */
 private fun pocketLines(pockets: List<Pocket>, open: Set<String>): List<PocketLine> = buildList {
-    pockets.forEach { p ->
+    pockets.forEachIndexed { pi, p ->
         val doc = p.doc
         val total = doc.nodes.sumOf { it.itemCount() }
         val pk = "p${p.id}"
-        add(
-            PocketLine(
-                pk, 0, null, doc.title, p.id,
-                progress = if (total > 0) "${doc.nodes.sumOf { it.doneCount(p.checks) }}/$total" else null,
-                open = pk in open,
-            ),
-        )
-        if (pk !in open) return@forEach
-        fun addNode(n: PocketNode, depth: Int) {
+        add(PocketLine(pk, null, doc.title, p, progress = if (total > 0) "${doc.nodes.sumOf { it.doneCount(p.checks) }}/$total" else null, open = pk in open, first = pi == 0))
+        if (pk !in open) return@forEachIndexed
+        fun addNode(n: PocketNode, inSection: Boolean, nest: Int) {
             val key = "$pk/${n.path}"
             when (n.kind) {
                 PocketKind.SECTION -> {
-                    val total = n.itemCount()
-                    add(
-                        PocketLine(
-                            key, depth, n.kind, n.text, p.id, n.path,
-                            progress = if (total > 0) "${n.doneCount(p.checks)}/$total" else null,
-                            open = key in open,
-                        ),
-                    )
-                    if (key in open) n.children.forEach { addNode(it, depth + 1) }
+                    val count = n.itemCount()
+                    add(PocketLine(key, n.kind, n.text, p, 48, n.path, progress = if (count > 0) "${n.doneCount(p.checks)}/$count" else null, open = key in open))
+                    if (key in open) n.children.forEach { addNode(it, true, 0) }
                 }
-                else -> {
-                    add(PocketLine(key, depth, n.kind, n.text, p.id, n.path, done = n.path in p.checks))
-                    n.children.forEach { addNode(it, depth + 1) }
+                PocketKind.ITEM -> {
+                    add(PocketLine(key, n.kind, n.text, p, 48 + 32 * nest, n.path, done = n.path in p.checks))
+                    n.children.forEach { addNode(it, inSection, nest + 1) }
                 }
+                PocketKind.NOTE -> add(PocketLine(key, n.kind, n.text, p, if (!inSection && nest == 0) 48 else 80 + 32 * (nest - 1).coerceAtLeast(0), n.path))
             }
         }
-        doc.nodes.forEach { addNode(it, 1) }
-        if (p.checks.isNotEmpty()) add(PocketLine("$pk/clear", 1, null, "체크 지우기", p.id, clear = true))
+        doc.nodes.forEach { addNode(it, false, 0) }
+        if (p.checks.isNotEmpty()) add(PocketLine("$pk/clear", null, "체크 지우기", p, clear = true))
     }
 }
 
@@ -903,604 +1013,74 @@ private fun pocketLines(pockets: List<Pocket>, open: Set<String>): List<PocketLi
  * 읽을 거리가 많아 작은 글씨·좁은 줄로 한 화면에 많이 보이게 합니다.
  */
 @Composable
-private fun PocketCard(pockets: List<Pocket>, modifier: Modifier) {
+private fun PocketPage(pockets: List<Pocket>, onClear: (Pocket) -> Unit) {
     var open by remember { mutableStateOf(setOf<String>()) }
     val lines = remember(pockets, open) { pocketLines(pockets, open) }
     val toggle = { key: String -> open = if (key in open) open - key else open + key }
-    Surface(
-        color = Glass,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(28.dp),
-        border = GlassEdge,
-        modifier = modifier,
-    ) {
-        LazyColumn(contentPadding = PaddingValues(vertical = 10.dp)) {
-            items(lines, key = { it.key }) { line ->
-                val indent = (14 + line.depth * 16).dp
-                if (line.clear) {
-                    Box(Modifier.fillMaxWidth().padding(end = 14.dp), contentAlignment = Alignment.CenterEnd) {
-                        Text(
-                            line.text,
-                            fontSize = 13.sp,
-                            color = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .clickable { TaskStore.clearPocketChecks(line.pocket) }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                    }
-                    return@items
+    LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+        items(lines, key = { it.key }) { line ->
+            when {
+                line.clear -> Box(Modifier.padding(start = 48.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
+                    SmallButton(line.text, { onClear(line.pocket) })
                 }
-                when (line.kind) {
-                    null, PocketKind.SECTION -> Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { toggle(line.key) }
-                            .padding(start = indent - 4.dp, end = 18.dp, top = if (line.kind == null) 10.dp else 6.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (line.open) "접기" else "펼치기",
-                            tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier
-                                .size(20.dp)
-                                .rotate(if (line.open) 0f else -90f),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            line.text,
-                            fontSize = if (line.kind == null) 16.sp else 15.sp,
-                            fontWeight = if (line.kind == null) FontWeight.Bold else FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = if (line.kind == null) 1f else 0.9f),
-                            lineHeight = 1.25.em,
-                            modifier = Modifier.weight(1f),
-                        )
-                        line.progress?.let {
-                            Text(it, fontSize = 13.sp, color = Color.White.copy(alpha = 0.55f), style = TextStyle(fontFeatureSettings = "tnum"))
+                line.kind == null || line.kind == PocketKind.SECTION -> {
+                    val book = line.kind == null
+                    val turn by animateFloatAsState(if (line.open) 90f else 0f, tween(200, easing = Lk.Decel), label = "chev")
+                    Column {
+                        if (book && !line.first) {
+                            Box(Modifier.padding(top = 4.dp).fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
                         }
-                    }
-                    PocketKind.ITEM -> Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { TaskStore.togglePocketCheck(line.pocket, line.path) }
-                            .padding(start = indent, end = 18.dp, top = 3.dp, bottom = 3.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Box(
+                        Row(
                             Modifier
-                                .padding(top = 1.dp)
-                                .size(18.dp)
-                                .then(
-                                    if (line.done) Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
-                                    else Modifier.border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape),
-                                ),
-                            contentAlignment = Alignment.Center,
+                                .fillMaxWidth()
+                                .heightIn(min = 40.dp)
+                                .clickable(role = Role.Button) { toggle(line.key) }
+                                .semantics {
+                                    contentDescription = line.text + (line.progress?.let { " $it" } ?: "")
+                                    stateDescription = if (line.open) "펼침" else "접힘"
+                                }
+                                .padding(start = if (book) 16.dp else 48.dp, end = 16.dp, top = if (book) 4.dp else 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            if (line.done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(13.dp))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(20.dp).rotate(turn))
+                            Text(
+                                line.text,
+                                style = if (book) Lk.Body15 else Lk.Caption,
+                                fontWeight = Lk.Strong,
+                                color = Lk.Text,
+                                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                            )
+                            line.progress?.let { Text(it, style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted) }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            line.text,
-                            fontSize = 15.sp,
-                            lineHeight = 1.3.em,
-                            color = Color.White.copy(alpha = if (line.done) 0.45f else 1f),
-                            modifier = Modifier.weight(1f),
-                        )
                     }
-                    PocketKind.NOTE -> Text(
+                }
+                line.kind == PocketKind.ITEM -> Row(Modifier.fillMaxWidth().padding(start = (line.left - 10).dp, end = 16.dp), verticalAlignment = Alignment.Top) {
+                    CheckCircle(line.done, Lk.Body, (if (line.done) "체크 풀기: " else "끝냄: ") + line.text, onClick = {
+                        TaskStore.togglePocketCheck(line.pocket.id, line.path)
+                    })
+                    Text(
                         line.text,
-                        fontSize = 14.sp,
-                        lineHeight = 1.3.em,
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(start = indent, end = 18.dp, top = 2.dp, bottom = 2.dp),
+                        style = Lk.Body15,
+                        color = if (line.done) Lk.Muted else Lk.Text,
+                        modifier = Modifier.weight(1f).padding(start = 2.dp, top = 10.dp, bottom = 10.dp),
                     )
+                }
+                else -> Text(
+                    line.text,
+                    style = Lk.Caption,
+                    color = Lk.Muted,
+                    modifier = Modifier.padding(start = line.left.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+                )
+            }
+        }
+        if (open.none { it.matches(Regex("p\\d+")) }) {
+            item(key = "hint") {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
+                    Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
+                    Text("이름을 누르면 펼쳐져요. 포켓북은 앱 › 설정 › 포켓북에서 붙여 넣어 만들어요.", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }
     }
 }
-
-private fun hhmm(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
-
-/** 맞춰 둔 알람마다 남은 시간을 초 단위로. ✕ 로 취소. */
-@Composable
-private fun Timers(alarms: List<Alarm>, onCancel: (Long) -> Unit) {
-    val now by produceState(System.currentTimeMillis()) {
-        while (true) {
-            value = System.currentTimeMillis()
-            delay(1_000 - value % 1_000)
-        }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        alarms.forEach { alarm ->
-            Surface(
-                color = Glass,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(50),
-                border = GlassEdge,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(Modifier.padding(start = 20.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painterResource(R.drawable.ic_alarm),
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        Fmt.countdown(alarm.at - now),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Medium,
-                        style = TextStyle(fontFeatureSettings = "tnum"), // 숫자 폭을 같게 해서 초가 바뀌어도 안 흔들림
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        alarm.label.ifEmpty { "${alarm.minutes}분 알람" },
-                        fontSize = 16.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { onCancel(alarm.id) }) {
-                        Icon(Icons.Default.Close, contentDescription = "알람 취소", tint = Color.White.copy(alpha = 0.7f))
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 직접 맞추는 알람: '몇 분 뒤'(타이머) 또는 '몇 시에'(1430 → 14:30, 지난 시각이면 내일). 숫자만 받습니다.
- * 이름은 '+ 이름 붙이기'를 눌렀을 때만 적고, 안 적으면 '30분 알람'·'14:30 알람'.
- */
-@Composable
-private fun AlarmAsk(onStart: (Long, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
-    val context = LocalContext.current
-    val exactAlarm = remember { Setup.exactAlarmAllowed(context) }
-    var atClock by remember { mutableStateOf(false) }
-    var minutes by remember { mutableStateOf("") }
-    var label by remember { mutableStateOf("") }
-    var withLabel by remember { mutableStateOf(false) }
-    val focus = remember { FocusRequester() }
-    val labelFocus = remember { FocusRequester() }
-    val windowFocused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
-    LaunchedEffect(withLabel) { if (withLabel) labelFocus.requestFocus() }
-    val target = if (atClock) clockTarget(minutes) else minutes.toIntOrNull()?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it * 60_000L }
-    val ready = target != null
-    val start: () -> Unit = { if (target != null) onStart(target, label.ifBlank { if (atClock) "${hhmm(target)} 알람" else "" }) }
-    val accent = MaterialTheme.colorScheme.primary
-
-    Surface(
-        color = Glass,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(28.dp),
-        border = GlassEdge,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("몇 분 뒤", "몇 시에").forEachIndexed { i, name ->
-                    val on = atClock == (i == 1)
-                    Text(
-                        name,
-                        fontSize = 16.sp,
-                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                        color = Color.White.copy(alpha = if (on) 1f else 0.6f),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(if (on) Color.White.copy(alpha = 0.16f) else Color.Transparent)
-                            .clickable {
-                                if (atClock != (i == 1)) minutes = ""
-                                atClock = i == 1
-                                focus.requestFocus()
-                            }
-                            .padding(horizontal = 14.dp, vertical = 7.dp),
-                    )
-                }
-            }
-            // 항암 끝 같은 시각을 맞추는 곳이라 늦을 수 있으면 여기서 바로 알립니다. 허용하면 맞춰 둔 알람도 제시간으로 다시 맞춰집니다.
-            if (!exactAlarm) {
-                Text(
-                    "'알람 및 리마인더'가 꺼져 있어 늦게 울릴 수 있어요. 눌러서 허용",
-                    fontSize = 15.sp,
-                    color = Color(0xFFFF9F0A),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onAllow)
-                        .padding(vertical = 6.dp, horizontal = 2.dp),
-                )
-            }
-            Row(verticalAlignment = Alignment.Bottom) {
-                BasicTextField(
-                    value = minutes,
-                    onValueChange = { minutes = it.filter(Char::isDigit).take(if (atClock) 4 else 3) },
-                    visualTransformation = if (atClock) ClockDigits else VisualTransformation.None,
-                    singleLine = true,
-                    textStyle = TextStyle(color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Medium),
-                    cursorBrush = SolidColor(accent),
-                    // 숫자 자판만 뜨게 (NumberPassword 자판에는 점·쉼표·부호가 없음. 글자는 가리지 않음)
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { start() }),
-                    decorationBox = { inner ->
-                        Box {
-                            if (minutes.isEmpty()) Text(if (atClock) "00:00" else "0", fontSize = 44.sp, color = Color.White.copy(alpha = 0.3f))
-                            inner()
-                        }
-                    },
-                    // 숫자 길이만큼만 차지해서 '분'이 바로 옆에 붙습니다.
-                    modifier = Modifier
-                        .width(IntrinsicSize.Min)
-                        .widthIn(min = 28.dp)
-                        .focusRequester(focus),
-                )
-                Text(
-                    when {
-                        !atClock -> "분"
-                        target == null -> ""
-                        Day.of(target) == Day.today() -> "오늘"
-                        else -> "내일"
-                    },
-                    fontSize = 22.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(start = 6.dp, bottom = 10.dp),
-                )
-            }
-            if (withLabel) {
-                BasicTextField(
-                    value = label,
-                    onValueChange = { label = it.take(30) },
-                    singleLine = true,
-                    textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
-                    cursorBrush = SolidColor(accent),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { start() }),
-                    decorationBox = { inner ->
-                        Box {
-                            if (label.isEmpty()) Text("이름 (예: 항암 끝)", fontSize = 18.sp, color = Color.White.copy(alpha = 0.4f))
-                            inner()
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                        .focusRequester(labelFocus),
-                )
-            } else {
-                Text(
-                    "+ 이름 붙이기",
-                    fontSize = 15.sp,
-                    color = Color.White.copy(alpha = 0.75f),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { withLabel = true }
-                        .padding(vertical = 6.dp, horizontal = 2.dp),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
-                    onClick = onCancel,
-                    color = Color.White.copy(alpha = 0.12f),
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                ) { Box(contentAlignment = Alignment.Center) { Text("취소", fontSize = 17.sp) } }
-                Surface(
-                    onClick = start,
-                    enabled = ready,
-                    color = if (ready) accent else accent.copy(alpha = 0.35f),
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                ) { Box(contentAlignment = Alignment.Center) { Text("시작", fontSize = 17.sp, fontWeight = FontWeight.Bold) } }
-            }
-        }
-    }
-}
-
-/** '몇 시에' 숫자(9 → 9:00, 930 → 9:30, 1430 → 14:30)의 다음 그 시각(ms). 지난 시각이면 내일, 틀린 시각이면 null. */
-internal fun clockTarget(digits: String, now: LocalDateTime = LocalDateTime.now()): Long? {
-    if (digits.isEmpty()) return null
-    val (h, m) = when (digits.length) {
-        1, 2 -> digits.toInt() to 0
-        3 -> digits.take(1).toInt() to digits.drop(1).toInt()
-        else -> digits.take(2).toInt() to digits.drop(2).take(2).toInt()
-    }
-    if (h > 23 || m > 59) return null
-    val today = now.toLocalDate().atTime(h, m)
-    val at = if (today.isAfter(now)) today else today.plusDays(1)
-    return at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-}
-
-/** '몇 시에' 칸: 숫자 3~4개면 가운데 쌍점을 보여 줍니다(입력은 숫자만). */
-private val ClockDigits = VisualTransformation { text ->
-    val d = text.text
-    val colon = when (d.length) {
-        3 -> 1
-        4 -> 2
-        else -> return@VisualTransformation TransformedText(text, OffsetMapping.Identity)
-    }
-    TransformedText(
-        AnnotatedString(d.take(colon) + ":" + d.drop(colon)),
-        object : OffsetMapping {
-            override fun originalToTransformed(offset: Int) = if (offset <= colon) offset else offset + 1
-            override fun transformedToOriginal(offset: Int) = if (offset <= colon) offset else offset - 1
-        },
-    )
-}
-
-/** 잠금화면을 가리는 대신 시계는 그대로 보여 줍니다. 분이 바뀔 때마다 다시 그립니다. */
-@Composable
-private fun Clock(modifier: Modifier) {
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            value = LocalDateTime.now()
-            delay(60_000L - value.second * 1_000L - value.nano / 1_000_000L)
-        }
-    }
-    // 시계와 날짜를 한 줄에 (글자 밑선을 맞춰서). 할 일 자리를 넓히려고 작게, 대신 얇은 글씨는 피합니다.
-    Row(modifier) {
-        Text(
-            now.format(DateTimeFormatter.ofPattern("HH:mm")), // 폰 설정과 상관없이 24시간제
-            color = Color.White,
-            fontSize = 48.sp,
-            fontWeight = FontWeight.Normal,
-            modifier = Modifier.alignByBaseline(),
-        )
-        Spacer(Modifier.width(14.dp))
-        Text(
-            Fmt.date(now.toLocalDate().toEpochDay()),
-            color = Color.White.copy(alpha = 0.9f),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.alignByBaseline(),
-        )
-    }
-}
-
-/**
- * 동그라미 + 큰 글씨 한 줄. 동그라미를 눌러야만 체크되고(체크 표시를 잠깐 보여 준 뒤 사라짐),
- * 글씨를 누르면 앱으로, 글씨를 길게 누르면 그 자리에서 이름을 고칩니다.
- * [timeColumn] 이면(근무 페이지) 맨 앞 시각을 왼쪽 한 칸에 따로: 지났는데 안 했으면 빨강([late]), 다음 것은 진하게([next]).
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun LockRow(
-    task: Task,
-    day: Long,
-    sp: Float,
-    gap: Int,
-    checkOnLeft: Boolean,
-    editing: Boolean,
-    onEditing: (Boolean) -> Unit,
-    onOpenApp: () -> Unit,
-    late: Boolean = false,
-    timeColumn: Boolean = false,
-    next: Boolean = false,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    var done by remember(task.id) { mutableStateOf(false) }
-    val accent = MaterialTheme.colorScheme.primary
-    val haptics = LocalHapticFeedback.current
-    LaunchedEffect(done) {
-        if (done) {
-            delay(350)
-            TaskStore.toggle(task.id, day)
-        }
-    }
-    val circle = @Composable {
-        // 손가락 폭만큼(48dp, 근무 페이지는 40dp) 눌리고, 보이는 동그라미는 26dp(근무 페이지 22dp)
-        Box(
-            Modifier
-                .size(if (timeColumn) 40.dp else 48.dp, circleBoxHeight(gap))
-                .clip(CircleShape)
-                .clickable(enabled = !done && !editing) {
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    done = true
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .size(if (timeColumn) 22.dp else 26.dp)
-                    .then(
-                        if (done) Modifier.background(accent, CircleShape)
-                        else Modifier.border(2.dp, Color.White.copy(alpha = 0.75f), CircleShape),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (done) Icon(Icons.Default.Check, contentDescription = "완료", tint = Color.White, modifier = Modifier.size(if (timeColumn) 15.dp else 18.dp))
-            }
-        }
-    }
-    // 여러 줄이어도 시각·동그라미가 첫 줄에 맞게 근무 페이지는 위로 맞춥니다.
-    val textPad = if (timeColumn) (gap + 6).dp else gap.dp
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 9.dp, vertical = 1.dp),
-        verticalAlignment = if (timeColumn) Alignment.Top else Alignment.CenterVertically,
-    ) {
-        if (checkOnLeft) circle()
-        if (timeColumn && !editing) {
-            Text(
-                itemMinute(task.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: "",
-                color = when {
-                    late -> Late
-                    next -> Color.White
-                    else -> Color.White.copy(alpha = 0.55f)
-                }.copy(alpha = if (done) 0.45f else if (late || next) 1f else 0.55f),
-                fontSize = sp.sp,
-                lineHeight = 1.25.em,
-                fontWeight = if (late || next) FontWeight.Bold else FontWeight.Medium,
-                style = TextStyle(fontFeatureSettings = "tnum"),
-                modifier = Modifier
-                    .padding(start = 2.dp, top = textPad)
-                    .width((sp * 2.9f).dp),
-            )
-        }
-        val textModifier = Modifier
-            .weight(1f)
-            .padding(horizontal = if (timeColumn) 0.dp else 6.dp)
-        if (editing) {
-            RenameField(task, sp, gap, onDone = { onEditing(false) }, modifier = textModifier)
-        } else {
-            Text(
-                if (timeColumn) itemText(task.title) else task.title,
-                color = (if (late) Late else Color.White).copy(alpha = if (done) 0.45f else 1f),
-                fontSize = sp.sp,
-                // 큰 글씨가 두 줄로 넘어가도 줄끼리 겹치지 않게 (기본 줄 높이는 글자 크기와 상관없이 24sp)
-                lineHeight = 1.25.em,
-                fontWeight = FontWeight.Medium,
-                textDecoration = if (done) TextDecoration.LineThrough else null,
-                maxLines = if (timeColumn) 3 else 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = textModifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .combinedClickable(
-                        enabled = !done,
-                        onClick = onOpenApp,
-                        onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onEditing(true)
-                        },
-                    )
-                    .padding(horizontal = 6.dp, vertical = textPad),
-            )
-        }
-        // 오른쪽 체크일 때도 동그라미 줄이 다른 줄과 맞도록 메모 버튼은 동그라미 앞에
-        trailing?.invoke()
-        if (!checkOnLeft) circle()
-    }
-}
-
-/** 카드 안 '할 일 추가' 버튼: 메모 아이콘만, 테마 색 동그라미라 유리 카드 위에서도 잘 보입니다. */
-@Composable
-private fun MemoButton(onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(painterResource(R.drawable.ic_memo), contentDescription = "할 일 추가", tint = Color.White, modifier = Modifier.size(22.dp))
-        }
-    }
-}
-
-/** 길게 눌러 여는 이름 고치기 칸. 엔터면 저장, 비우거나 그대로면 저장하지 않고 닫힘. */
-@Composable
-private fun RenameField(task: Task, sp: Float, gap: Int, onDone: () -> Unit, modifier: Modifier) {
-    var text by remember { mutableStateOf(TextFieldValue(task.title, TextRange(task.title.length))) }
-    val focus = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    val windowFocused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(windowFocused) { if (windowFocused) focus.requestFocus() }
-    // 키보드를 내리면 고치기를 취소합니다.
-    CloseWhenImeHides(onClose = onDone)
-    BasicTextField(
-        value = text,
-        onValueChange = { text = it },
-        singleLine = true,
-        textStyle = TextStyle(color = Color.White, fontSize = sp.sp, fontWeight = FontWeight.Medium),
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = {
-            val title = text.text.trim()
-            if (title.isNotEmpty() && title != task.title) TaskStore.update(task.copy(title = title))
-            // 포커스를 비워 둬야 남은 키 입력이 옆 줄 동그라미로 넘어가 체크되지 않습니다.
-            focusManager.clearFocus()
-            onDone()
-        }),
-        modifier = modifier
-            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 6.dp, vertical = gap.dp)
-            .focusRequester(focus),
-    )
-}
-
-/** 접혀 있으면 '＋ 할 일 추가' 알약, 누르면 그 자리에서 입력칸이 됩니다. 적고 엔터면 추가, 빈 채로 엔터면 접힘. */
-@Composable
-private fun AddField(adding: Boolean, onAdding: (Boolean) -> Unit, onAdded: (Task) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    val focus = remember { FocusRequester() }
-    val windowFocused = LocalWindowInfo.current.isWindowFocused
-    // 잠금화면 위에서는 창이 포커스를 받은 뒤에야 키보드가 뜹니다.
-    LaunchedEffect(adding, windowFocused) { if (adding && windowFocused) focus.requestFocus() }
-    // 빈 채로 키보드를 내리면 알약으로 접고 시계를 다시 보여 줍니다.
-    if (adding) CloseWhenImeHides(onClose = { if (text.isBlank()) onAdding(false) })
-
-    Surface(
-        color = Glass,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(50),
-        border = GlassEdge,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = !adding) { onAdding(true) },
-    ) {
-        if (!adding) {
-            Row(Modifier.padding(horizontal = 22.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White.copy(alpha = 0.8f))
-                Spacer(Modifier.width(10.dp))
-                Text("할 일 추가", fontSize = 17.sp, color = Color.White.copy(alpha = 0.8f))
-            }
-        } else {
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = TextStyle(color = Color.White, fontSize = 18.sp),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    val added = TaskStore.add(text)
-                    if (added == null) {
-                        onAdding(false)
-                    } else {
-                        text = ""
-                        onAdded(added)
-                    }
-                }),
-                decorationBox = { inner ->
-                    Box {
-                        if (text.isEmpty()) Text("적고, 엔터. 끝.", fontSize = 18.sp, color = Color.White.copy(alpha = 0.5f))
-                        inner()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp, vertical = 16.dp)
-                    .focusRequester(focus),
-            )
-        }
-    }
-}
-
-/** 키보드가 한 번 올라왔다가 내려가면 [onClose]. 뒤로 가기로 키보드만 내린 경우를 알아차리려고 씁니다. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CloseWhenImeHides(onClose: () -> Unit) {
-    val imeVisible = WindowInsets.isImeVisible
-    var seen by remember { mutableStateOf(false) }
-    LaunchedEffect(imeVisible) {
-        if (imeVisible) seen = true else if (seen) onClose()
-    }
-}
-
