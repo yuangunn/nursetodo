@@ -29,6 +29,16 @@ object Fmt {
         }
     }
 
+    /** 줄 오른쪽 작은 시각: 오늘이면 14:05, 어제, 그 전은 11/10 */
+    fun clock(ms: Long, today: Long = Day.today()): String {
+        val t = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault())
+        return when (t.toLocalDate().toEpochDay() - today) {
+            0L -> "%02d:%02d".format(t.hour, t.minute)
+            -1L -> "어제"
+            else -> "${t.monthValue}/${t.dayOfMonth}"
+        }
+    }
+
     /** 10월 22일 (수) */
     fun date(day: Long): String {
         val d = LocalDate.ofEpochDay(day)

@@ -55,6 +55,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -174,6 +175,7 @@ fun SettingsScreen() {
         Group("화면") {
             ValueRow("테마", listOf("시스템 따라감", "라이트", "다크")[s.theme]) { sheet = "theme" }
             ValueRow("새 할 일 위치", if (s.newOnTop) "맨 위" else "맨 아래") { sheet = "newOnTop" }
+            SetRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요.", onClick = { TaskStore.updateSettings { it.copy(onboarded = false) } })
         }
 
         AccentPicker(s)
@@ -278,7 +280,7 @@ private fun LockPageExtras(s: Settings) {
         },
     ) { Setup.openNotiAccess(context) }
     if (notiOn) {
-        AppPicker("알림 볼 앱", s.notiApps, "아무것도 안 고르면 모든 앱 알림을 보여요.") { c -> TaskStore.updateSettings { it.copy(notiApps = c) } }
+        AppPicker("알림 볼 앱", s.notiApps, "아무것도 안 고르면 모든 앱 알림을 보여요.", emptyValue = "모든 앱") { c -> TaskStore.updateSettings { it.copy(notiApps = c) } }
     } else {
         LinkRow(
             "허용이 막혀 있으면",
@@ -659,7 +661,7 @@ private fun KeywordSettings(s: Settings, onSheet: (String) -> Unit) {
 
 /** 앱 고르기(런처에 보이는 앱). 줄에는 고른 앱 이름, 누르면 고르는 창. [chosenApps] 가 비었을 때 뜻은 [emptyText]. */
 @Composable
-private fun AppPicker(title: String, chosenApps: Set<String>, emptyText: String, onSave: (Set<String>) -> Unit) {
+internal fun AppPicker(title: String, chosenApps: Set<String>, emptyText: String, emptyValue: String = "없음", onSave: (Set<String>) -> Unit) {
     val context = LocalContext.current
     var picking by remember { mutableStateOf(false) }
     val names = remember(chosenApps) {
@@ -667,7 +669,7 @@ private fun AppPicker(title: String, chosenApps: Set<String>, emptyText: String,
         // 안 깔린 앱(처음 골라 둔 삼성 메시지 등)은 이름을 못 읽으니 뺍니다.
         chosenApps.mapNotNull { pkg -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull() }.sorted()
     }
-    ValueRow(title, if (names.isEmpty()) "없음" else names.joinToString(" · ")) { picking = true }
+    ValueRow(title, if (names.isEmpty()) emptyValue else names.joinToString(" · ")) { picking = true }
 
     if (picking) {
         // 고른 앱이 맨 위, 나머지는 이름순 (런처에 보이는 앱만)
@@ -703,7 +705,7 @@ private fun AppPicker(title: String, chosenApps: Set<String>, emptyText: String,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Checkbox(checked = pkg in chosen, onCheckedChange = null, modifier = Modifier.padding(12.dp))
-                                icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(28.dp)) }
+                                icon?.let { Image(it, contentDescription = null, modifier = Modifier.size(28.dp).clip(CircleShape)) }
                                 Spacer(Modifier.width(12.dp))
                                 Text(label, style = MaterialTheme.typography.bodyLarge)
                             }
@@ -729,7 +731,7 @@ private fun ShortcutIcon(sc: Shortcut) {
     val context = LocalContext.current
     val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
     if (icon != null) {
-        Image(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+        Image(icon, contentDescription = null, modifier = Modifier.size(24.dp).clip(CircleShape))
     } else {
         Icon(painterResource(Shortcuts.builtInIcon(sc)), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
     }

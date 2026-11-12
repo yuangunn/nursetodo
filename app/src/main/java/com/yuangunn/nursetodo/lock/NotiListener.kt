@@ -12,7 +12,6 @@ import android.service.notification.StatusBarNotification
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -127,7 +126,7 @@ class NotiListener : NotificationListenerService() {
         }
 
         fun icon(context: Context, pkg: String): ImageBitmap? = runCatching {
-            context.packageManager.getApplicationIcon(pkg).toBitmap(72, 72).asImageBitmap()
+            Shortcuts.iconBitmap(context.packageManager.getApplicationIcon(pkg), 72).asImageBitmap()
         }.getOrNull()
 
         /** 알림을 눌렀을 때처럼 그 앱 화면을 엽니다. 잠금은 먼저 풀어 둔 상태여야 합니다. */
