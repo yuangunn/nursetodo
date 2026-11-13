@@ -94,6 +94,20 @@ object TaskStore {
         if (get(task.id) == null) commit(_tasks.value + task)
     }
 
+    /** [day] 에 끝낸 일반 할 일을 한 번에 지우고, 되돌리기용으로 지운 것을 돌려줍니다([Task.clearableOn]). */
+    fun deleteDone(day: Long): List<Task> {
+        val gone = _tasks.value.filter { it.clearableOn(day) }
+        if (gone.isNotEmpty()) commit(_tasks.value - gone.toSet())
+        return gone
+    }
+
+    /** [deleteDone] 되돌리기. 이미 있는 것은 건너뜁니다. */
+    fun restoreAll(tasks: List<Task>) {
+        val have = _tasks.value.mapTo(HashSet()) { it.id }
+        val back = tasks.filter { it.id !in have }
+        if (back.isNotEmpty()) commit(_tasks.value + back)
+    }
+
     /** 지난 날 완료한 일반 할 일을 지웁니다. 루틴은 남겨 둡니다. */
     fun clearOldDone(): Int {
         val today = Day.today()
@@ -365,9 +379,6 @@ object TaskStore {
     internal fun Settings.toJson() = JSONObject().apply {
         put("newOnTop", newOnTop)
         put("lockEnabled", lockEnabled)
-        put("lockText", lockText)
-        put("ddayLabel", ddayLabel)
-        ddayDate?.let { put("ddayDate", it) }
         put("accent", accent)
         put("textSize", textSize)
         put("bold", bold)
@@ -424,9 +435,6 @@ object TaskStore {
         Settings(
             newOnTop = optBoolean("newOnTop", d.newOnTop),
             lockEnabled = optBoolean("lockEnabled", d.lockEnabled),
-            lockText = optString("lockText", d.lockText),
-            ddayLabel = optString("ddayLabel", d.ddayLabel),
-            ddayDate = if (has("ddayDate")) getLong("ddayDate") else null,
             accent = optInt("accent", d.accent),
             textSize = optInt("textSize", d.textSize),
             bold = optBoolean("bold", d.bold),

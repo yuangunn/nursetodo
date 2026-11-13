@@ -53,16 +53,6 @@ object Fmt {
         else -> date(day)
     }
 
-    /** D-3, D-DAY, D+2 */
-    fun dday(target: Long, today: Long = Day.today()): String {
-        val diff = target - today
-        return when {
-            diff > 0 -> "D-$diff"
-            diff == 0L -> "D-DAY"
-            else -> "D+${-diff}"
-        }
-    }
-
     /** 매일 / 평일 / 주말 / 월·수·금 */
     fun repeat(mask: Int): String = when (mask) {
         Task.EVERY_DAY -> "매일"
@@ -70,10 +60,4 @@ object Fmt {
         0b1100000 -> "주말"
         else -> WEEKDAYS.filterIndexed { i, _ -> mask and (1 shl i) != 0 }.joinToString("·")
     }
-
-    /** 잠금화면/위젯 상단에 붙는 문구: "합격 D-12 · 오늘도 화이팅" */
-    fun headline(s: Settings, today: Long = Day.today()): String = listOfNotNull(
-        s.ddayDate?.let { listOf(s.ddayLabel.trim(), dday(it, today)).filter { p -> p.isNotEmpty() }.joinToString(" ") },
-        s.lockText.trim().ifEmpty { null },
-    ).joinToString(" · ")
 }

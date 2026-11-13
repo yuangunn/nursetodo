@@ -55,7 +55,8 @@ internal object Lk {
     val Missed = Color(0xFFFFA69E)
     val OnAccent = Color(0xFF0A0A0A)
     val Badge = Color(0xFFE5242F)
-    val Toast = Color(0xE02C2C2E)
+    // 불투명: 카드 바닥 완료 줄 위에 떠도 아래 글자가 비치지 않게
+    val Toast = Color(0xFF2C2C2E)
     val Control = Color(0x24FFFFFF)
     val Selected = Color(0x33FFFFFF)
 

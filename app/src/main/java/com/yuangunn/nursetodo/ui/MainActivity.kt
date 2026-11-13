@@ -165,6 +165,16 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
             if (result == SnackbarResult.ActionPerformed) TaskStore.restore(task)
         }
     }
+    val clearDone: (Long) -> Unit = { day ->
+        val gone = TaskStore.deleteDone(day)
+        if (gone.isNotEmpty()) {
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                val result = snackbar.showSnackbar("완료한 할 일 ${gone.size}개 지움", actionLabel = "되돌리기", duration = SnackbarDuration.Short)
+                if (result == SnackbarResult.ActionPerformed) TaskStore.restoreAll(gone)
+            }
+        }
+    }
 
     // 전체 화면 편집기(프리셋 고치기, 포켓북 붙여넣기)는 아래 탭 위에 덮어 그립니다.
     val overlay = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
@@ -203,9 +213,9 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
         Box(Modifier.padding(padding).consumeWindowInsets(padding)) {
             tabState.SaveableStateProvider(tab) {
                 when (tab) {
-                    0 -> TodayScreen(onEdit = { editing = it }, onDelete = delete)
+                    0 -> TodayScreen(onEdit = { editing = it }, onDelete = delete, onClearDone = clearDone)
                     1 -> PocketScreen()
-                    2 -> CalendarScreen(onEdit = { editing = it }, onDelete = delete)
+                    2 -> CalendarScreen(onEdit = { editing = it }, onDelete = delete, onClearDone = clearDone)
                     3 -> CalcScreen()
                     else -> SettingsScreen()
                 }

@@ -30,7 +30,7 @@ import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
 
 @Composable
-fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
+fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit, onClearDone: (Long) -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val today = Day.today()
@@ -43,16 +43,13 @@ fun TodayScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
             tasks = tasks,
             onEdit = onEdit,
             onDelete = onDelete,
+            onClearDone = { onClearDone(today) },
             modifier = Modifier.weight(1f),
             header = {
                 item(key = "header") {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
                         Text(Fmt.date(today), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("오늘", style = MaterialTheme.typography.headlineSmall)
-                        val headline = Fmt.headline(settings, today)
-                        if (headline.isNotEmpty()) {
-                            Text(headline, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        }
                         if (tasks.isNotEmpty()) {
                             // 진행 막대 4 (container 바탕, 강조 채움)와 '6개 중 1개 끝냄'
                             Row(

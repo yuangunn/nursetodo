@@ -601,7 +601,14 @@ private fun LockPage(
                     enter = expandVertically(tween(280, easing = Lk.Decel), expandFrom = Alignment.Bottom) + fadeIn(tween(280), initialAlpha = 0.4f),
                     exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Bottom) + fadeOut(tween(200), targetAlpha = 0.4f),
                 ) {
-                    DonePanel(done, today, onToggle = toggleTodo, onClose = closePanel)
+                    DonePanel(
+                        done, today, onToggle = toggleTodo,
+                        onClear = {
+                            val gone = TaskStore.deleteDone(today)
+                            if (gone.isNotEmpty()) show(Undo("완료한 할 일 ${gone.size}개 지움", PAGE_TODO, onUndo = { TaskStore.restoreAll(gone) }))
+                        },
+                        onClose = closePanel,
+                    )
                 }
                 Reveal(panel == Panel.ALARMS && alarms.isNotEmpty(), enter = enter, exit = exit) {
                     AlarmPanel(alarms, onOff = offAlarm, onClose = closePanel)
@@ -807,10 +814,19 @@ private fun DoneBar(done: List<Task>, today: Long, onOpen: () -> Unit) {
     }
 }
 
-/** 완료 목록(카드 자리를 채우는 패널): 끝낸 순서대로, 줄마다 끝낸 시각. 동그라미를 누르면 다시 할 일로. */
+/**
+ * 완료 목록(카드 자리를 채우는 패널): 끝낸 순서대로, 줄마다 끝낸 시각. 동그라미를 누르면 다시 할 일로.
+ * 지울 수 있는 것([Task.clearableOn])이 있으면 닫기 왼쪽에 '모두 지우기'(되돌리기 토스트).
+ */
 @Composable
-private fun DonePanel(done: List<Task>, today: Long, onToggle: (Task) -> Unit, onClose: () -> Unit) {
-    PanelFrame("완료 ${done.size}", "끝낸 순서예요. 동그라미를 누르면 다시 할 일로 돌아가요.", onClose) {
+private fun DonePanel(done: List<Task>, today: Long, onToggle: (Task) -> Unit, onClear: () -> Unit, onClose: () -> Unit) {
+    val routines = done.any { !it.clearableOn(today) }
+    PanelFrame(
+        "완료 ${done.size}",
+        "끝낸 순서예요. 동그라미를 누르면 다시 할 일로 돌아가요." + if (routines) " 루틴은 지우지 않고 내일 다시 나와요." else "",
+        onClose,
+        action = ("모두 지우기" to onClear).takeIf { done.any { it.clearableOn(today) } },
+    ) {
         Box(Modifier.height(4.dp))
         done.forEach { t -> DoneRow(t, today) { onToggle(t) } }
     }
@@ -1302,7 +1318,8 @@ private fun HandoffPanel(head: DutyHead, items: List<Task>, onCarry: () -> Unit,
                 Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.DividerSoft))
             }
         }
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 카드 모서리까지 옆·아래 간격을 같게(16), 완료·알림 패널과 같은 자리
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PillButton("${withRo(name)} 가져오기", onCarry, Modifier.fillMaxWidth(), filled = true)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PillButton("취소", onCancel, Modifier.weight(1f))
@@ -1425,7 +1442,7 @@ private fun PocketPage(pockets: List<Pocket>, onClear: (Pocket) -> Unit) {
             item(key = "hint") {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
                     Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
-                    Text("이름을 누르면 펼쳐져요. 포켓북은 앱 › 설정 › 포켓북에서 붙여 넣어 만들어요.", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(top = 8.dp))
+                    Text("이름을 누르면 펼쳐져요. 포켓북은 앱의 포켓북 탭에서 붙여 넣어 만들어요.", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }

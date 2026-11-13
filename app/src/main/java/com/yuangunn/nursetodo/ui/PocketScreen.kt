@@ -221,7 +221,7 @@ fun PocketScreen() {
                     Modifier
                         .padding(start = 16.dp, end = 16.dp, top = 16.dp)
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.large)
                         .padding(16.dp),
                 ) {
                     Text("붙여 넣는 형식", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 4.dp))
@@ -322,7 +322,7 @@ private fun PocketEditor(title: String, initial: String, onDelete: (() -> Unit)?
                 .weight(1f)
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                 .padding(12.dp),
         ) {
             if (preview) {
@@ -375,8 +375,8 @@ private fun PocketEditor(title: String, initial: String, onDelete: (() -> Unit)?
                         Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(8.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.background, MaterialTheme.shapes.small)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                             .clickable { value = insertAtLineStart(value, mark) },
                         contentAlignment = Alignment.Center,
                     ) { Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1) }

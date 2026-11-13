@@ -129,7 +129,7 @@ fun CalcScreen() {
             Modifier
                 .padding(top = 16.dp)
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.large)
                 .padding(16.dp),
         ) {
             Text("주입속도", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -227,7 +227,7 @@ private fun NumField(
         suffix = { Text(unit, modifier = Modifier.width(if (trailing != null) 24.dp else 32.dp)) },
         trailingIcon = trailing,
         singleLine = true,
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.small,
         textStyle = LocalTextStyle.current.copy(fontSize = 17.sp, lineHeight = 24.sp, textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = if (last) ImeAction.Done else ImeAction.Next),
         keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Next) }),

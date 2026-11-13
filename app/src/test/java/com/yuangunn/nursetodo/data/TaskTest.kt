@@ -93,12 +93,8 @@ class TaskTest {
 
     @Test
     fun formatting() {
-        assertEquals("D-3", Fmt.dday(today + 3, today))
-        assertEquals("D-DAY", Fmt.dday(today, today))
-        assertEquals("D+2", Fmt.dday(today - 2, today))
         assertEquals("평일", Fmt.repeat(0b0011111))
         assertEquals("월·수·금", Fmt.repeat(0b0010101))
         assertEquals("10월 22일 (목)", Fmt.date(today))
-        assertEquals("수능 D-3 · 화이팅", Fmt.headline(Settings(ddayLabel = "수능", ddayDate = today + 3, lockText = "화이팅"), today))
     }
 }

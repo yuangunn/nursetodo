@@ -13,8 +13,8 @@ android {
         applicationId = "com.yuangunn.nursetodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "2.3.0"
+        versionCode = 22
+        versionName = "2.4.0"
     }
 
     // 기본판은 파일로 설치되고, 알림판(다른 앱 알림 보기)은 Play 프로텍트가 파일 설치를 막아 컴퓨터(adb)로 설치합니다.
