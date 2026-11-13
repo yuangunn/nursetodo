@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -172,9 +173,9 @@ internal fun AppIcon(pkg: String, size: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** 빨간 개수 배지(1~9, 9+). 아이콘 오른쪽 위 모서리에서 4 나갑니다. */
+/** 빨간 개수 배지(1~9, 9+). 기본은 아이콘 오른쪽 위 모서리에서 4 나가고, [inline] 이면 제자리(줄 안 글자처럼). */
 @Composable
-internal fun Badge(count: Int, modifier: Modifier = Modifier) {
+internal fun Badge(count: Int, modifier: Modifier = Modifier, inline: Boolean = false) {
     Text(
         if (count > 9) "9+" else "$count",
         style = Lk.Caption.merge(Tnum),
@@ -182,7 +183,7 @@ internal fun Badge(count: Int, modifier: Modifier = Modifier) {
         color = Color.White,
         textAlign = TextAlign.Center,
         modifier = modifier
-            .offset(4.dp, (-4).dp)
+            .offset(if (inline) 0.dp else 4.dp, if (inline) 0.dp else (-4).dp)
             .height(18.dp)
             .widthIn(min = 18.dp)
             .background(Lk.Badge, RoundedCornerShape(9.dp))
@@ -452,9 +453,19 @@ internal fun AlarmRow(alarms: List<Alarm>, listOpen: Boolean, onToggleList: () -
     }
 }
 
-/** 카드 자리를 채우는 목록(알림·알람): 머리 줄, 스크롤 목록과 아래 안내, 맨 아래에 고정한 닫기 44. */
+/**
+ * 카드 자리를 채우는 목록(알림·알람·완료): 머리 줄, 스크롤 목록과 아래 안내, 맨 아래에 고정한 닫기 44.
+ * [action] 이 있으면 닫기 왼쪽에 같은 폭의 보조 버튼(알림 모두 지우기).
+ */
 @Composable
-private fun PanelFrame(title: String, hint: String, onClose: () -> Unit, closeLabel: String = "닫기", content: @Composable ColumnScope.() -> Unit) {
+internal fun PanelFrame(
+    title: String,
+    hint: String,
+    onClose: () -> Unit,
+    closeLabel: String = "닫기",
+    action: Pair<String, () -> Unit>? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(Modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -474,7 +485,10 @@ private fun PanelFrame(title: String, hint: String, onClose: () -> Unit, closeLa
             content()
             Text(hint, style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp))
         }
-        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { PillButton(closeLabel, onClose, Modifier.fillMaxWidth()) }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            action?.let { (label, run) -> PillButton(label, run, Modifier.weight(1f)) }
+            PillButton(closeLabel, onClose, Modifier.weight(1f))
+        }
     }
 }
 
@@ -486,10 +500,18 @@ private fun Divider(color: Color) = Box(
         .background(color),
 )
 
-/** 알림 목록: 최근 순, 줄을 누르면 잠금을 풀고 그 앱을 엽니다. */
+/**
+ * 알림 목록: 최근 순, 줄을 누르면 잠금을 풀고 그 앱을 엽니다. 줄 오른쪽 ✕ 는 그 알림을 지우고(알림 창에서도 사라짐),
+ * 아래 '모두 지우기'는 목록 전체를 지웁니다. 확인해서 끝난 알림을 잠금을 풀지 않고 정리하는 길.
+ */
 @Composable
-internal fun NotiPanel(notis: List<Noti>, onTap: (Noti) -> Unit, onClose: () -> Unit) {
-    PanelFrame("알림 ${notis.size}개", "누르면 잠금을 풀고 그 앱을 열어요.", onClose) {
+internal fun NotiPanel(notis: List<Noti>, onTap: (Noti) -> Unit, onDismiss: (Noti) -> Unit, onClearAll: () -> Unit, onClose: () -> Unit) {
+    PanelFrame(
+        "알림 ${notis.size}개",
+        "누르면 잠금을 풀고 그 앱을 열어요. ✕로 지운 알림은 알림 창에서도 사라져요.",
+        onClose,
+        action = ("모두 지우기" to onClearAll).takeIf { notis.size > 1 },
+    ) {
         if (notis.isEmpty()) {
             Text(
                 "새 알림이 없어요",
@@ -506,7 +528,7 @@ internal fun NotiPanel(notis: List<Noti>, onTap: (Noti) -> Unit, onClose: () -> 
                 Modifier
                     .fillMaxWidth()
                     .clickable(role = Role.Button) { onTap(n) }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AppIcon(n.pkg, 24.dp)
@@ -524,6 +546,14 @@ internal fun NotiPanel(notis: List<Noti>, onTap: (Noti) -> Unit, onClose: () -> 
                         if (n.text.isNotBlank()) Text(n.text, style = Lk.Body15, color = Lk.Text, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                // 첫 줄(앱 이름)에 맞춘 지우기: 보이는 ✕ 16, 누르는 칸 40
+                Press(
+                    { onDismiss(n) },
+                    Modifier
+                        .offset(y = (-11).dp)
+                        .size(40.dp)
+                        .semantics { contentDescription = "${n.app} 알림 지우기" },
+                ) { Icon(Icons.Default.Close, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(16.dp)) }
             }
             Divider(Lk.DividerSoft)
         }
@@ -564,65 +594,69 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
         var dragY by remember { mutableFloatStateOf(0f) }
         val rowPx = with(LocalDensity.current) { 48.dp.toPx() }
         (order ?: list).forEachIndexed { i, sc ->
-            val name = remember(sc) { Shortcuts.name(context, sc) }
-            val dragging = i == dragIndex
-            Row(
-                Modifier
-                    .zIndex(if (dragging) 1f else 0f)
-                    .graphicsLayer { translationY = if (dragging) dragY else 0f }
-                    .background(if (dragging) Lk.Toast else Color.Transparent)
-                    .pointerInput(sc.id) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                order = list
-                                dragIndex = list.indexOf(sc)
-                                dragY = 0f
-                            },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                val now = order ?: return@detectDragGesturesAfterLongPress
-                                dragY += amount.y
-                                val to = when {
-                                    dragY > rowPx / 2 && dragIndex + 1 < now.size -> dragIndex + 1
-                                    dragY < -rowPx / 2 && dragIndex > 0 -> dragIndex - 1
-                                    else -> return@detectDragGesturesAfterLongPress
-                                }
-                                order = now.toMutableList().apply { add(to, removeAt(dragIndex)) }
-                                dragY += if (to > dragIndex) -rowPx else rowPx
-                                dragIndex = to
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            },
-                            onDragEnd = {
-                                order?.let(save)
-                                order = null
-                                dragIndex = -1
-                            },
-                            onDragCancel = {
-                                order = null
-                                dragIndex = -1
-                            },
-                        )
+            // 줄을 바로가기 id 로 묶어, 끄는 중 자리가 바뀌어도 같은 줄(손가락 처리 포함)이 따라 움직이게 합니다.
+            // 위치로만 그리면 자리가 바뀌는 순간 그 칸의 pointerInput 키가 달라져 끌기가 취소됩니다(실기기·에뮬레이터 재현).
+            key(sc.id) {
+                val name = remember(sc) { Shortcuts.name(context, sc) }
+                val dragging = i == dragIndex
+                Row(
+                    Modifier
+                        .zIndex(if (dragging) 1f else 0f)
+                        .graphicsLayer { translationY = if (dragging) dragY else 0f }
+                        .background(if (dragging) Lk.Toast else Color.Transparent)
+                        .pointerInput(sc.id, list) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    order = list
+                                    dragIndex = list.indexOf(sc)
+                                    dragY = 0f
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    val now = order ?: return@detectDragGesturesAfterLongPress
+                                    dragY += amount.y
+                                    val to = when {
+                                        dragY > rowPx / 2 && dragIndex + 1 < now.size -> dragIndex + 1
+                                        dragY < -rowPx / 2 && dragIndex > 0 -> dragIndex - 1
+                                        else -> return@detectDragGesturesAfterLongPress
+                                    }
+                                    order = now.toMutableList().apply { add(to, removeAt(dragIndex)) }
+                                    dragY += if (to > dragIndex) -rowPx else rowPx
+                                    dragIndex = to
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                onDragEnd = {
+                                    order?.let(save)
+                                    order = null
+                                    dragIndex = -1
+                                },
+                                onDragCancel = {
+                                    order = null
+                                    dragIndex = -1
+                                },
+                            )
+                        }
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(Icons.Default.Menu, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp))
+                    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { ShortcutIcon(sc, 20.dp) }
+                    Text(
+                        // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
+                        if (i >= slots) "$name · 칸이 모자라 안 보여요" else name,
+                        style = Lk.Body15,
+                        color = if (i >= slots) Lk.Muted else Lk.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Press({ save(list - sc) }, Modifier.size(40.dp).semantics { contentDescription = "$name 빼기" }) {
+                        Icon(Icons.Default.Close, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(18.dp))
                     }
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(start = 16.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(Icons.Default.Menu, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp))
-                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { ShortcutIcon(sc, 20.dp) }
-                Text(
-                    // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
-                    if (i >= slots) "$name · 칸이 모자라 안 보여요" else name,
-                    style = Lk.Body15,
-                    color = if (i >= slots) Lk.Muted else Lk.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Press({ save(list - sc) }, Modifier.size(40.dp).semantics { contentDescription = "$name 빼기" }) {
-                    Icon(Icons.Default.Close, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -761,8 +795,8 @@ internal fun SettingsButton(onClick: () -> Unit) = RoundButton("설정", onClick
 }
 
 /**
- * 근무·포켓북 페이지의 알림 버튼. 알림이 없으면 유리 원과 종, 있으면 최근 앱 아이콘이 앞(다음 앱은 뒤에 8만 보임)과 전체 개수 배지.
- * 목록이 열린 동안은 옅은 바탕.
+ * 근무·포켓북 페이지의 알림 버튼. 알림이 없으면 유리 원과 종, 있으면 할 일 페이지 알림 줄과 같은 옅은 알약 안에
+ * 종 · 앱 아이콘(최근 2개, 나란히) · 빨간 전체 개수. 아이콘·배지를 겹치지 않고 한 줄에 둡니다. 목록이 열린 동안은 진한 바탕.
  */
 @Composable
 internal fun BellButton(notis: List<Noti>, open: Boolean, onClick: () -> Unit) {
@@ -773,28 +807,27 @@ internal fun BellButton(notis: List<Noti>, open: Boolean, onClick: () -> Unit) {
         return
     }
     val apps = notis.map { it.pkg }.distinct().take(2)
-    // 배지는 버튼 밖에 그려 알약 모서리에 잘리지 않게 합니다.
-    Box {
-        Press(
-            onClick,
-            Modifier
-                .height(44.dp)
-                .semantics {
-                    contentDescription = "알림 ${notis.size}개 보기"
-                    stateDescription = if (open) "펼침" else "접힘"
-                },
-            shape = Pill,
-            color = if (open) Lk.Selected else Color.Transparent,
+    Press(
+        onClick,
+        Modifier
+            .height(44.dp)
+            .semantics {
+                contentDescription = "알림 ${notis.size}개 보기"
+                stateDescription = if (open) "펼침" else "접힘"
+            },
+        shape = Pill,
+        color = if (open) Lk.Selected else Lk.Rail,
+        border = Lk.Edge,
+    ) {
+        Row(
+            Modifier.padding(start = 12.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(Modifier.padding(start = 4.dp, end = 8.dp)) {
-                if (apps.size > 1) AppIcon(apps[1], 36.dp)
-                Box(Modifier.padding(start = if (apps.size > 1) 8.dp else 0.dp)) {
-                    AppIcon(apps[0], 36.dp, Modifier.border(2.dp, Color.Black.copy(alpha = 0.45f), CircleShape))
-                }
-            }
+            Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Lk.Body, modifier = Modifier.size(16.dp))
+            apps.forEach { AppIcon(it, 24.dp) }
+            Badge(notis.size, Modifier.clearAndSetSemantics {}, inline = true)
         }
-        // 앞 아이콘(오른쪽 끝에서 8 안, 위에서 4 아래)의 오른쪽 위 모서리
-        Badge(notis.size, Modifier.align(Alignment.TopEnd).offset((-8).dp, 4.dp).clearAndSetSemantics {})
     }
 }
 

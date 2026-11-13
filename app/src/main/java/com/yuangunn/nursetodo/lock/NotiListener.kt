@@ -146,5 +146,24 @@ class NotiListener : NotificationListenerService() {
             }
             if (n.autoCancel) instance?.cancelNotification(n.key)
         }
+
+        /**
+         * 알림 창에서 밀어 지우듯 그 알림들을 지웁니다(되돌릴 수 없음). 목록은 onNotificationRemoved 로 다시 읽힙니다.
+         * 묶음의 마지막 알림이면 묶음 요약도 함께 지웁니다 — 요약만 남으면 알림 창에 빈 묶음('앱 이름 · 시각')이 남습니다.
+         */
+        fun dismiss(keys: List<String>) {
+            val l = instance ?: return
+            if (keys.isEmpty()) return
+            runCatching {
+                val gone = keys.toSet()
+                val active = l.activeNotifications.orEmpty()
+                val summaries = active.filter { s ->
+                    s.isClearable && s.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 &&
+                        active.any { it.groupKey == s.groupKey && it.key in gone } &&
+                        active.none { it.groupKey == s.groupKey && it.key != s.key && it.key !in gone }
+                }.map { it.key }
+                l.cancelNotifications((gone + summaries).toTypedArray())
+            }
+        }
     }
 }

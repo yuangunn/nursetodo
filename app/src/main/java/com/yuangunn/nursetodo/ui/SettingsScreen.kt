@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -508,54 +509,58 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
     val rowPx = with(LocalDensity.current) { 48.dp.toPx() }
     val shown = order ?: s.shortcuts
     shown.forEachIndexed { i, sc ->
-        val name = remember(sc) { Shortcuts.name(context, sc) }
-        val dragging = i == dragIndex
-        Box(
-            Modifier
-                .zIndex(if (dragging) 1f else 0f)
-                .graphicsLayer { translationY = if (dragging) dragY else 0f }
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .pointerInput(sc.id) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            order = s.shortcuts
-                            dragIndex = s.shortcuts.indexOf(sc)
-                            dragY = 0f
-                        },
-                        onDrag = { change, amount ->
-                            change.consume()
-                            val list = order ?: return@detectDragGesturesAfterLongPress
-                            dragY += amount.y
-                            val to = when {
-                                dragY > rowPx / 2 && dragIndex + 1 < list.size -> dragIndex + 1
-                                dragY < -rowPx / 2 && dragIndex > 0 -> dragIndex - 1
-                                else -> return@detectDragGesturesAfterLongPress
-                            }
-                            order = list.toMutableList().apply { add(to, removeAt(dragIndex)) }
-                            dragY += if (to > dragIndex) -rowPx else rowPx
-                            dragIndex = to
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        },
-                        onDragEnd = {
-                            order?.let(save)
-                            order = null
-                            dragIndex = -1
-                        },
-                        onDragCancel = {
-                            order = null
-                            dragIndex = -1
-                        },
-                    )
-                }
-                .clickable { renaming = i },
-        ) {
-            RemovableRow(
-                // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
-                if (i >= slots) "$name (칸이 모자라 안 보여요)" else name,
-                onRemove = { save(s.shortcuts.filterIndexed { j, _ -> j != i }) },
-                leading = { ShortcutIcon(sc) },
-            )
+        // 줄을 바로가기 id 로 묶어, 끄는 중 자리가 바뀌어도 같은 줄(손가락 처리 포함)이 따라 움직이게 합니다.
+        // 위치로만 그리면 자리가 바뀌는 순간 그 칸의 pointerInput 키가 달라져 끌기가 취소됩니다.
+        key(sc.id) {
+            val name = remember(sc) { Shortcuts.name(context, sc) }
+            val dragging = i == dragIndex
+            Box(
+                Modifier
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer { translationY = if (dragging) dragY else 0f }
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                    .pointerInput(sc.id, s.shortcuts) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                order = s.shortcuts
+                                dragIndex = s.shortcuts.indexOf(sc)
+                                dragY = 0f
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                val list = order ?: return@detectDragGesturesAfterLongPress
+                                dragY += amount.y
+                                val to = when {
+                                    dragY > rowPx / 2 && dragIndex + 1 < list.size -> dragIndex + 1
+                                    dragY < -rowPx / 2 && dragIndex > 0 -> dragIndex - 1
+                                    else -> return@detectDragGesturesAfterLongPress
+                                }
+                                order = list.toMutableList().apply { add(to, removeAt(dragIndex)) }
+                                dragY += if (to > dragIndex) -rowPx else rowPx
+                                dragIndex = to
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            },
+                            onDragEnd = {
+                                order?.let(save)
+                                order = null
+                                dragIndex = -1
+                            },
+                            onDragCancel = {
+                                order = null
+                                dragIndex = -1
+                            },
+                        )
+                    }
+                    .clickable { renaming = i },
+            ) {
+                RemovableRow(
+                    // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
+                    if (i >= slots) "$name (칸이 모자라 안 보여요)" else name,
+                    onRemove = { save(s.shortcuts.filterIndexed { j, _ -> j != i }) },
+                    leading = { ShortcutIcon(sc) },
+                )
+            }
         }
     }
     if (s.shortcuts.size < slots) AddRow("바로가기 추가") { picking = true } else SetRow("${slots}칸이 다 찼어요", "빼거나 모양을 바꾸면 더 넣을 수 있어요.")

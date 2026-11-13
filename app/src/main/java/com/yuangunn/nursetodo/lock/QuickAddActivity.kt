@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -63,7 +64,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.Icon
@@ -78,7 +78,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +85,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -272,7 +272,7 @@ internal const val GRACE_MS = 30 * 60_000L
 /** 이만큼 위로 밀고 떼면 잠금 해제 */
 private val UNLOCK_DRAG = 120.dp
 
-private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF, SHORTCUTS }
+private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF, SHORTCUTS, DONE }
 
 @Composable
 private fun LockPage(
@@ -332,6 +332,10 @@ private fun LockPage(
     BackHandler(enabled = editingId != null) { editingId = null }
     BackHandler(enabled = askingAlarm) { askingAlarm = false }
     BackHandler(enabled = panel != Panel.NONE) { closePanel() }
+    // 목록이 비면(알림을 다 지움, 완료를 다 되돌림) 패널을 닫습니다.
+    LaunchedEffect(notis.isEmpty(), done.isEmpty()) {
+        if ((panel == Panel.NOTIS && notis.isEmpty()) || (panel == Panel.DONE && done.isEmpty())) closePanel()
+    }
     // 키보드를 쓰는 동안엔 키워드 카드·알람 줄·바로가기·안내를 접어 자리를 만듭니다.
     val typing = adding || editingId != null
     // 지워진 앱은 빼고 고른 모양의 칸 수까지
@@ -566,6 +570,7 @@ private fun LockPage(
                         }
                         else -> TodoPage(
                             todo, done, today, listState, editingId, { editingId = it }, onOpenApp, toggleTodo,
+                            onOpenDone = { panel = Panel.DONE },
                             notis = notis,
                             rail = NotiListener.available(context),
                             onRail = { panel = Panel.NOTIS },
@@ -578,7 +583,25 @@ private fun LockPage(
                 val enter = expandVertically(tween(280, easing = Lk.Decel), expandFrom = Alignment.Top) + fadeIn(tween(280), initialAlpha = 0.4f)
                 val exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) + fadeOut(tween(200), targetAlpha = 0.4f)
                 Reveal(panel == Panel.NOTIS, enter = enter, exit = exit) {
-                    NotiPanel(notis, onTap = { n -> closePanel(); onOpenNoti(n) }, onClose = closePanel)
+                    NotiPanel(
+                        notis,
+                        onTap = { n -> closePanel(); onOpenNoti(n) },
+                        onDismiss = { n -> NotiListener.dismiss(listOf(n.key)) },
+                        onClearAll = {
+                            NotiListener.dismiss(notis.map { it.key })
+                            closePanel()
+                        },
+                        onClose = closePanel,
+                    )
+                }
+                // 완료 목록은 카드 바닥의 완료 줄에서 열리니 아래에서 위로 펼칩니다.
+                Reveal(
+                    panel == Panel.DONE && done.isNotEmpty() && page == PAGE_TODO,
+                    Modifier.align(Alignment.BottomCenter),
+                    enter = expandVertically(tween(280, easing = Lk.Decel), expandFrom = Alignment.Bottom) + fadeIn(tween(280), initialAlpha = 0.4f),
+                    exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Bottom) + fadeOut(tween(200), targetAlpha = 0.4f),
+                ) {
+                    DonePanel(done, today, onToggle = toggleTodo, onClose = closePanel)
                 }
                 Reveal(panel == Panel.ALARMS && alarms.isNotEmpty(), enter = enter, exit = exit) {
                     AlarmPanel(alarms, onOff = offAlarm, onClose = closePanel)
@@ -663,8 +686,9 @@ private fun LockPage(
 }
 
 /**
- * 할 일 페이지: 동그라미 · 글자 · 오른쪽 만든 시각, 맨 아래 접힌 '완료' 묶음(끝낸 순서, 끝낸 시각).
- * 알림이 있으면 오른쪽 아래에 알림 세로 줄(알림판) — 그 폭만큼 줄을 비워 글자와 겹치지 않게 하고, 빈 안내는 카드 전체의 가운데.
+ * 할 일 페이지: 위는 할 일 목록(동그라미 · 글자 · 오른쪽 만든 시각), 끝낸 일이 있으면 카드 바닥에 '완료' 줄을 고정합니다.
+ * 완료 줄은 목록 길이와 상관없이 늘 같은 자리(바닥)라 찾기 쉽고, 누르면 카드 자리에 완료 목록이 열립니다([onOpenDone]).
+ * 알림이 있으면 목록 칸의 오른쪽 아래에 알림 세로 줄(알림판) — 그 폭만큼 줄을 비우고, 빈 안내는 목록 칸 전체의 가운데.
  */
 @Composable
 private fun TodoPage(
@@ -676,6 +700,7 @@ private fun TodoPage(
     onEditing: (Long?) -> Unit,
     onOpenApp: () -> Unit,
     onToggle: (Task) -> Unit,
+    onOpenDone: () -> Unit,
     notis: List<Noti>,
     rail: Boolean,
     onRail: () -> Unit,
@@ -686,58 +711,57 @@ private fun TodoPage(
     val showRail = rail && notis.isNotEmpty()
     // 알림 줄 44 + 사이 12
     val side = if (showRail) 56.dp else 0.dp
-    var doneOpen by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
+    Column(Modifier.fillMaxSize()) {
+        Box(
             Modifier
-                .fillMaxSize()
-                .fadeEdges(),
-            state = state,
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            if (list.isEmpty()) {
-                item(key = "empty") {
-                    EmptyState(
-                        Icons.Default.CheckCircle,
-                        if (done.isEmpty()) "할 일이 없어요" else "오늘 할 일을 다 끝냈어요",
-                        when {
-                            done.isNotEmpty() -> "끝낸 일은 아래 완료에 있어요."
-                            dutyPage -> "아래 할 일 추가로 적거나, 근무로 넘겨 교대 할 일을 보세요."
-                            else -> "아래 할 일 추가로 적어요."
-                        },
-                        Modifier
-                            .fillParentMaxHeight(if (done.isEmpty()) 1f else 0.8f)
-                            .fillMaxWidth()
-                            .padding(horizontal = side),
-                    )
+            LazyColumn(
+                Modifier
+                    .fillMaxSize()
+                    .fadeEdges(),
+                state = state,
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+            ) {
+                if (list.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyState(
+                            Icons.Default.CheckCircle,
+                            if (done.isEmpty()) "할 일이 없어요" else "오늘 할 일을 다 끝냈어요",
+                            when {
+                                done.isNotEmpty() -> "끝낸 일은 아래 완료에서 볼 수 있어요."
+                                dutyPage -> "아래 할 일 추가로 적거나, 근무로 넘겨 교대 할 일을 보세요."
+                                else -> "아래 할 일 추가로 적어요."
+                            },
+                            Modifier
+                                .fillParentMaxHeight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = side),
+                        )
+                    }
                 }
-            }
-            items(list, key = { it.id }) { t ->
-                Box(Modifier.animateItem().padding(end = side)) {
-                    TodoRow(
-                        t, on = t.isDone(today), today = today,
-                        editing = t.id == editingId,
-                        onEditing = { on -> onEditing(if (on) t.id else null) },
-                        onOpenApp = onOpenApp,
-                        onToggle = { onToggle(t) },
-                    )
-                }
-            }
-            if (done.isNotEmpty()) {
-                item(key = "done") {
-                    DoneHeader(done.size, doneOpen, Modifier.animateItem().padding(end = side)) { doneOpen = !doneOpen }
-                }
-                if (doneOpen) {
-                    items(done, key = { "d" + it.id }) { t ->
-                        Box(Modifier.animateItem().padding(end = side)) { DoneRow(t, today) { onToggle(t) } }
+                items(list, key = { it.id }) { t ->
+                    Box(Modifier.animateItem().padding(end = side)) {
+                        TodoRow(
+                            t, on = t.isDone(today), today = today,
+                            editing = t.id == editingId,
+                            onEditing = { on -> onEditing(if (on) t.id else null) },
+                            onOpenApp = onOpenApp,
+                            onToggle = { onToggle(t) },
+                        )
                     }
                 }
             }
+            if (addInCard) {
+                Box(Modifier.align(Alignment.BottomEnd).padding(end = side, bottom = 8.dp)) { MemoButton(onAdd) }
+            }
+            // 되돌리기 토스트(카드 바닥에서 8 + 높이 56)에 가리지 않게: 완료 줄이 있으면 그 위 24, 없으면 52
+            if (showRail) {
+                NotiRail(notis, onRail, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = if (done.isEmpty()) 52.dp else 24.dp))
+            }
         }
-        if (addInCard) {
-            Box(Modifier.align(Alignment.BottomEnd).padding(end = side, bottom = 8.dp)) { MemoButton(onAdd) }
-        }
-        if (showRail) NotiRail(notis, onRail, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 52.dp))
+        if (done.isNotEmpty()) DoneBar(done, today, onOpenDone)
     }
 }
 
@@ -746,41 +770,60 @@ internal fun doneToday(tasks: List<Task>, today: Long, recent: Set<Long> = empty
     tasks.filter { (!preset || it.shift == null) && it.isDone(today) && it.id !in recent }
         .sortedBy { it.doneAtOn(today) ?: 0L }
 
-/** '완료 3' 접기·펼치기 줄. */
+/**
+ * 카드 바닥에 고정한 완료 줄(높이 48, 위 가는 선, 바탕 흰 6%): 강조색 체크 · '완료 3' · '마지막 21:54' · 위 화살표.
+ * 누르면 카드 자리에 완료 목록이 열립니다.
+ */
 @Composable
-private fun DoneHeader(count: Int, open: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .semantics {
-                contentDescription = "완료 ${count}개"
-                stateDescription = if (open) "펼침" else "접힘"
-            }
-            .heightIn(min = 40.dp)
-            .padding(start = 14.dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("완료 $count", style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Body, modifier = Modifier.weight(1f))
-        Icon(
-            if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-            contentDescription = null,
-            tint = Lk.Muted,
-            modifier = Modifier.size(20.dp),
+private fun DoneBar(done: List<Task>, today: Long, onOpen: () -> Unit) {
+    val accent = LocalLockAccent.current
+    val last = done.lastOrNull()?.doneAtOn(today)
+    Column {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Lk.Divider),
         )
+        Press(
+            onOpen,
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .semantics { contentDescription = "완료 ${done.size}개 보기" + (last?.let { ", 마지막 " + Fmt.clock(it, today) } ?: "") },
+            shape = RoundedCornerShape(0.dp),
+            color = Color.White.copy(alpha = 0.06f),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(Modifier.padding(start = 16.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("완료 ${done.size}", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text, modifier = Modifier.weight(1f))
+                last?.let { Text("마지막 " + Fmt.clock(it, today), style = Lk.Caption.merge(Tnum), color = Lk.Muted) }
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }
 
-/** 완료 묶음의 한 줄: 채운 동그라미(누르면 다시 할 일로) · 흐린 취소선 글자 · 오른쪽 끝낸 시각. */
+/** 완료 목록(카드 자리를 채우는 패널): 끝낸 순서대로, 줄마다 끝낸 시각. 동그라미를 누르면 다시 할 일로. */
+@Composable
+private fun DonePanel(done: List<Task>, today: Long, onToggle: (Task) -> Unit, onClose: () -> Unit) {
+    PanelFrame("완료 ${done.size}", "끝낸 순서예요. 동그라미를 누르면 다시 할 일로 돌아가요.", onClose) {
+        Box(Modifier.height(4.dp))
+        done.forEach { t -> DoneRow(t, today) { onToggle(t) } }
+    }
+}
+
+/** 완료 목록의 한 줄: 채운 동그라미(누르면 다시 할 일로) · 흐린 취소선 글자 · 오른쪽 끝낸 시각. */
 @Composable
 private fun DoneRow(task: Task, today: Long, onToggle: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .padding(start = 6.dp, end = 8.dp),
+            .padding(start = 6.dp, end = 12.dp),
         verticalAlignment = Alignment.Top,
     ) {
         CheckCircle(true, Lk.Body, "체크 풀기: " + task.title, onClick = onToggle)
