@@ -3,7 +3,7 @@ package com.yuangunn.nursetodo.data
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** 사용기한 계산기의 자주 쓰는 기한. [name] 이 비면 '28일'처럼 기간만 보입니다. */
+/** 사용기한 계산기의 자주 쓰는 기한. [name] 이 비면 '7일'처럼 기간만 보입니다. */
 data class ExpiryPreset(val name: String, val amount: Int, val unit: Int) {
     val label: String get() = Expiry.period(amount, unit).let { if (name.isBlank()) it else "${name.trim()} · $it" }
 }
@@ -33,8 +33,8 @@ object Expiry {
 
     /**
      * [start] 부터 [amount][unit] 뒤 기한.
-     * - 기본은 시작한 다음 날이 1일째: 28일 → 시작일 + 28일(1일 개봉이면 29일). 다회용 바이알 '첫 천공 후 28일'(USP 797) 셈과 같습니다.
-     * - [firstDay] 면 시작한 날이 1일째: 28일 → 시작일 + 27일(1일 개봉이면 28일). 기관 지침이 이렇게 세면 켭니다.
+     * - 기본은 시작한 다음 날이 1일째: N일 → 시작일 + N일(1일에 열고 7일이면 8일까지). '개봉 후 N일'을 연 때부터 N일 뒤로 보는 셈.
+     * - [firstDay] 면 시작한 날이 1일째: N일 → 시작일 + N − 1일(1일에 열고 7일이면 7일까지). 기관 지침이 이렇게 세면 켭니다.
      * 시간은 그대로 더하고, 개월은 달력 달로 더합니다(1월 31일 + 1개월 = 2월 말일).
      */
     fun until(start: LocalDateTime, amount: Int, unit: Int, firstDay: Boolean): LocalDateTime {

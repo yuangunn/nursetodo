@@ -1,5 +1,14 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.text.KeyboardActions
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.widget.Toast
@@ -71,10 +80,10 @@ import java.time.temporal.ChronoUnit
 private val Pill = RoundedCornerShape(50)
 
 /**
- * 사용기한 계산기: 개봉·멸균·조제한 날(시간 단위면 시각도) + 기간(시간·일·주·개월)으로 '○까지'.
- * 자주 쓰는 기한은 칩(누르면 채움, 길게 누르면 빼기, '+ 저장'으로 이름 붙여 넣기). 시작한 날을 1일째로 셀지는 기관마다 달라 고르게 하고 저장합니다.
- * 제조사 유효기간을 넣으면 더 빠른 날을 씁니다(다회용 바이알 28일 규칙과 같은 원칙). 결과는 남은 날, 적어 붙일 라벨 줄, 기한 날의 할 일로 넣기.
- * 적은 값은 기기에 저장하지 않습니다(공용 폰).
+ * 사용기한 계산기: 물품마다 정해진 기간(시간·일·주·개월)을 넣으면 시작한 날(개봉·부착·조제 등, 기본 오늘)부터 '○까지'를 바로 계산합니다.
+ * 기간 칸이 맨 위이고 비어 있으면 열자마자 커서. 자주 쓰는 기한은 칩(누르면 채움, 길게 누르면 빼기, '+ 저장'으로 이름 붙여 넣기).
+ * 결과 아래 접힌 옵션: 제조사 유효기간(더 빠른 날로), 시작한 날을 1일째로 세기(기관마다 달라 저장, 설명은 지금 값으로 두 경우를 계산해 보여 줌).
+ * 결과는 남은 날, 적어 붙일 라벨 줄, 기한 날의 할 일로 넣기. 적은 값은 기기에 저장하지 않습니다(공용 폰).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -92,6 +101,11 @@ internal fun ExpiryCalc(clear: Int) {
     var saving by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<ExpiryPreset?>(null) }
     var seen by rememberSaveable { mutableIntStateOf(clear) }
+    var optionsOpen by rememberSaveable { mutableStateOf(false) }
+    val amountFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    // 사용기한을 열면 기간이 비었을 때 바로 숫자를 칠 수 있게
+    LaunchedEffect(Unit) { if (amount.isEmpty()) amountFocus.requestFocus() }
     LaunchedEffect(clear) {
         if (clear != seen) {
             seen = clear
@@ -102,6 +116,7 @@ internal fun ExpiryCalc(clear: Int) {
             unit = Expiry.DAYS
             name = ""
             maker = null
+            amountFocus.requestFocus()
         }
     }
     // 값을 고치면 '할 일에 넣음' 표시는 지웁니다.
@@ -123,18 +138,7 @@ internal fun ExpiryCalc(clear: Int) {
             }
             PresetChip("+ 저장", on = false, enabled = n != null, onClick = { saving = true })
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PickField("시작한 날", Fmt.date(startDay), Modifier.weight(1f)) {
-                val d = LocalDate.ofEpochDay(startDay)
-                DatePickerDialog(context, { _, y, m, dd -> startDay = LocalDate.of(y, m + 1, dd).toEpochDay() }, d.year, d.monthValue - 1, d.dayOfMonth).show()
-            }
-            if (hours) {
-                PickField("시각", clock(startMin), Modifier.width(112.dp)) {
-                    TimePickerDialog(context, { _, h, m -> startMin = h * 60 + m }, startMin / 60, startMin % 60, true).show()
-                }
-            }
-        }
-        Text("개봉·멸균·조제한 날이에요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+        // 기간이 먼저: 비어 있으면 열자마자 이 칸에 커서(숫자 키보드)
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = amount,
@@ -146,49 +150,30 @@ internal fun ExpiryCalc(clear: Int) {
                 singleLine = true,
                 shape = MaterialTheme.shapes.small,
                 textStyle = LocalTextStyle.current.copy(fontSize = 17.sp, lineHeight = 24.sp, textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 modifier = Modifier
                     .width(96.dp)
-                    .heightIn(min = 48.dp),
+                    .heightIn(min = 48.dp)
+                    .focusRequester(amountFocus),
             )
             Segmented(Expiry.UNITS, unit, Modifier.weight(1f).padding(bottom = 4.dp)) {
                 unit = it
                 name = ""
             }
         }
-        PickField(
-            "제조사 유효기간 (선택)",
-            maker?.let { Fmt.date(it) } ?: "",
-            Modifier.fillMaxWidth(),
-            placeholder = "넣으면 더 빠른 날로 계산해요",
-            onClear = maker?.let { { maker = null } },
-        ) {
-            val d = maker?.let(LocalDate::ofEpochDay) ?: LocalDate.ofEpochDay(startDay).plusMonths(1)
-            DatePickerDialog(context, { _, y, m, dd -> maker = LocalDate.of(y, m + 1, dd).toEpochDay() }, d.year, d.monthValue - 1, d.dayOfMonth).show()
-        }
-        if (!hours) {
-            // 기관 지침에 따라 고르고 저장. 칸들과 왼쪽을 맞추고 설정 줄 선은 긋지 않습니다.
-            val firstDay = s.expiryFirstDay
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .clickable(role = Role.Switch) { TaskStore.updateSettings { it.copy(expiryFirstDay = !firstDay) } }
-                    .padding(start = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("시작한 날을 1일째로 세기", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        if (firstDay) "1일에 열고 28일이면 28일까지" else "1일에 열고 28일이면 29일까지 (다음 날이 1일째)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PickField("시작한 날", Fmt.date(startDay), Modifier.weight(1f)) {
+                val d = LocalDate.ofEpochDay(startDay)
+                DatePickerDialog(context, { _, y, m, dd -> startDay = LocalDate.of(y, m + 1, dd).toEpochDay() }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+            }
+            if (hours) {
+                PickField("시각", clock(startMin), Modifier.width(112.dp)) {
+                    TimePickerDialog(context, { _, h, m -> startMin = h * 60 + m }, startMin / 60, startMin % 60, true).show()
                 }
-                AppSwitch(firstDay) { v -> TaskStore.updateSettings { it.copy(expiryFirstDay = v) } }
             }
         }
+        Text("개봉·부착·조제처럼 시작한 날이에요. 기본은 오늘.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
 
         // 결과
         Column(
@@ -266,6 +251,80 @@ internal fun ExpiryCalc(clear: Int) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                 Text("기한은 참고용입니다. 제조사 설명서와 기관 지침을 반드시 확인하세요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        // 옵션: 자주 바꾸지 않아 접어 두고, 켠 것은 접힌 줄에 보입니다(결과가 달라지므로).
+        val firstDay = s.expiryFirstDay
+        val optionSummary = listOfNotNull(
+            "시작한 날 1일째".takeIf { firstDay && !hours },
+            maker?.let { "제조사 ${md(LocalDate.ofEpochDay(it))}" },
+        ).joinToString(" · ")
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(role = Role.Button) { optionsOpen = !optionsOpen }
+                .semantics { stateDescription = if (optionsOpen) "펼침" else "접힘" }
+                .padding(start = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("옵션", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                optionSummary.ifEmpty { "제조사 유효기간 · 날짜 세는 법" },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (optionSummary.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (optionsOpen) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        if (optionsOpen) {
+            PickField(
+                "제조사 유효기간 (선택)",
+                maker?.let { Fmt.date(it) } ?: "",
+                Modifier.fillMaxWidth(),
+                onClear = maker?.let { { maker = null } },
+            ) {
+                val d = maker?.let(LocalDate::ofEpochDay) ?: LocalDate.ofEpochDay(startDay).plusMonths(1)
+                DatePickerDialog(context, { _, y, m, dd -> maker = LocalDate.of(y, m + 1, dd).toEpochDay() }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+            }
+            Text("넣으면 계산한 날과 둘 중 빠른 날로 잡아요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+            if (!hours) {
+                // 기관 지침에 따라 고르고 저장. 설명은 지금 넣은 값으로 두 가지를 다 보여 줍니다.
+                val off = n?.let { Expiry.until(start, it, unit, false).toLocalDate() }
+                val on = n?.let { Expiry.until(start, it, unit, true).toLocalDate() }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .clickable(role = Role.Switch) { TaskStore.updateSettings { it.copy(expiryFirstDay = !firstDay) } }
+                        .padding(start = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("시작한 날을 1일째로 세기", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (on == null || off == null) {
+                                "끄면 다음 날이 1일째, 켜면 시작한 날이 1일째예요."
+                            } else {
+                                "켜면 ${md(on)}까지 · 끄면 ${md(off)}까지 (${md(start.toLocalDate())} 시작, ${Expiry.period(n, unit)})"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    AppSwitch(firstDay) { v -> TaskStore.updateSettings { it.copy(expiryFirstDay = v) } }
+                }
             }
         }
     }

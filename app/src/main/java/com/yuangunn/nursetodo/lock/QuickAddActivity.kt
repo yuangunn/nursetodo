@@ -1114,26 +1114,49 @@ private fun DutyPage(
         return
     }
     val lastCarried = list.lastOrNull { it.carried != null }?.id
+    // 앞 근무에서 넘어온 것 · 시간별(시각순) · 이번 근무 할 일(시각 없음, 끝낸 수/전체). dutyOrder 순서를 그대로 나눕니다.
+    val carried = list.filter { it.carried != null }
+    val timed = list.filter { it.carried == null && it.due != null }
+    val other = list.filter { it.carried == null && it.due == null }
+    val row: @Composable (Task) -> Unit = { t ->
+        DutyRow(
+            t, states[t.id] ?: Duty.REST, today,
+            editing = t.id == editingId,
+            onEditing = { on -> onEditing(if (on) t.id else null) },
+            menuOpen = t.id == menuId,
+            onMenu = { o -> onMenu(if (o) t.id else null) },
+            menu = { menuFor(t) },
+            subsOpen = t.id in open,
+            onSubs = { open = if (t.id in open) open - t.id else open + t.id },
+        )
+    }
     LazyColumn(Modifier.fillMaxSize().fadeEdges(), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "head") { header() }
-        items(list, key = { it.id }) { t ->
+        items(carried, key = { it.id }) { t ->
             Column(Modifier.animateItem()) {
-                if (t.carried != null && t.id == list.first().id) {
+                if (t.id == carried.first().id) {
                     Text("${t.carried}에서 넘어옴", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
                 }
-                DutyRow(
-                    t, states[t.id] ?: Duty.REST, today,
-                    editing = t.id == editingId,
-                    onEditing = { on -> onEditing(if (on) t.id else null) },
-                    menuOpen = t.id == menuId,
-                    onMenu = { o -> onMenu(if (o) t.id else null) },
-                    menu = { menuFor(t) },
-                    subsOpen = t.id in open,
-                    onSubs = { open = if (t.id in open) open - t.id else open + t.id },
-                )
+                row(t)
                 if (t.id == lastCarried) Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp).fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
             }
         }
+        // 두 묶음이 다 있을 때만 '시간별' 이름을 붙입니다(시간별만 있으면 예전처럼 이름 없이).
+        if (timed.isNotEmpty() && other.isNotEmpty()) item(key = "timedHead") { SectionHead("시간별") }
+        items(timed, key = { it.id }) { t -> Box(Modifier.animateItem()) { row(t) } }
+        if (other.isNotEmpty()) {
+            item(key = "otherHead") { SectionHead("이번 근무 할 일", "${other.count { it.doneOn != null }}/${other.size}") }
+            items(other, key = { it.id }) { t -> Box(Modifier.animateItem()) { row(t) } }
+        }
+    }
+}
+
+/** 근무 페이지 묶음 이름(13/18 600 흐리게, 위 12): '시간별', '이번 근무 할 일 2/4'. */
+@Composable
+private fun SectionHead(title: String, right: String = "") {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Muted, modifier = Modifier.weight(1f))
+        if (right.isNotEmpty()) Text(right, style = Lk.Caption.merge(Tnum), color = Lk.Muted)
     }
 }
 
@@ -1181,7 +1204,8 @@ private fun DutyRow(
                 },
                 enabled = !editing,
             )
-            Column(
+            // 시각 칸: 시각이 있거나 미체크·다음 표시가 있을 때만(이번 근무 할 일은 글자를 동그라미 바로 옆에)
+            if (time.isNotEmpty() || strong) Column(
                 Modifier
                     .padding(start = 2.dp, top = 10.dp)
                     .width(44.dp),
