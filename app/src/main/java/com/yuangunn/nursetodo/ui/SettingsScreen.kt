@@ -1,5 +1,10 @@
 package com.yuangunn.nursetodo.ui
 
+import com.yuangunn.nursetodo.data.repeatLines
+import com.yuangunn.nursetodo.data.splitPresetItems
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import com.yuangunn.nursetodo.R
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
@@ -564,18 +569,25 @@ private fun PresetSettings(s: Settings) {
 }
 
 /**
- * 프리셋 고치기(전체 화면): 위 막대(닫기 · 제목 · 저장), 이름, 근무 시작 시각, 할 일(한 줄에 하나, 두 칸 들여 쓰면 하위 항목),
- * 예시 불러오기, 시각 쓴 줄마다 근무 루틴 알림 켜고 끄기. 아래에 복제 · 삭제 · 지금 불러오기.
+ * 프리셋 고치기(전체 화면): 위 막대(닫기 · 제목 · 저장), 이름, 근무 시작 시각, 할 일 두 칸 —
+ * 시간별 할 일(앞에 시각, 그 시각에 알림 · 반복해서 넣기 · 예시)과 이번 근무 할 일(시각 없음). 한 줄에 하나, 두 칸 들여 쓰면 하위 항목.
+ * 저장 형식은 한 목록 그대로(시각 유무로 갈림)라 다른 칸에 쓴 줄은 다시 열 때 제 칸으로 갑니다(칸 아래에 미리 알림).
+ * 시각 쓴 줄마다 근무 루틴 알림 켜고 끄기. 아래에 복제 · 삭제 · 지금 불러오기.
  */
 @Composable
 private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
     val context = LocalContext.current
     var name by remember(p.id) { mutableStateOf(p.name) }
     var start by remember(p.id) { mutableStateOf(p.start) }
-    var items by remember(p.id) { mutableStateOf(p.items.joinToString("\n")) }
+    val split = remember(p.id) { splitPresetItems(p.items) }
+    var timedText by remember(p.id) { mutableStateOf(split.first.joinToString("\n")) }
+    var otherText by remember(p.id) { mutableStateOf(split.second.joinToString("\n")) }
     var quiet by remember(p.id) { mutableStateOf(p.quiet) }
-    // 두 칸 들여 쓴 줄(하위 항목)은 들여쓰기를 남깁니다.
-    val lines = items.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+    var repeating by remember(p.id) { mutableStateOf(false) }
+    // 두 칸 들여 쓴 줄(하위 항목)은 들여쓰기를 남깁니다. 저장은 시간별 다음 근무 할 일 순서.
+    val timedLines = timedText.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+    val otherLines = otherText.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+    val lines = timedLines + otherLines
     var deleting by remember(p.id) { mutableStateOf(false) }
     val isNew = s.presets.none { it.id == p.id }
     val edited = { Preset(p.id, name.trim().ifEmpty { "프리셋" }, start, lines, quiet.filter { it in lines }.toSet()) }
@@ -613,17 +625,50 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                         Text(start?.let(::clock) ?: "없음", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
-                Column {
+                // 시간별 할 일: 그 시각에 알림, 30분 넘게 안 하면 미체크
+                Column(Modifier.padding(top = 8.dp)) {
+                    Text("시간별 할 일", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("앞에 08:00처럼 시각을 써요. 그 시각에 알리고, 지나면 미체크로 보여요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
                     OutlinedTextField(
-                        value = items,
-                        onValueChange = { items = it },
-                        label = { Text("할 일 (한 줄에 하나)") },
-                        supportingText = { Text("앞에 07:00처럼 시각을 쓰면 그 시각에 알려요.\n두 칸 들여 쓰면 위 줄의 하위 항목이 돼요.") },
-                        minLines = 8,
+                        value = timedText,
+                        onValueChange = { timedText = it },
+                        placeholder = { Text("08:00 정규 라운딩\n  V/S check\n12:00 점심식전약 · 혈당측정") },
+                        supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
+                        minLines = 5,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    // 예시는 지운 것 없이 맨 아래에 붙입니다.
-                    TextButton(onClick = { items = (lines + Preset.DayExample).joinToString("\n") }) { Text("예시 불러오기 (Day)") }
+                    val noTime = timedLines.count { !isSubLine(it) && itemMinute(it) == null }
+                    if (noTime > 0) {
+                        Text("시각이 없는 줄 ${noTime}개는 저장하면 '이번 근무 할 일'로 가요.", style = MaterialTheme.typography.bodySmall, color = warningColor(s.isDark()), modifier = Modifier.padding(start = 4.dp))
+                    }
+                    Row {
+                        TextButton(onClick = { repeating = true }) { Text("반복해서 넣기") }
+                        // 예시는 지운 것 없이 맨 아래에 붙입니다.
+                        TextButton(onClick = { timedText = (timedLines + Preset.DayExample).joinToString("\n") }) { Text("예시 불러오기 (Day)") }
+                    }
+                }
+                // 이번 근무 할 일: 시간과 상관없이 근무마다 하는 일
+                Column {
+                    Text("이번 근무 할 일", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("시간과 상관없이 이번 근무에 할 일이에요. 알림 없이 체크만 해요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                    OutlinedTextField(
+                        value = otherText,
+                        onValueChange = { otherText = it },
+                        placeholder = { Text("차팅\n물품 카운트\n처치 물품 수가 매기기\n익일 식사 넣기") },
+                        supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    val withTime = otherLines.count { !isSubLine(it) && itemMinute(it) != null }
+                    if (withTime > 0) {
+                        Text("시각을 쓴 줄 ${withTime}개는 저장하면 '시간별 할 일'로 가요.", style = MaterialTheme.typography.bodySmall, color = warningColor(s.isDark()), modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+                if (repeating) {
+                    RepeatDialog(defaultStart = start ?: (8 * 60), onDismiss = { repeating = false }) { added ->
+                        timedText = (timedLines + added).joinToString("\n")
+                        repeating = false
+                    }
                 }
             }
             // 시각 붙은 줄마다 근무 루틴 알림을 따로 끄고 켭니다.
@@ -668,6 +713,58 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * 반복해서 넣기: 이름 · 시작 · 끝 시각 · 간격(30분~6시간)으로 '08:00 라운딩' 줄을 여러 개([repeatLines]). 끝이 시작보다 이르면 자정을 넘김.
+ * 미리 보기에 넣을 시각들과 줄 수.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RepeatDialog(defaultStart: Int, onDismiss: () -> Unit, onAdd: (List<String>) -> Unit) {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var from by remember { mutableIntStateOf(defaultStart) }
+    var to by remember { mutableIntStateOf((defaultStart + 6 * 60) % 1440) }
+    var every by remember { mutableIntStateOf(120) }
+    val made = repeatLines(text, from, every, to)
+    val pick = { now: Int, set: (Int) -> Unit -> TimePickerDialog(context, { _, h, m -> set(h * 60 + m) }, now / 60, now % 60, true).show() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("반복해서 넣기") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(40) },
+                    singleLine = true,
+                    label = { Text("할 일") },
+                    placeholder = { Text("예: 라운딩") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LineButton("${clock(from)}부터", { pick(from) { from = it } }, Modifier.weight(1f))
+                    LineButton("${clock(to)}까지", { pick(to) { to = it } }, Modifier.weight(1f))
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(30 to "30분", 60 to "1시간", 120 to "2시간", 180 to "3시간", 240 to "4시간", 360 to "6시간").forEach { (m, label) ->
+                        FilterChip(selected = every == m, onClick = { every = m }, label = { Text("${label}마다") })
+                    }
+                }
+                Text(
+                    if (made.isEmpty()) {
+                        "할 일 이름을 적으면 넣을 시각이 보여요."
+                    } else {
+                        made.take(6).joinToString(" · ") { it.take(5) } + (if (made.size > 6) " …" else "") + " (${made.size}줄)"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAdd(made) }, enabled = made.isNotEmpty()) { Text("넣기") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }
 
 private fun clock(minute: Int) = "%02d:%02d".format(minute / 60, minute % 60)

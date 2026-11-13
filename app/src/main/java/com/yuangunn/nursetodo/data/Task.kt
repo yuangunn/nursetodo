@@ -231,6 +231,31 @@ fun List<Preset>.dutyTarget(now: LocalDateTime, early: Long = 60 * 60_000L): Pai
 /** 두 칸(또는 탭) 들여 쓴 프리셋 줄: 위 줄의 하위 항목. */
 fun isSubLine(line: String): Boolean = line.startsWith("  ") || line.startsWith("\t")
 
+/**
+ * 프리셋 줄을 시간별 할 일(앞에 시각)과 이번 근무 할 일(시각 없음)로 나눕니다. 저장 형식은 그대로(시각 유무로만 갈림)라
+ * 옛 프리셋·주고받은 글도 바로 두 칸으로 보입니다. 하위 항목(두 칸 들여 쓴 줄)은 위 줄을 따라가고, 위 줄이 없으면 근무 할 일로.
+ */
+fun splitPresetItems(items: List<String>): Pair<List<String>, List<String>> {
+    val timed = mutableListOf<String>()
+    val other = mutableListOf<String>()
+    var into = other
+    items.filter { it.isNotBlank() }.forEach { line ->
+        if (!isSubLine(line)) into = if (itemMinute(line) != null) timed else other
+        into += line
+    }
+    return timed to other
+}
+
+/**
+ * 반복해서 넣기: [start] 부터 [every] 분마다 [end] 까지(둘 다 포함) '08:00 라운딩' 줄들. 끝이 시작보다 이르면 자정을 넘깁니다(Night 23:00 → 05:00).
+ * 회차마다 따로 체크하고 따로 알리도록 줄을 나눠 넣습니다.
+ */
+fun repeatLines(text: String, start: Int, every: Int, end: Int): List<String> {
+    if (every <= 0 || text.isBlank()) return emptyList()
+    val span = ((end - start) % 1440 + 1440) % 1440
+    return (0..span step every).map { val m = (start + it) % 1440; "%02d:%02d %s".format(m / 60, m % 60, text.trim()) }
+}
+
 /** 프리셋 줄을 (항목, 하위 항목들)로 묶습니다. 빈 줄은 빼고, 위에 항목이 없는 하위 줄은 항목으로. */
 fun presetRows(items: List<String>): List<Pair<String, List<String>>> {
     val rows = mutableListOf<Pair<String, MutableList<String>>>()
