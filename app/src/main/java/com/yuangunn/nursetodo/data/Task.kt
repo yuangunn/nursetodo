@@ -148,6 +148,10 @@ data class Settings(
     val theme: Int = 0,
     /** 항암계산기 주입속도 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
     val rateLimit: Int = 1000,
+    /** 사용기한 계산기의 자주 쓰는 기한(칩). */
+    val expiryPresets: List<ExpiryPreset> = Expiry.DEFAULTS,
+    /** 사용기한을 셀 때 시작한 날을 1일째로(기관 지침에 따라). 끄면 다음 날이 1일째. */
+    val expiryFirstDay: Boolean = false,
     /** 키워드 알림을 볼 앱(패키지 이름). 처음엔 삼성 메시지·구글 메시지·팀즈. 비우면 울리지 않음. */
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
     /** 첫 실행 안내를 끝냈거나 건너뜀. 새로 깔면 false, 2.1.0 전부터 쓰던 설치(저장 파일에 이 값이 없음)는 true. */

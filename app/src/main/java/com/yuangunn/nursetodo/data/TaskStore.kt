@@ -411,6 +411,8 @@ object TaskStore {
         put("keywordSound", keywordSound)
         put("theme", theme)
         put("rateLimit", rateLimit)
+        put("expiryPresets", JSONArray().apply { expiryPresets.forEach { p -> put(JSONObject().put("name", p.name).put("amount", p.amount).put("unit", p.unit)) } })
+        put("expiryFirstDay", expiryFirstDay)
         put("keywordApps", JSONArray(keywordApps.sorted()))
         put("onboarded", onboarded)
     }
@@ -472,6 +474,12 @@ object TaskStore {
             keywordSound = optBoolean("keywordSound", d.keywordSound),
             theme = optInt("theme", d.theme).coerceIn(0, 2),
             rateLimit = optInt("rateLimit", d.rateLimit).coerceIn(1, 99_999),
+            expiryPresets = optJSONArray("expiryPresets")?.let { a ->
+                (0 until a.length()).map { a.getJSONObject(it) }.map { o ->
+                    ExpiryPreset(o.optString("name"), o.optInt("amount", 1).coerceIn(1, 999), o.optInt("unit", Expiry.DAYS).coerceIn(0, 3))
+                }
+            } ?: d.expiryPresets,
+            expiryFirstDay = optBoolean("expiryFirstDay", d.expiryFirstDay),
             keywordApps = optJSONArray("keywordApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.keywordApps,
             // 2.1.0 전 저장 파일엔 없음 = 이미 쓰던 사람이라 안내를 건너뜀
             onboarded = optBoolean("onboarded", true),

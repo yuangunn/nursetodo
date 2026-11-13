@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -295,28 +294,7 @@ private fun PocketEditor(title: String, initial: String, onDelete: (() -> Unit)?
             }
             FillButton("저장", { onDone(value.text) }, enabled = value.text.isNotBlank())
         }
-        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) {
-            listOf("글", "미리 보기").forEachIndexed { i, label ->
-                val on = preview == (i == 1)
-                val shape = if (i == 0) RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp) else RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .background(if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background, shape)
-                        .border(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, shape)
-                        .clickable { preview = i == 1 },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-        }
+        Segmented(listOf("글", "미리 보기"), if (preview) 1 else 0, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)) { preview = it == 1 }
         Box(
             Modifier
                 .weight(1f)
