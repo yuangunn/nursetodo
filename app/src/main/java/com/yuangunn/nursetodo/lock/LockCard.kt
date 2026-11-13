@@ -94,10 +94,9 @@ object LockCard {
 
         val title = Fmt.date(today)
         val progress = if (all.isEmpty()) "" else "$doneCount/${all.size}"
-        val headline = Fmt.headline(settings, today)
         // 끝낸 일은 잠금화면에서 사라지고 앱의 '완료된 할 일'에서만 보입니다.
         val remaining = all.filterNot { it.isDone(today) }
-        if (settings.lockLive) return buildLive(context, progress, headline, all, remaining, accent)
+        if (settings.lockLive) return buildLive(context, progress, all, remaining, accent)
 
         // 펼친 카드 높이는 시스템이 약 256dp 로 자르므로 글자가 클수록 줄 수를 줄입니다.
         val sp = settings.cardTextSp()
@@ -131,8 +130,6 @@ object LockCard {
             setTextViewText(R.id.title, title)
             setTextViewTextSize(R.id.title, TypedValue.COMPLEX_UNIT_SP, sp)
             setTextViewText(R.id.progress, progress)
-            setTextViewText(R.id.headline, headline)
-            setViewVisibility(R.id.headline, if (headline.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
             removeAllViews(R.id.rows)
             remaining.take(maxRows).forEach { addView(R.id.rows, row(context, it, sp)) }
             val more = remaining.size - maxRows
@@ -193,7 +190,6 @@ object LockCard {
     private fun buildLive(
         context: Context,
         progress: String,
-        headline: String,
         all: List<Task>,
         remaining: List<Task>,
         accent: Int,
@@ -205,7 +201,6 @@ object LockCard {
             // 제목은 시스템이 꼭 요구해서 날짜 대신 진행률만 둡니다.
             .setContentTitle(if (remaining.isEmpty()) empty else progress)
             .setContentText(remaining.firstOrNull()?.title)
-            .setSubText(headline.ifEmpty { null })
             .setStyle(
                 if (remaining.isEmpty()) null
                 else NotificationCompat.BigTextStyle().bigText(remaining.joinToString("\n") { "○  ${it.title}" }),

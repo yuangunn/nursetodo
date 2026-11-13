@@ -43,6 +43,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -86,6 +87,7 @@ fun TaskList(
     onEdit: (Task) -> Unit,
     onDelete: (Task) -> Unit,
     modifier: Modifier = Modifier,
+    onClearDone: () -> Unit = {},
     header: LazyListScope.() -> Unit = {},
     footer: LazyListScope.() -> Unit = {},
 ) {
@@ -191,6 +193,14 @@ fun TaskList(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
+                    // 접어 둔 채로도 한 번에 지웁니다(되돌리기는 스낵바). 루틴·근무 할 일만 남았으면 숨김.
+                    val clearable = done.count { it.clearableOn(day) }
+                    if (clearable > 0) {
+                        TextButton(
+                            onClick = onClearDone,
+                            modifier = Modifier.semantics { contentDescription = "완료한 할 일 ${clearable}개 지우기" },
+                        ) { Text("모두 지우기", style = MaterialTheme.typography.labelLarge) }
+                    }
                     Icon(
                         if (showDone) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                         contentDescription = if (showDone) "접기" else "펼치기",

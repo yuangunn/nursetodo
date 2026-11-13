@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,8 +62,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
- * 앱 화면 공용 부품. 화면 좌우 여백 16, 컨트롤 48, 한 줄 48 · 두 줄 64, 칸·결과·설정 묶음 모서리 16, 시트 24,
- * 입력 칸·칩 8, 버튼은 완전히 둥글게. 글자는 24/32 · 17/24 · 15/20 · 13/18.
+ * 앱 화면 공용 부품. 화면 좌우 여백 16, 컨트롤 48, 한 줄 48 · 두 줄 64. 모서리는 네 가지만:
+ * 칸·결과·설정 묶음 16, 입력 칸·칩 12, 아래 시트·대화상자 28(테마 [AppShapes]), 버튼·막대는 완전히 둥글게.
+ * 글자는 24/32 · 17/24 · 15/20 · 13/18.
  */
 private val Pill = RoundedCornerShape(50)
 
@@ -140,14 +143,19 @@ fun LineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
 @Composable
 fun Group(title: String, count: String = "", foot: String = "", content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.padding(horizontal = 12.dp)) {
-        Row(Modifier.padding(start = 4.dp, end = 4.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            if (count.isNotEmpty()) Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (title.isEmpty() && count.isEmpty()) {
+            // 이름 없는 묶음(하위 화면의 첫 묶음 등)은 간격만
+            Spacer(Modifier.height(16.dp))
+        } else {
+            Row(Modifier.padding(start = 4.dp, end = 4.dp, top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                if (count.isNotEmpty()) Text(count, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(MaterialTheme.shapes.large)
                 .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                 // 줄마다 아래에 긋는 선 중 마지막 줄 것은 카드 밖으로 잘라 냅니다.
                 .layout { m, c ->
@@ -162,13 +170,13 @@ fun Group(title: String, count: String = "", foot: String = "", content: @Compos
     }
 }
 
-/** 설정 줄 아래 선(안쪽 16부터, outlineVariant). [Group] 이 마지막 줄 선은 잘라 냅니다. */
+/** 설정 줄 아래 선(안쪽 [start]부터, 기본 16, outlineVariant). [Group] 이 마지막 줄 선은 잘라 냅니다. */
 @Composable
-fun Modifier.rowLine(): Modifier {
+fun Modifier.rowLine(start: Dp = 16.dp): Modifier {
     val c = MaterialTheme.colorScheme.outlineVariant
     return drawBehind {
         val y = size.height - 0.5.dp.toPx()
-        drawLine(c, Offset(16.dp.toPx(), y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+        drawLine(c, Offset(start.toPx(), y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
     }
 }
 
@@ -301,7 +309,7 @@ fun PickSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         scrimColor = Color.Black.copy(alpha = 0.4f),
         dragHandle = {
@@ -309,7 +317,7 @@ fun PickSheet(
                 Modifier
                     .padding(vertical = 8.dp)
                     .size(32.dp, 4.dp)
-                    .background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
+                    .background(MaterialTheme.colorScheme.outline, Pill),
             )
         },
     ) {

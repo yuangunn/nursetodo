@@ -1,5 +1,6 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -116,5 +117,17 @@ fun NurseTodoTheme(settings: Settings, content: @Composable () -> Unit) {
             error = Color(0xFFC5221F),
         )
     }
-    MaterialTheme(colorScheme = scheme, typography = AppType, content = content)
+    MaterialTheme(colorScheme = scheme, typography = AppType, shapes = AppShapes, content = content)
 }
+
+/**
+ * 앱 모서리: 입력 칸·칩·스낵바·메뉴 12(extraSmall·small), 칸·묶음 16(medium·large), 아래 시트·대화상자 28.
+ * 머티리얼 기본(4·8·12·16·28)이 부품마다 달라 입력 칸 4, 칩 8, 우리 칸 8 이 섞이던 것을 맞춥니다.
+ */
+val AppShapes = androidx.compose.material3.Shapes(
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    medium = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+)

@@ -31,7 +31,7 @@ object Alarms {
         // 시험판에서 소리가 붙은 채로 만든 채널. 채널 소리는 나중에 못 바꿔서 새 채널로 옮깁니다.
         nm.deleteNotificationChannel("alarm")
         val channel = NotificationChannel(CHANNEL_ID, "알람", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "'몇 분 뒤' 알람이 울릴 때 (소리·진동은 설정 → 알람)"
+            description = "'몇 분 뒤' 알람이 울릴 때 (소리·진동은 설정 › 알람)"
             setSound(null, null)
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC

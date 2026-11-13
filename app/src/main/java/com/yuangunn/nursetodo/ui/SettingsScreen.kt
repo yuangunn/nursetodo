@@ -1,7 +1,33 @@
 package com.yuangunn.nursetodo.ui
 
+import com.yuangunn.nursetodo.R
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedContent
+import androidx.activity.compose.BackHandler
 import android.app.Activity
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.media.RingtoneManager
@@ -40,11 +66,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -52,7 +78,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +92,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,7 +100,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuangunn.nursetodo.data.Day
-import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Preset
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.PresetShare
@@ -98,95 +121,84 @@ import com.yuangunn.nursetodo.lock.Shortcuts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
 
 private val PageNames = listOf("할 일", "근무", "포켓북")
 
+/** 설정 하위 화면. 첫 화면 줄 이름과 하위 화면 제목이 같습니다. */
+private enum class SettingsPage(val title: String) {
+    LOCK("잠금화면"),
+    SHORTCUTS("바로가기"),
+    NOTI("다른 앱 알림"),
+    SETUP("권한 점검"),
+    PRESET("교대 프리셋"),
+    KEYWORD("키워드 알림"),
+    ALARM("알람"),
+    CALC("항암계산기"),
+    LOOK("테마·강조색"),
+}
+
+private val AlarmModes = listOf("소리+진동", "소리만", "진동만")
+
 /**
- * 설정: 묶음 카드(모서리 16, 줄 48, 줄 사이 안쪽 16부터 선)에 잠금화면 · 교대 프리셋 · 키워드 알림 · 바로가기 · 항암계산기 ·
- * 알람 · 화면 · 강조색 · 데이터. 값을 누르면 아래 고르기 시트. 말투는 안내가 ~요, 안전 문구가 ~하세요.
+ * 설정: 첫 화면은 묶음(잠금화면 · 근무 · 도구 · 화면 · 기타)마다 아이콘 · 이름 · 지금 값 줄([NavRow])이고, 누르면 하위 화면.
+ * 한 화면에 줄이 10~15개를 넘지 않게 나누고, 긴 설명은 하위 화면 아래 짧은 설명(1~2줄)으로 둡니다(Android·AOSP 설정 가이드).
+ * 하위 화면은 위 막대(뒤로 · 제목) 아래 묶음 카드(모서리 16, 줄 48). 값을 누르면 아래 고르기 시트.
+ * 말투는 안내가 ~요, 안전 문구가 ~하세요.
  */
 @Composable
 fun SettingsScreen() {
     val s by TaskStore.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var sheet by remember { mutableStateOf("") }
-    val dark = s.isDark()
-
-    Column(
-        Modifier
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    BackHandler(enabled = page != null) { page = null }
+    // 라이트는 칸 색 바탕 위에 흰 묶음, 다크는 검정 바탕 위에 #1C1C1E 묶음
+    val bg = if (s.isDark()) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainer
+    AnimatedContent(
+        page,
+        transitionSpec = {
+            val forward = targetState != null
+            (slideInHorizontally(tween(250)) { if (forward) it / 5 else -it / 5 } + fadeIn(tween(250))) togetherWith
+                (slideOutHorizontally(tween(200)) { if (forward) -it / 5 else it / 5 } + fadeOut(tween(150)))
+        },
+        modifier = Modifier
             .fillMaxSize()
-            // 라이트는 칸 색 바탕 위에 흰 묶음, 다크는 검정 바탕 위에 #1C1C1E 묶음
-            .background(if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainer)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 16.dp),
-    ) {
-        Text("설정", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
-
-        Group("잠금화면") {
-            SwitchSetRow("잠금화면에 할 일 보이기", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
-            SwitchSetRow("화면 켜면 할 일 먼저", s.lockPage) { v ->
-                TaskStore.updateSettings { it.copy(lockPage = v) }
-                // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
-                if (v) Setup.requestOverlay(context)
-            }
-            if (s.lockPage) {
-                ValueRow("보일 페이지", PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 }.joinToString(" · ")) { sheet = "pages" }
-                if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
-                    SetRow("할 일 추가 버튼", "아래 바로가기의 '할 일 추가'로 해요. 위쪽 버튼은 숨겼어요.")
-                } else {
-                    ValueRow("할 일 추가 버튼", listOf("카드 아래", "카드 안")[s.addButton.coerceIn(0, 1)]) { sheet = "addPos" }
+            .background(bg),
+        label = "settingsPage",
+    ) { p ->
+        if (p == null) {
+            SettingsHome(s, open = { page = it }, onSheet = { sheet = it })
+        } else {
+            SettingsSub(p.title, onBack = { page = null }) {
+                when (p) {
+                    SettingsPage.LOCK -> LockSettings(s) { sheet = it }
+                    SettingsPage.SHORTCUTS -> Group("보이는 바로가기", count = "${s.shortcuts.size}/${s.shortcutSlots()}", foot = "길게 눌러 끌면 순서가 바뀌고, 누르면 버튼 이름을 바꿔요(비우면 앱 이름).") {
+                        ShortcutSettings(s) { sheet = "shape" }
+                    }
+                    SettingsPage.NOTI -> NotiSettings(s)
+                    SettingsPage.SETUP -> SetupGuide(Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp), showTitle = false)
+                    SettingsPage.PRESET -> Group("", foot = "교대를 받으면 그 근무 할 일로 바뀌어요. '07:00 정규 라운딩'처럼 시각을 쓴 줄은 받은 폰에서만 그 시각에 알려요.") {
+                        PresetSettings(s)
+                    }
+                    SettingsPage.KEYWORD -> Group("", foot = "고른 앱 알림에 키워드가 있으면 화면을 켜고 진동해요. 교대를 받은 폰에서만 그 근무 동안 알려요.") {
+                        KeywordSettings(s) { sheet = it }
+                    }
+                    SettingsPage.ALARM -> Group("", foot = "할 일 화면 '알람'으로 맞춘 알람이에요. 화면이 꺼져 있어도 정시에 울리고, 끌 때까지(최대 10분) 울려요.") {
+                        AlarmSettings(s)
+                    }
+                    SettingsPage.CALC -> Group("", foot = "기관·펌프 기준으로 정하세요. 넘으면 계산 결과가 주황으로 바뀌어요.") {
+                        ValueRow("주입속도 상한", "${s.rateLimit} cc/hr") { sheet = "rate" }
+                    }
+                    SettingsPage.LOOK -> {
+                        Group("", foot = "잠금화면은 늘 어두워요. 다크로 두면 잠금을 풀 때 눈부시지 않아요.") {
+                            ValueRow("테마", listOf("시스템 따라감", "라이트", "다크")[s.theme]) { sheet = "theme" }
+                        }
+                        AccentPicker(s)
+                    }
                 }
-                LockPageExtras(s)
             }
-            // 할 일 화면을 쓰면 잠금화면 카드는 겹쳐서 띄우지 않으므로, 카드 방식일 때만 의미가 있습니다.
-            if (Build.VERSION.SDK_INT >= 36 && !s.lockPage) {
-                SwitchSetRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
-            }
-            SettingField(s.lockText, 40, "카드 문구 (예: 오늘도 무사히)") { v -> TaskStore.updateSettings { it.copy(lockText = v) } }
-            DdayRow(s)
-        }
-        SetupGuide(Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp))
-
-        Group(
-            "교대 프리셋",
-            foot = "잠금화면에서 교대를 받으면 근무 할 일로 바뀌어요. 이때 못 끝낸 할 일은 가져올지 고르고, 포켓북 체크는 지우고, 꺼 둔 루틴 알림은 다시 켜요. " +
-                "'07:00 정규 라운딩'처럼 시각을 쓴 줄은 교대를 받은 폰에서만 그 시각에 진동과 팝업으로 알려요.",
-        ) { PresetSettings(s) }
-
-        if (NotiListener.available(context)) {
-            Group(
-                "키워드 알림",
-                count = "${s.keywordList.size}개",
-                foot = "고른 앱의 새 알림(보낸 사람·내용)에 키워드가 있으면 화면을 켜고 진동해요. 카드는 확인할 때까지 잠금화면 맨 위에 남아요. 교대를 받은 폰에서만 그 근무 동안 알려요.",
-            ) { KeywordSettings(s) { sheet = it } }
-        }
-
-        Group("할 일 화면 바로가기", count = "${s.shortcuts.size}/${s.shortcutSlots()}", foot = "길게 눌러 끌면 순서가 바뀌어요. 누르면 버튼 이름을 바꿔요(비우면 앱 이름).") {
-            ShortcutSettings(s) { sheet = "shape" }
-        }
-
-        Group("항암계산기") { ValueRow("주입속도 상한", "${s.rateLimit} cc/hr") { sheet = "rate" } }
-
-        Group("알람", foot = "할 일 화면의 '알람'으로 맞춘 알람이 울리는 방식이에요. 화면이 꺼져 있어도 정시에 울리고, 끄기를 누를 때까지(최대 10분) 울려요.") {
-            AlarmSettings(s)
-        }
-
-        Group("화면") {
-            ValueRow("테마", listOf("시스템 따라감", "라이트", "다크")[s.theme]) { sheet = "theme" }
-            ValueRow("새 할 일 위치", if (s.newOnTop) "맨 위" else "맨 아래") { sheet = "newOnTop" }
-            SetRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요.", onClick = { TaskStore.updateSettings { it.copy(onboarded = false) } })
-        }
-
-        AccentPicker(s)
-
-        Group("데이터", foot = "데이터는 이 폰에만 저장돼요. 인터넷 권한이 없어 밖으로 나가지 않아요.") {
-            SetRow("지난 완료 항목 정리", onClick = {
-                val n = TaskStore.clearOldDone()
-                Toast.makeText(context, if (n > 0) "${n}개 정리했어요" else "정리할 항목이 없어요", Toast.LENGTH_SHORT).show()
-            }, titleColor = MaterialTheme.colorScheme.primary)
         }
     }
 
@@ -246,75 +258,245 @@ fun SettingsScreen() {
     }
 }
 
-/** 잠금화면 할 일 화면에 딸린 것: 상태바 아이콘 숨기기, 다른 앱 알림(알림판). */
+/** 설정 첫 화면: 묶음마다 아이콘 · 이름 · 지금 값. 권한 점검은 꼭 필요한데 안 한 단계가 있으면 주황으로 'N개 남음'. */
 @Composable
-private fun LockPageExtras(s: Settings) {
+private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (String) -> Unit) {
     val context = LocalContext.current
-    // 안드로이드가 상시 서비스에 알림 하나를 꼭 요구해서 앱이 아이콘을 직접 지울 수는 없습니다.
     var tick by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
-    val hidden = remember(tick) { Setup.pageIconHidden(context) }
-    val notiOn = remember(tick) { NotiListener.allowed(context) }
-    val notiLive = remember(tick) { NotiListener.connected }
-    LinkRow(
-        "상태바의 널스투두 아이콘 숨기기",
-        if (hidden) "숨겼어요. 할 일 화면은 그대로 동작해요." else "열리는 화면에서 '알림 표시'를 끄면 상태바·알림창에서 사라지고, 할 일 화면은 그대로 동작해요.",
-        if (hidden) "숨김" else "열기",
-    ) { Setup.openChannelSettings(context) }
-    if (!NotiListener.available(context)) {
-        LinkRow(
-            "할 일 화면에 다른 앱 알림 보기",
-            "이 설치본(기본판)에는 없어요. 다른 앱 알림을 읽는 앱은 구글 Play 프로텍트가 파일 설치를 막아서, 알림판은 컴퓨터로 설치해야 해요.",
-        )
-        return
-    }
-    LinkRow(
-        "할 일 화면에 다른 앱 알림 보기",
-        when {
-            notiOn && notiLive -> "할 일 페이지 오른쪽, 근무·포켓북 페이지 위 알림 버튼에 앱 아이콘이 보여요. 누르면 알림 목록이 열려요."
-            notiOn -> "연결이 끊겼어요(다른 판을 깔았다가 다시 깔면 이래요). 열리는 화면에서 다시 켜 주세요."
-            else -> "열리는 화면에서 '널스투두'의 알림 접근을 허용해 주세요. 알림은 이 폰 밖으로 나가지 않아요. 켜 두면 내선 앱 같은 인터넷 전화가 올 때도 수신 화면을 가리지 않아요."
-        },
-        when {
-            notiOn && notiLive -> "켜짐"
-            notiOn -> "다시 켜기"
-            else -> "켜기"
-        },
-    ) { Setup.openNotiAccess(context) }
-    if (notiOn) {
-        AppPicker("알림 볼 앱", s.notiApps, "아무것도 안 고르면 모든 앱 알림을 보여요.", emptyValue = "모든 앱") { c -> TaskStore.updateSettings { it.copy(notiApps = c) } }
-    } else {
-        LinkRow(
-            "허용이 막혀 있으면",
-            "스토어가 아닌 파일로 설치한 앱은 안드로이드가 막아 둬요. 앱 정보 → 오른쪽 위 ⋮ → '제한된 설정 허용' 뒤 다시 켜 주세요.",
-            "앱 정보",
-        ) { Setup.openAppInfo(context) }
+    val left = remember(tick, s) { setupLeft(context, s) }
+    val notiAvailable = remember { NotiListener.available(context) }
+    val notiOn = remember(tick) { NotiListener.allowed(context) && NotiListener.connected }
+    val icon = @Composable { v: ImageVector -> Icon(v, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+    val res = @Composable { id: Int -> Icon(painterResource(id), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp)) }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 16.dp),
+    ) {
+        Text("설정", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+        Group("잠금화면") {
+            NavRow("잠금화면", lockSummary(s), icon = { icon(Icons.Outlined.Lock) }) { open(SettingsPage.LOCK) }
+            NavRow("바로가기", remember(s.shortcuts) { s.shortcuts.joinToString(" · ") { Shortcuts.name(context, it) }.ifEmpty { "없음" } }, icon = { icon(Icons.AutoMirrored.Outlined.List) }) {
+                open(SettingsPage.SHORTCUTS)
+            }
+            if (notiAvailable) {
+                NavRow(
+                    "다른 앱 알림",
+                    when {
+                        !notiOn -> "꺼짐"
+                        s.notiApps.isEmpty() -> "모든 앱"
+                        else -> "앱 ${s.notiApps.size}개"
+                    },
+                    icon = { icon(Icons.Outlined.Notifications) },
+                ) { open(SettingsPage.NOTI) }
+            }
+            NavRow(
+                "권한 점검",
+                if (left > 0) "${left}개 남음" else "모두 켜짐",
+                warn = left > 0,
+                icon = {
+                    if (left > 0) Icon(Icons.Outlined.Warning, contentDescription = null, tint = Warn) else icon(Icons.Outlined.CheckCircle)
+                },
+            ) { open(SettingsPage.SETUP) }
+        }
+        Group("근무") {
+            NavRow(
+                "교대 프리셋",
+                if (!s.presetMode) "꺼짐" else s.presets.joinToString(" · ") { it.name }.ifEmpty { "프리셋 없음" } + if (s.routineAlarm) " · 루틴 알림" else "",
+                icon = { icon(Icons.Outlined.Refresh) },
+            ) { open(SettingsPage.PRESET) }
+            if (notiAvailable) {
+                NavRow(
+                    "키워드 알림",
+                    when {
+                        !s.keywordOn -> "꺼짐"
+                        s.keywordList.isEmpty() -> "키워드 없음"
+                        else -> "${s.keywordList.size}개 · " + if (s.keywordSound) "소리와 진동" else "진동만"
+                    },
+                    icon = { icon(Icons.Outlined.Search) },
+                ) { open(SettingsPage.KEYWORD) }
+            }
+        }
+        Group("도구") {
+            NavRow(
+                "알람",
+                if (s.alarmMode == 2) AlarmModes[2] else "크기 ${s.alarmVolume} · ${AlarmModes[s.alarmMode.coerceIn(0, 2)]}",
+                icon = { res(R.drawable.ic_alarm) },
+            ) { open(SettingsPage.ALARM) }
+            NavRow("항암계산기", "주입속도 상한 ${s.rateLimit} cc/hr", icon = { res(R.drawable.ic_calc) }) { open(SettingsPage.CALC) }
+        }
+        Group("화면") {
+            val accent = (if (s.isDark()) AccentDark else AccentLight)[s.accent.coerceIn(AccentNames.indices)]
+            NavRow(
+                "테마·강조색",
+                listOf("시스템 따라감", "라이트", "다크")[s.theme] + " · " + AccentNames[s.accent.coerceIn(AccentNames.indices)],
+                icon = { Box(Modifier.size(20.dp).background(accent, CircleShape)) },
+            ) { open(SettingsPage.LOOK) }
+            NavRow("새 할 일 위치", if (s.newOnTop) "맨 위" else "맨 아래", icon = { icon(Icons.Outlined.Add) }) { onSheet("newOnTop") }
+        }
+        Group("기타", foot = "데이터는 이 폰에만 저장돼요. 인터넷 권한이 없어 밖으로 나가지 않아요.") {
+            NavRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요", chevron = false, icon = { icon(Icons.Outlined.Info) }) {
+                TaskStore.updateSettings { it.copy(onboarded = false) }
+            }
+            NavRow("지난 완료 항목 정리", "어제까지 끝낸 할 일을 지워요. 루틴은 남겨요", chevron = false, icon = { icon(Icons.Outlined.Delete) }) {
+                val n = TaskStore.clearOldDone()
+                Toast.makeText(context, if (n > 0) "${n}개 정리했어요" else "정리할 항목이 없어요", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
+private val Warn = Color(0xFFFF9F0A)
+
+/** 잠금화면 줄의 지금 값: 꺼짐 / 할 일 화면 · 보일 페이지 / 잠금화면 카드(라이브 알림). */
+private fun lockSummary(s: Settings): String = when {
+    !s.lockEnabled -> "꺼짐"
+    s.lockPage -> "할 일 화면 · " + PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 }.joinToString(", ")
+    Build.VERSION.SDK_INT >= 36 && s.lockLive -> "잠금화면 카드 · 라이브 알림"
+    else -> "잠금화면 카드"
+}
+
+/**
+ * 첫 화면 줄(최소 64): 아이콘 칸 24 · 이름(17/24) · 지금 값(13/18, [warn] 이면 주황) · 하위 화면이면 오른쪽 ›.
+ * 줄 사이 선은 이름 글자 앞(16 + 24 + 16)부터.
+ */
 @Composable
-private fun DdayRow(s: Settings) {
-    val context = LocalContext.current
+private fun NavRow(title: String, summary: String, warn: Boolean = false, chevron: Boolean = true, icon: @Composable () -> Unit, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .rowLine()
-            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 8.dp),
+            .rowLine(start = 56.dp)
+            .heightIn(min = 64.dp)
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Box(Modifier.weight(1f)) {
-            SettingFieldBare(s.ddayLabel, 20, "D-day 이름") { v -> TaskStore.updateSettings { it.copy(ddayLabel = v) } }
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (summary.isNotEmpty()) {
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (warn) Warn else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        TextButton(onClick = {
-            val d = LocalDate.ofEpochDay(s.ddayDate ?: Day.today())
-            DatePickerDialog(context, { _, y, m, dd ->
-                TaskStore.updateSettings { it.copy(ddayDate = LocalDate.of(y, m + 1, dd).toEpochDay()) }
-            }, d.year, d.monthValue - 1, d.dayOfMonth).show()
-        }) { Text(s.ddayDate?.let { "${Fmt.date(it)} · ${Fmt.dday(it)}" } ?: "날짜 선택") }
+        if (chevron) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        } else {
+            Spacer(Modifier.width(8.dp))
+        }
     }
-    if (s.ddayDate != null) {
-        SetRow("D-day 지우기", onClick = { TaskStore.updateSettings { it.copy(ddayDate = null, ddayLabel = "") } }, titleColor = MaterialTheme.colorScheme.error)
+}
+
+/** 하위 화면 틀: 위 막대 56(뒤로 48 · 제목 17/24 600) 아래 스크롤. 뒤로 가기·시스템 뒤로 모두 첫 화면으로. */
+@Composable
+private fun SettingsSub(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(start = 4.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
+            Text(title, style = MaterialTheme.typography.titleMedium)
+        }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp),
+            content = content,
+        )
+    }
+}
+
+/**
+ * 잠금화면: 대표 스위치(잠금화면에 할 일 보이기)를 끄면 딸린 설정은 숨깁니다.
+ * 켜져 있으면 보이는 방식(할 일 화면 / 잠금화면 카드)과 그 방식의 설정.
+ */
+@Composable
+private fun LockSettings(s: Settings, onSheet: (String) -> Unit) {
+    val context = LocalContext.current
+    Group("") {
+        SwitchSetRow("잠금화면에 할 일 보이기", s.lockEnabled) { v -> TaskStore.updateSettings { it.copy(lockEnabled = v) } }
+    }
+    if (!s.lockEnabled) return
+    Group(
+        "보이는 방식",
+        foot = if (s.lockPage) "화면을 켜면 잠금 위에 할 일 화면이 먼저 떠요." else "잠금화면 알림 카드로 보여요. 줄을 누르면 잠금을 풀지 않고 체크해요.",
+    ) {
+        SwitchSetRow("화면 켜면 할 일 먼저", s.lockPage) { v ->
+            TaskStore.updateSettings { it.copy(lockPage = v) }
+            // 백그라운드에서 화면을 띄우려면 '다른 앱 위에 표시'를 허용해야 합니다.
+            if (v) Setup.requestOverlay(context)
+        }
+        if (s.lockPage) {
+            ValueRow("보일 페이지", PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 }.joinToString(" · ")) { onSheet("pages") }
+            if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
+                SetRow("할 일 추가 버튼", "아래 바로가기의 '할 일 추가'를 써요")
+            } else {
+                ValueRow("할 일 추가 버튼", listOf("카드 아래", "카드 안")[s.addButton.coerceIn(0, 1)]) { onSheet("addPos") }
+            }
+        } else if (Build.VERSION.SDK_INT >= 36) {
+            SwitchSetRow("라이브 알림으로 늘 펼쳐 보기", s.lockLive) { v -> TaskStore.updateSettings { it.copy(lockLive = v) } }
+        }
+    }
+    if (s.lockPage) {
+        // 안드로이드가 상시 서비스에 알림 하나를 꼭 요구해서 앱이 아이콘을 직접 지울 수는 없습니다.
+        var tick by remember { mutableIntStateOf(0) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+        val hidden = remember(tick) { Setup.pageIconHidden(context) }
+        Group("") {
+            LinkRow("상태바 아이콘 숨기기", "열리는 화면에서 '알림 표시'를 끄면 사라져요", if (hidden) "숨김" else "") { Setup.openChannelSettings(context) }
+        }
+    }
+    if (!NotiListener.available(context)) {
+        Group("", foot = "다른 앱 알림을 읽는 앱은 구글 Play 프로텍트가 파일 설치를 막아서, 알림판은 Play 스토어로 받아야 해요.") {
+            LinkRow("다른 앱 알림 보기", "이 설치본(기본판)에는 없어요")
+        }
+    }
+}
+
+/** 다른 앱 알림(알림판): 알림 접근 상태 · 볼 앱. 허용이 막혔으면 '제한된 설정' 안내. */
+@Composable
+private fun NotiSettings(s: Settings) {
+    val context = LocalContext.current
+    var tick by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
+    val notiOn = remember(tick) { NotiListener.allowed(context) }
+    val notiLive = remember(tick) { NotiListener.connected }
+    Group(
+        "",
+        foot = "할 일 페이지 오른쪽, 근무·포켓북 페이지 위 알림 버튼에 앱 아이콘이 보여요. 알림은 이 폰 밖으로 나가지 않아요.",
+    ) {
+        LinkRow(
+            "알림 접근",
+            when {
+                notiOn && notiLive -> ""
+                notiOn -> "연결이 끊겼어요. 열리는 화면에서 다시 켜 주세요"
+                else -> "열리는 화면에서 '널스투두'를 허용해 주세요"
+            },
+            when {
+                notiOn && notiLive -> "켜짐"
+                notiOn -> "다시 켜기"
+                else -> "꺼짐"
+            },
+        ) { Setup.openNotiAccess(context) }
+        if (notiOn) {
+            AppPicker("알림 볼 앱", s.notiApps, "아무것도 안 고르면 모든 앱 알림을 보여요.", emptyValue = "모든 앱") { c -> TaskStore.updateSettings { it.copy(notiApps = c) } }
+        } else {
+            LinkRow("허용이 막혀 있으면", "앱 정보 › 오른쪽 위 ⋮ › '제한된 설정 허용' 뒤 다시 켜 주세요", "앱 정보") { Setup.openAppInfo(context) }
+        }
     }
 }
 
@@ -419,7 +601,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     Box(
                         Modifier
                             .heightIn(min = 48.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(24.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(50))
                             .clickable {
                                 val t = start ?: (7 * 60)
                                 TimePickerDialog(context, { _, h, m -> start = h * 60 + m }, t / 60, t % 60, true).apply {
@@ -813,6 +995,8 @@ private fun AlarmSettings(s: Settings) {
             onValueChangeFinished = { TaskStore.updateSettings { it.copy(alarmVolume = volume.roundToInt()) } },
             valueRange = 1f..10f,
             steps = 8,
+            // 칸 점은 지워 막대만: 숫자는 오른쪽에 보여 줍니다.
+            colors = SliderDefaults.colors(activeTickColor = androidx.compose.ui.graphics.Color.Transparent, inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent),
             enabled = s.alarmMode != 2,
             modifier = Modifier
                 .weight(1f)
@@ -849,45 +1033,13 @@ private fun AlarmSettings(s: Settings) {
     }
 }
 
-/**
- * 글자는 화면 상태로 바로 받고, 저장(잠금화면 카드 다시 그리기 포함)은 입력이 멈춘 뒤 한 번만 합니다.
- * 저장소 값을 그대로 입력칸에 물리면 한글 조합이 깨지고, 글자마다 알림을 갱신하다 시스템 제한에 걸립니다.
- */
-@Composable
-private fun SettingFieldBare(value: String, max: Int, label: String, onSave: (String) -> Unit) {
-    var text by remember { mutableStateOf(value) }
-    var saved by remember { mutableStateOf(value) }
-    // 바깥에서 바뀐 값(D-day 지우기 등)만 입력칸에 반영합니다. 방금 저장한 값이 돌아온 것으로
-    // 입력칸을 덮으면 그 사이에 친 글자가 사라집니다.
-    LaunchedEffect(value) { if (value != saved) { saved = value; text = value } }
-    LaunchedEffect(text) {
-        if (text == saved) return@LaunchedEffect
-        delay(500)
-        saved = text
-        onSave(text)
-    }
-    val latest by rememberUpdatedState(text)
-    DisposableEffect(Unit) { onDispose { if (latest != saved) onSave(latest) } }
-    OutlinedTextField(
-        value = text,
-        onValueChange = { text = it.take(max) },
-        label = { Text(label) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-@Composable
-private fun SettingField(value: String, max: Int, label: String, onSave: (String) -> Unit) {
-    Box(Modifier.fillMaxWidth().rowLine().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)) {
-        SettingFieldBare(value, max, label, onSave)
-    }
-}
-
-/** 누르면 시스템 화면을 여는 줄: 제목, 설명, 오른쪽에 상태·동작(강조색). [onClick] 이 없으면 안내만. */
+/** 누르면 시스템 화면을 여는 줄: 제목, 짧은 설명, 오른쪽 지금 상태(흐리게) · ›. [onClick] 이 없으면 안내만. */
 @Composable
 private fun LinkRow(title: String, body: String, action: String = "", onClick: (() -> Unit)? = null) {
     SetRow(title, body, onClick) {
-        if (action.isNotEmpty()) Text(action, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        if (action.isNotEmpty()) Text(action, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (onClick != null) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        }
     }
 }

@@ -1,5 +1,9 @@
 package com.yuangunn.nursetodo.lock
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.fillMaxHeight
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -186,7 +190,7 @@ internal fun Badge(count: Int, modifier: Modifier = Modifier, inline: Boolean = 
             .offset(if (inline) 0.dp else 4.dp, if (inline) 0.dp else (-4).dp)
             .height(18.dp)
             .widthIn(min = 18.dp)
-            .background(Lk.Badge, RoundedCornerShape(9.dp))
+            .background(Lk.Badge, Pill)
             .padding(horizontal = 5.dp),
     )
 }
@@ -251,7 +255,7 @@ internal fun ToastBar(u: Undo, onUndo: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
-            .background(Lk.Toast, RoundedCornerShape(22.dp))
+            .background(Lk.Toast, Pill)
             .padding(start = 16.dp, end = 4.dp, top = if (u.sub.isNotEmpty()) 6.dp else 0.dp, bottom = if (u.sub.isNotEmpty()) 6.dp else 0.dp)
             .semantics { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
@@ -369,7 +373,7 @@ private fun KeywordCompact(h: KeywordAlert.Hit, onExpand: () -> Unit) {
             .fillMaxWidth()
             .height(44.dp)
             .semantics { contentDescription = "키워드 알림 펼치기: ${hhmm(h.time)} ${h.app} ${h.title}" },
-        shape = RoundedCornerShape(22.dp),
+        shape = Pill,
         color = Lk.Alert,
         border = androidx.compose.foundation.BorderStroke(2.dp, Lk.Missed.copy(alpha = 0.6f)),
     ) {
@@ -485,7 +489,8 @@ internal fun PanelFrame(
             content()
             Text(hint, style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp))
         }
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 카드 모서리까지 옆·아래 간격을 같게(16)
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             action?.let { (label, run) -> PillButton(label, run, Modifier.weight(1f)) }
             PillButton(closeLabel, onClose, Modifier.weight(1f))
         }
@@ -572,7 +577,7 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
     val slots = settings.shortcutSlots()
     val list = settings.shortcuts
     val full = list.size >= slots
-    PanelFrame("바로가기 편집", "길게 눌러 끌면 순서가 바뀌어요. 버튼 이름은 앱 › 설정 › 할 일 화면 바로가기에서 바꿔요.", onClose, closeLabel = "완료") {
+    PanelFrame("바로가기 편집", "길게 눌러 끌면 순서가 바뀌어요. 버튼 이름은 앱 › 설정 › 바로가기에서 바꿔요.", onClose, closeLabel = "완료") {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("3개씩", "2개씩", "아이콘만").forEachIndexed { i, name ->
                 val on = settings.shortcutStyle == i
@@ -855,7 +860,7 @@ internal fun NotiRail(notis: List<Noti>, onTap: () -> Unit, modifier: Modifier =
                     Modifier
                         .fillMaxSize()
                         .semantics { contentDescription = "${list.first().app} 알림 ${list.size}개 보기" },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = Pill,
                 ) { AppIcon(pkg, 32.dp) }
                 // 아이콘(가운데 32)의 오른쪽 위 모서리에서 4 나감
                 if (list.size > 1) Badge(list.size, Modifier.align(Alignment.TopEnd).offset((-6).dp, 4.dp).clearAndSetSemantics {})
@@ -865,8 +870,10 @@ internal fun NotiRail(notis: List<Noti>, onTap: () -> Unit, modifier: Modifier =
 }
 
 /**
- * 할 일 추가(높이 44). 누르면 그 자리가 입력 칸: 강조 테두리 2, 왼쪽 닫기, 오른쪽 추가(강조 채움).
- * 추가나 키보드 완료면 맨 위에 넣고 닫습니다. 빈 칸이면 넣지 않고 닫습니다.
+ * 할 일 추가(높이 44). 누르면 그 자리가 입력 칸: 강조 테두리 2, 왼쪽 닫기, 오른쪽 추가.
+ * 추가 버튼은 바깥 알약과 같은 중심의 둥근 끝(테두리 안쪽에서 위·아래·오른쪽 4씩, 높이 32 · 반지름 16 = 22 − 6)이고
+ * 누르는 칸은 높이 44 전체. 글자가 없으면 흐리게 두고 눌리지 않습니다(키보드 완료는 빈 칸이면 닫기).
+ * 추가나 키보드 완료면 맨 위에 넣고 닫습니다.
  */
 @Composable
 internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String) -> Unit) {
@@ -902,7 +909,7 @@ internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String
             .height(44.dp)
             .background(Lk.Cover, Pill)
             .border(2.dp, accent, Pill)
-            .padding(horizontal = 2.dp),
+            .padding(start = 2.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -928,9 +935,30 @@ internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String
                 .focusRequester(focus)
                 .semantics { contentDescription = "새 할 일" },
         )
-        Box(Modifier.height(40.dp), contentAlignment = Alignment.Center) {
-            Press(submit, Modifier.height(36.dp), shape = Pill, color = accent) {
-                Text("추가", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.OnAccent, modifier = Modifier.padding(horizontal = 16.dp))
+        val ready = text.isNotBlank()
+        val source = remember { MutableInteractionSource() }
+        val pressed by source.collectIsPressedAsState()
+        val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(100, easing = Lk.Decel), label = "add")
+        val fill by animateColorAsState(if (ready) accent else Lk.Control, tween(150), label = "addFill")
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .clickable(source, indication = null, enabled = ready, role = Role.Button, onClick = submit)
+                .padding(vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .background(fill, Pill)
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("추가", style = Lk.Body15, fontWeight = Lk.Strong, color = if (ready) Lk.OnAccent else Lk.Muted)
             }
         }
     }

@@ -37,6 +37,13 @@ data class Task(
 ) {
     val isRoutine: Boolean get() = repeatMask != 0
 
+    /**
+     * '완료 모두 지우기'로 지울 수 있는지: [day] 에 끝낸 일반 할 일만. 루틴은 지우면 반복이 사라지고(오늘 체크는 내일 풀림),
+     * 근무(교대 프리셋) 할 일은 끝낸 기록으로 근무 루틴 알림을 건너뛰므로(Routine) 남깁니다. 다음 교대를 받으면 바뀝니다.
+     */
+    // 일반 할 일의 isDone 은 날짜를 보지 않으므로, 그날 목록의 '완료'에 보이는 것(doneOn == day)만 고릅니다.
+    fun clearableOn(day: Long): Boolean = !isRoutine && shift == null && doneOn == day
+
     /** 만든 시각(ms). id 를 만든 순간의 시각으로 정하므로 따로 저장하지 않습니다. */
     val createdAt: Long get() = id
 
@@ -84,9 +91,6 @@ data class Alarm(val id: Long, val at: Long, val label: String = "") {
 data class Settings(
     val newOnTop: Boolean = false,
     val lockEnabled: Boolean = true,
-    val lockText: String = "",
-    val ddayLabel: String = "",
-    val ddayDate: Long? = null,
     val accent: Int = 0,
     val textSize: Int = 1,
     val bold: Boolean = false,
@@ -106,7 +110,7 @@ data class Settings(
     /** 알람음(content:// URI). null 이면 폰의 기본 알람음. */
     val alarmSound: String? = null,
     /** 알람 크기 1~10. 울리는 동안만 폰의 알람 음량을 이만큼으로 맞췄다가 끄면 되돌립니다. */
-    val alarmVolume: Int = 7,
+    val alarmVolume: Int = 3,
     /** 울리는 방식: 0 소리+진동, 1 소리만, 2 진동만. */
     val alarmMode: Int = 0,
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */

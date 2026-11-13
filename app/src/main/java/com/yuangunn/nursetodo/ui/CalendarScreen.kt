@@ -45,7 +45,7 @@ import com.yuangunn.nursetodo.data.TaskStore
 import java.time.LocalDate
 
 @Composable
-fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
+fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit, onClearDone: (Long) -> Unit) {
     val all by TaskStore.tasks.collectAsStateWithLifecycle()
     val today = Day.today()
     var selected by rememberSaveable { mutableLongStateOf(today) }
@@ -61,6 +61,7 @@ fun CalendarScreen(onEdit: (Task) -> Unit, onDelete: (Task) -> Unit) {
             onEdit = onEdit,
             onDelete = onDelete,
             modifier = Modifier.weight(1f),
+            onClearDone = { onClearDone(selected) },
             header = {
                 item(key = "calendar") {
                     MonthGrid(

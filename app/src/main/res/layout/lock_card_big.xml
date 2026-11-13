@@ -38,14 +38,6 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/headline"
-        style="@style/TextAppearance.Compat.Notification.Info"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:maxLines="1"
-        android:visibility="gone" />
-
     <LinearLayout
         android:id="@+id/rows"
         android:layout_width="match_parent"

@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.ui
 
+import com.yuangunn.nursetodo.data.Settings
+import android.content.Context
 import android.Manifest
 import android.app.Activity
 import android.os.Build
@@ -49,7 +51,7 @@ import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.lock.Setup
 
-private enum class State { Done, Todo, Manual }
+internal enum class State { Done, Todo, Manual }
 
 /**
  * 잠금화면 카드 · 위젯 · 타일을 단계별로 점검하고 버튼 한 번으로 고치는 카드.
@@ -63,6 +65,7 @@ fun SetupGuide(
     modifier: Modifier = Modifier,
     hideDone: Boolean = false,
     onClose: (() -> Unit)? = null,
+    showTitle: Boolean = true,
 ) {
     val context = LocalContext.current
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
@@ -75,21 +78,75 @@ fun SetupGuide(
         tick++
     }
 
-    // tick 이 바뀌면 다시 계산
-    val allowed = remember(tick, settings) { Setup.notificationsAllowed(context) }
-    val blocked = remember(tick, settings) { Setup.channelBlocked(context) }
-    val showing = remember(tick, settings) { allowed && Setup.cardShowing(context) }
-    val widget = remember(tick, settings) { Setup.widgetAdded(context) }
-    val style = remember(tick, settings) { Setup.samsungLockStyle(context) }
-    val overlay = remember(tick, settings) { android.provider.Settings.canDrawOverlays(context) }
-    val exactAlarm = remember(tick, settings) { Setup.exactAlarmAllowed(context) }
+    val steps = remember(tick, settings) {
+        setupSteps(
+            context, settings,
+            askNotifications = { askPermission.launch(Manifest.permission.POST_NOTIFICATIONS) },
+            bump = { tick++ },
+        )
+    }
+
+    // 다 끝났으면 빈 카드를 남기지 않습니다.
+    val left = steps.count { !it.optional && it.state == State.Todo }
+    if (hideDone && left == 0) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    val expanded = !hideDone || open
+
+    Surface(
+        // 설정 › 권한 점검에서는 다른 설정 묶음과 같은 흰 카드, 오늘 탭에서는 눈에 띄게 회색 카드
+        color = if (hideDone) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            // 설정 › 권한 점검 화면은 위 막대가 제목이라 카드 제목을 뺍니다.
+            if (showTitle) Row(
+                Modifier.then(if (hideDone) Modifier.clickable { open = !open } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (hideDone) "잠금화면 설정 ${left}개 남음" else "잠금화면에서 쓰려면",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (hideDone) {
+                    Icon(
+                        if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (open) "접기" else "펼치기",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (onClose != null) TextButton(onClick = onClose) { Text("닫기") }
+            }
+            if (!expanded) return@Column
+            // 오늘 탭에서는 꼭 필요한데 아직 안 한 단계만
+            steps.filter { !hideDone || (!it.optional && it.state == State.Todo) }
+                .forEachIndexed { i, step -> Step(i + 1, step) }
+        }
+    }
+}
+
+/**
+ * 점검 단계와 지금 상태. [SetupGuide] 가 그리고, 설정 첫 화면은 꼭 필요한데 안 한 단계 수([setupLeft])만 씁니다.
+ * [askNotifications] 는 알림 권한 요청, [bump] 는 상태를 다시 읽게 합니다.
+ */
+internal fun setupSteps(context: Context, settings: Settings, askNotifications: () -> Unit = {}, bump: () -> Unit = {}): List<StepSpec> {
+    val allowed = Setup.notificationsAllowed(context)
+    val blocked = Setup.channelBlocked(context)
+    val showing = allowed && Setup.cardShowing(context)
+    val widget = Setup.widgetAdded(context)
+    val style = Setup.samsungLockStyle(context)
+    val overlay = android.provider.Settings.canDrawOverlays(context)
+    val exactAlarm = Setup.exactAlarmAllowed(context)
     // 할 일 화면(A안)을 쓰면 잠금화면 카드·알림 스타일·라이브 알림은 필요 없습니다 (카드를 띄우지 않음).
     val page = settings.lockPage
     val live = !page && Build.VERSION.SDK_INT >= 36 && settings.lockLive
-    val promoted = remember(tick, settings) { live && Setup.liveShowing(context) }
+    val promoted = live && Setup.liveShowing(context)
     val hiddenOnSamsung = style != null && style != 0
 
-    val steps = buildList {
+    return buildList {
         add(
             StepSpec(
                 state = if (allowed) State.Done else State.Todo,
@@ -97,7 +154,7 @@ fun SetupGuide(
                 body = if (page) "알람이 울리고 할 일 화면이 늘 켜져 있으려면 필요해요." else "잠금화면 카드는 알림으로 표시돼요.",
                 action = "허용하기".takeIf { !allowed },
             ) {
-                if (Build.VERSION.SDK_INT >= 33) askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                if (Build.VERSION.SDK_INT >= 33) askNotifications()
                 else Setup.openAppNotificationSettings(context)
             },
         )
@@ -118,7 +175,7 @@ fun SetupGuide(
                     },
                 ) {
                     if (!settings.lockEnabled) TaskStore.updateSettings { it.copy(lockEnabled = true) } else Setup.requestOverlay(context)
-                    tick++
+                    bump()
                 },
             )
         } else {
@@ -145,7 +202,7 @@ fun SetupGuide(
                         !settings.lockEnabled -> TaskStore.updateSettings { it.copy(lockEnabled = true) }
                         else -> (context.applicationContext as NurseTodoApp).refreshSurfaces()
                     }
-                    tick++
+                    bump()
                 },
             )
             add(
@@ -227,48 +284,13 @@ fun SetupGuide(
             },
         )
     }
-
-    // 다 끝났으면 빈 카드를 남기지 않습니다.
-    val left = steps.count { !it.optional && it.state == State.Todo }
-    if (hideDone && left == 0) return
-    var open by rememberSaveable { mutableStateOf(false) }
-    val expanded = !hideDone || open
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.large,
-        modifier = modifier,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(
-                Modifier.then(if (hideDone) Modifier.clickable { open = !open } else Modifier),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (hideDone) "잠금화면 설정 ${left}개 남음" else "잠금화면에서 쓰려면",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                if (hideDone) {
-                    Icon(
-                        if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (open) "접기" else "펼치기",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (onClose != null) TextButton(onClick = onClose) { Text("닫기") }
-            }
-            if (!expanded) return@Column
-            // 오늘 탭에서는 꼭 필요한데 아직 안 한 단계만
-            steps.filter { !hideDone || (!it.optional && it.state == State.Todo) }
-                .forEachIndexed { i, step -> Step(i + 1, step) }
-        }
-    }
 }
 
-private class StepSpec(
+/** 꼭 필요한데 아직 안 한 단계 수. */
+internal fun setupLeft(context: Context, settings: Settings): Int =
+    setupSteps(context, settings).count { !it.optional && it.state == State.Todo }
+
+internal class StepSpec(
     val state: State,
     val title: String,
     val body: String,
