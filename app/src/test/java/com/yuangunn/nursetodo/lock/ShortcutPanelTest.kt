@@ -46,10 +46,16 @@ class ShortcutPanelTest {
         rule.onNodeWithText("캘린더").performTouchInput {
             down(center)
             advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
-            // 줄 높이 48 두 번만큼 위로, 조금씩
-            repeat(20) { moveBy(Offset(0f, -48.dp.toPx() * 2 / 20)) }
-            up()
+            // 같은 묶음 안에 다음 사건이 있어야 시계가 넘어가 길게 누르기가 잡힙니다.
+            moveBy(Offset(0f, -1f))
         }
+        // 줄 높이 48 두 번만큼 위로, 조금씩. 실기기처럼 움직임 사이에 화면을 다시 그려서
+        // 자리가 바뀐 뒤에도 끌기가 이어지는지 봅니다(한 번에 넣으면 끝날 때까지 다시 그리지 않아 못 잡음).
+        repeat(20) {
+            rule.onNodeWithText("캘린더").performTouchInput { moveBy(Offset(0f, -48.dp.toPx() * 2 / 20)) }
+            rule.waitForIdle()
+        }
+        rule.onNodeWithText("캘린더").performTouchInput { up() }
         rule.waitForIdle()
         assertEquals(listOf(Shortcut.CALENDAR, Shortcut.CALC, Shortcut.ALARM), ids())
     }
