@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,8 +71,33 @@ private fun hhmm(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefaul
  * 투여시간은 시간·분 두 칸(1시간 30분을 그대로). 결과가 설정의 상한을 넘으면 주황으로 바꾸고 확인 문구를 보이며,
  * 아니면 지금 시작할 때 끝나는 시각과 알람 맞추기. 용량은 기기에 저장하지 않습니다(공용 폰에서 이전 환자 값이 남지 않게).
  */
+/** 계산기 탭: 위 '항암 주입속도 | 사용기한' 고르기. 둘을 오가도 각자 적은 값은 남고, 모두 지우기는 보이는 쪽만. */
 @Composable
 fun CalcScreen() {
+    var mode by rememberSaveable { mutableIntStateOf(0) }
+    var clearInfusion by rememberSaveable { mutableIntStateOf(0) }
+    var clearExpiry by rememberSaveable { mutableIntStateOf(0) }
+    val holder = rememberSaveableStateHolder()
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("계산기", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { if (mode == 0) clearInfusion++ else clearExpiry++ }) { Text("모두 지우기", style = MaterialTheme.typography.labelLarge) }
+        }
+        Segmented(listOf("항암 주입속도", "사용기한"), mode, Modifier.padding(top = 8.dp)) { mode = it }
+        holder.SaveableStateProvider(mode) {
+            if (mode == 0) InfusionCalc(clearInfusion) else ExpiryCalc(clearExpiry)
+        }
+    }
+}
+
+@Composable
+private fun InfusionCalc(clear: Int) {
     val s by TaskStore.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var base by rememberSaveable { mutableStateOf("") }
@@ -95,24 +122,20 @@ fun CalcScreen() {
     val over = rate != null && rate.ccPerHr.toDouble() > s.rateLimit
     val color = if (over) warningColor(dark) else MaterialTheme.colorScheme.primary
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("항암 주입속도", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = {
-                base = ""
-                chemo = ""
-                priming = DEFAULT_PRIMING
-                withPriming = true
-                hours = ""
-                minutes = ""
-            }) { Text("모두 지우기", style = MaterialTheme.typography.labelLarge) }
+    // 위 '모두 지우기'(누른 횟수가 바뀌면). 다른 계산기에 다녀와 다시 그려질 때는 지우지 않습니다.
+    var seen by rememberSaveable { mutableIntStateOf(clear) }
+    LaunchedEffect(clear) {
+        if (clear != seen) {
+            seen = clear
+            base = ""
+            chemo = ""
+            priming = DEFAULT_PRIMING
+            withPriming = true
+            hours = ""
+            minutes = ""
         }
+    }
+    Column {
         Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             NumField("Base fluid", base, "cc") { base = it }
             NumField("항암 fluid", chemo, "cc") { chemo = it }
@@ -198,7 +221,7 @@ fun CalcScreen() {
 }
 
 @Composable
-private fun CardLine() = Box(
+internal fun CardLine() = Box(
     Modifier
         .padding(vertical = 12.dp)
         .fillMaxWidth()

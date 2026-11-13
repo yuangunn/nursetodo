@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.ui
 
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.BorderStroke
@@ -252,6 +254,43 @@ fun ValueRow(title: String, value: String, badge: String = "", onClick: () -> Un
         }
         Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * 여러 갈래 중 하나 고르기(높이 48, 바깥 알약 테두리 1, 고른 칸은 primaryContainer 알약이 안쪽 4 띄워 같은 중심).
+ * 계산기 종류, 사용기한 단위, 포켓북 글/미리 보기.
+ */
+@Composable
+fun Segmented(options: List<String>, chosen: Int, modifier: Modifier = Modifier, onChoose: (Int) -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outline, Pill)
+            .padding(4.dp),
+    ) {
+        options.forEachIndexed { i, o ->
+            val on = i == chosen
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(Pill)
+                    .background(if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable(role = Role.Tab) { onChoose(i) }
+                    .semantics { selected = on },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    o,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 

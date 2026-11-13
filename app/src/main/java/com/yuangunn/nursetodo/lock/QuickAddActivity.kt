@@ -1,5 +1,12 @@
 package com.yuangunn.nursetodo.lock
 
+import com.yuangunn.nursetodo.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.automirrored.outlined.ExitToApp
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Refresh
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -315,6 +322,9 @@ private fun LockPage(
     var adding by remember { mutableStateOf(startAdding) }
     var editingId by remember { mutableStateOf<Long?>(null) }
     var askingAlarm by remember { mutableStateOf(false) }
+    // 할 일 줄 팝업이 열린 줄과, 팝업의 '타이머 맞추기'가 알람 칸에 채울 이름
+    var menuId by remember { mutableStateOf<Long?>(null) }
+    var timerLabel by remember { mutableStateOf("") }
     var panel by remember { mutableStateOf(Panel.NONE) }
     var kwOpen by remember { mutableStateOf<String?>(null) }
     // 목록을 닫는 애니메이션과 그 뒤 300ms 는 아래 항목을 못 누르게 (이어서 누른 것이 체크되지 않게)
@@ -351,6 +361,7 @@ private fun LockPage(
             Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
             Shortcut.ALARM -> {
                 panel = Panel.NONE
+                timerLabel = ""
                 askingAlarm = true
             }
             Shortcut.ADD -> adding = true
@@ -425,6 +436,53 @@ private fun LockPage(
             )
         }
     }
+    // 할 일 줄 팝업: 타이머 맞추기 · (할 일 페이지) 이번 근무로 옮기기 · 이름 고치기 · 지우기 · 앱에서 자세히 고치기
+    val dutyName = settings.presets.firstOrNull { it.id == settings.presetLoaded }?.name?.takeIf { it.isNotBlank() }
+    val rowMenu: (Task, Boolean) -> List<RowMenuItem> = { t, inDuty ->
+        val tint = @Composable { v: ImageVector -> Icon(v, contentDescription = null, tint = Lk.Body, modifier = Modifier.size(20.dp)) }
+        buildList {
+            add(
+                RowMenuItem("타이머 맞추기", icon = { Icon(painterResource(R.drawable.ic_alarm), contentDescription = null, tint = Lk.Body, modifier = Modifier.size(20.dp)) }) {
+                    menuId = null
+                    panel = Panel.NONE
+                    timerLabel = itemText(t.title)
+                    askingAlarm = true
+                },
+            )
+            // 근무로 옮기기: 받은 근무가 있고 근무 페이지를 쓸 때, 반복(루틴)이 아닌 할 일만. 할 일에서 빼서 그 근무 목록 맨 아래(시각 없는 줄)로.
+            val shift = settings.presetApplied
+            if (!inDuty && preset && shift != null && dutyName != null && !t.isRoutine && PAGE_DUTY in pages) {
+                add(
+                    RowMenuItem("${withRo("$dutyName 근무")} 옮기기", icon = { tint(Icons.Outlined.Refresh) }) {
+                        menuId = null
+                        TaskStore.update(t.copy(shift = shift, date = null, carried = null))
+                        show(Undo("‘${t.title}’ ${withRo("$dutyName 근무")} 옮김", PAGE_TODO, onUndo = { TaskStore.update(t) }))
+                    },
+                )
+            }
+            add(
+                RowMenuItem("이름 고치기", icon = { tint(Icons.Outlined.Edit) }) {
+                    menuId = null
+                    editingId = t.id
+                },
+            )
+            add(
+                RowMenuItem("지우기", danger = true, icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = Lk.Missed, modifier = Modifier.size(20.dp)) }) {
+                    menuId = null
+                    TaskStore.delete(t.id)
+                    show(Undo("‘${t.title}’ 지움", if (inDuty) PAGE_DUTY else PAGE_TODO, onUndo = { TaskStore.restore(t) }))
+                },
+            )
+            add(
+                RowMenuItem("앱에서 자세히 고치기", icon = { tint(Icons.AutoMirrored.Outlined.ExitToApp) }) {
+                    menuId = null
+                    onOpenApp()
+                },
+            )
+        }
+    }
+    // 페이지를 넘기거나 목록 패널을 열면 팝업을 닫습니다.
+    LaunchedEffect(page, panel) { menuId = null }
     // 교대 받기: 앞 근무에 못 끝낸 항목이 있으면 카드 자리에서 가져올지 고르고, 받으면 10초 되돌리기
     val head = remember(settings, now) { settings.dutyHead(LocalDateTime.now()) }
     var handoff by remember { mutableStateOf<DutyHead?>(null) }
@@ -562,14 +620,14 @@ private fun LockPage(
                     verticalAlignment = Alignment.Top,
                 ) { i ->
                     when (pages[i]) {
-                        PAGE_DUTY -> DutyPage(duty, head, settings, now, dutyListState, editingId, { editingId = it }, onOpenApp, receive)
+                        PAGE_DUTY -> DutyPage(duty, head, settings, now, dutyListState, editingId, { editingId = it }, menuId, { menuId = it }, { rowMenu(it, true) }, receive)
                         PAGE_POCKET -> PocketPage(pockets) { p ->
                             val old = p.checks
                             TaskStore.clearPocketChecks(p.id)
                             show(Undo("체크 ${old.size}개 지움", PAGE_POCKET, onUndo = { TaskStore.setPocketChecks(p.id, old) }))
                         }
                         else -> TodoPage(
-                            todo, done, today, listState, editingId, { editingId = it }, onOpenApp, toggleTodo,
+                            todo, done, today, listState, editingId, { editingId = it }, menuId, { menuId = it }, { rowMenu(it, false) }, toggleTodo,
                             onOpenDone = { panel = Panel.DONE },
                             notis = notis,
                             rail = NotiListener.available(context),
@@ -664,6 +722,7 @@ private fun LockPage(
                     },
                     onCancel = { askingAlarm = false },
                     onAllow = onAllowAlarm,
+                    initialLabel = timerLabel,
                 )
             } else {
                 if ((addBar && editingId == null) || adding) {
@@ -705,7 +764,9 @@ private fun TodoPage(
     state: LazyListState,
     editingId: Long?,
     onEditing: (Long?) -> Unit,
-    onOpenApp: () -> Unit,
+    menuId: Long?,
+    onMenu: (Long?) -> Unit,
+    menuFor: (Task) -> List<RowMenuItem>,
     onToggle: (Task) -> Unit,
     onOpenDone: () -> Unit,
     notis: List<Noti>,
@@ -754,7 +815,9 @@ private fun TodoPage(
                             t, on = t.isDone(today), today = today,
                             editing = t.id == editingId,
                             onEditing = { on -> onEditing(if (on) t.id else null) },
-                            onOpenApp = onOpenApp,
+                            menuOpen = t.id == menuId,
+                            onMenu = { o -> onMenu(if (o) t.id else null) },
+                            menu = { menuFor(t) },
                             onToggle = { onToggle(t) },
                         )
                     }
@@ -875,11 +938,21 @@ private fun MemoButton(onClick: () -> Unit) {
 
 /**
  * 할 일 한 줄: 동그라미 · 글자(15/20, 어절 단위 줄바꿈, 말줄임 없음). 동그라미를 눌러야만 체크되고,
- * 글씨를 누르면 앱으로, 0.5초 길게 누르면 그 자리에서 이름을 고칩니다.
+ * 글씨를 누르거나 길게 누르면 그 줄 아래에 팝업([RowMenu]: 타이머 · 근무로 옮기기 · 이름 고치기 · 지우기 · 앱에서 자세히).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TodoRow(task: Task, on: Boolean, today: Long, editing: Boolean, onEditing: (Boolean) -> Unit, onOpenApp: () -> Unit, onToggle: () -> Unit) {
+private fun TodoRow(
+    task: Task,
+    on: Boolean,
+    today: Long,
+    editing: Boolean,
+    onEditing: (Boolean) -> Unit,
+    menuOpen: Boolean,
+    onMenu: (Boolean) -> Unit,
+    menu: () -> List<RowMenuItem>,
+    onToggle: () -> Unit,
+) {
     val haptics = LocalHapticFeedback.current
     Row(
         Modifier
@@ -895,26 +968,30 @@ private fun TodoRow(task: Task, on: Boolean, today: Long, editing: Boolean, onEd
         if (editing) {
             RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f))
         } else {
-            Text(
-                task.title,
-                style = Lk.Body15,
-                color = if (on) Lk.Muted else Lk.Text,
-                textDecoration = if (on) TextDecoration.LineThrough else null,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 2.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .combinedClickable(
-                        enabled = !on,
-                        onClick = onOpenApp,
-                        onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onEditing(true)
-                        },
-                        onLongClickLabel = "이름 고치기",
-                    )
-                    .padding(top = 10.dp, bottom = 10.dp),
-            )
+            Box(Modifier.weight(1f)) {
+                Text(
+                    task.title,
+                    style = Lk.Body15,
+                    color = if (on) Lk.Muted else Lk.Text,
+                    textDecoration = if (on) TextDecoration.LineThrough else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 2.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .combinedClickable(
+                            enabled = !on,
+                            onClickLabel = "메뉴 열기",
+                            onClick = { onMenu(true) },
+                            onLongClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onMenu(true)
+                            },
+                            onLongClickLabel = "메뉴 열기",
+                        )
+                        .padding(top = 10.dp, bottom = 10.dp),
+                )
+                RowMenu(menuOpen, menu, onDismiss = { onMenu(false) })
+            }
             // 만든 시각(오늘이면 시:분, 어제, 그 전은 월/일)
             RowTime(Fmt.clock(task.createdAt, today))
         }
@@ -1017,7 +1094,9 @@ private fun DutyPage(
     state: LazyListState,
     editingId: Long?,
     onEditing: (Long?) -> Unit,
-    onOpenApp: () -> Unit,
+    menuId: Long?,
+    onMenu: (Long?) -> Unit,
+    menuFor: (Task) -> List<RowMenuItem>,
     onReceive: (DutyHead) -> Unit,
 ) {
     val today = Day.today()
@@ -1046,7 +1125,9 @@ private fun DutyPage(
                     t, states[t.id] ?: Duty.REST, today,
                     editing = t.id == editingId,
                     onEditing = { on -> onEditing(if (on) t.id else null) },
-                    onOpenApp = onOpenApp,
+                    menuOpen = t.id == menuId,
+                    onMenu = { o -> onMenu(if (o) t.id else null) },
+                    menu = { menuFor(t) },
                     subsOpen = t.id in open,
                     onSubs = { open = if (t.id in open) open - t.id else open + t.id },
                 )
@@ -1064,7 +1145,9 @@ private fun DutyRow(
     today: Long,
     editing: Boolean,
     onEditing: (Boolean) -> Unit,
-    onOpenApp: () -> Unit,
+    menuOpen: Boolean,
+    onMenu: (Boolean) -> Unit,
+    menu: () -> List<RowMenuItem>,
     subsOpen: Boolean,
     onSubs: () -> Unit,
 ) {
@@ -1125,18 +1208,20 @@ private fun DutyRow(
             if (editing) {
                 RenameField(task, onDone = { onEditing(false) }, modifier = Modifier.weight(1f).padding(start = 10.dp))
             } else {
+                Box(Modifier.weight(1f).padding(start = 12.dp)) {
+                RowMenu(menuOpen, menu, onDismiss = { onMenu(false) })
                 Column(
                     Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp)
+                        .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .combinedClickable(
-                            onClick = onOpenApp,
+                            onClickLabel = "메뉴 열기",
+                            onClick = { onMenu(true) },
                             onLongClick = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onEditing(true)
+                                onMenu(true)
                             },
-                            onLongClickLabel = "이름 고치기",
+                            onLongClickLabel = "메뉴 열기",
                         )
                         .padding(vertical = 10.dp),
                 ) {
@@ -1153,6 +1238,7 @@ private fun DutyRow(
                         textDecoration = if (on) TextDecoration.LineThrough else null,
                     )
                     if (doneAt != null) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
+                }
                 }
             }
             if (subs.isNotEmpty() && !editing) {

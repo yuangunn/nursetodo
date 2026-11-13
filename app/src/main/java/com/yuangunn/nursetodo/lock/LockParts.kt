@@ -1,5 +1,7 @@
 package com.yuangunn.nursetodo.lock
 
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -964,6 +966,37 @@ internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String
     }
 }
 
+/** 할 일 줄 팝업의 한 줄. [danger] 면 붉은 글자(지우기). */
+internal class RowMenuItem(val label: String, val danger: Boolean = false, val icon: @Composable () -> Unit, val onClick: () -> Unit)
+
+/**
+ * 할 일 줄 글자를 누르거나 길게 누르면 그 줄 아래(자리가 없으면 위)에 뜨는 팝업: 불투명 #2C2C2E, 모서리 16, 테두리 흰 14%,
+ * 줄 48(아이콘 20 · 15/20). 잠금화면 모서리는 카드 24 · 팝업 16 · 입력 칸 12 · 알약.
+ */
+@Composable
+internal fun RowMenu(expanded: Boolean, items: () -> List<RowMenuItem>, onDismiss: () -> Unit) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(16.dp),
+        containerColor = Lk.Toast,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        border = Lk.Edge,
+    ) {
+        if (expanded) {
+            items().forEach { m ->
+                DropdownMenuItem(
+                    text = { Text(m.label, style = Lk.Body15, color = if (m.danger) Lk.Missed else Lk.Text) },
+                    leadingIcon = m.icon,
+                    onClick = m.onClick,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
+            }
+        }
+    }
+}
+
 /** 열고 닫을 때 움직이는 덩어리. (Column 안의 Box 에서 부르면 ColumnScope 판이 잡혀서 따로 둡니다.) */
 @Composable
 internal fun Reveal(
@@ -1097,20 +1130,22 @@ internal fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, t
  * 오른쪽에 울릴 시각이나 남은 시간을 미리 보여 주고, 키보드의 완료는 시작과 같습니다.
  */
 @Composable
-internal fun AlarmSheet(onStart: (Long, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit) {
+internal fun AlarmSheet(onStart: (Long, String) -> Unit, onCancel: () -> Unit, onAllow: () -> Unit, initialLabel: String = "") {
     val context = LocalContext.current
     val accent = LocalLockAccent.current
     val exactAlarm = remember { Setup.exactAlarmAllowed(context) }
     var atClock by remember { mutableStateOf(false) }
     // 30분을 고른 채로 열고, 숫자를 누르면 바로 바뀌게 전체 선택
     var digits by remember { mutableStateOf(TextFieldValue("30", TextRange(0, 2))) }
-    var label by remember { mutableStateOf("") }
-    var withLabel by remember { mutableStateOf(false) }
+    // 할 일 줄 팝업의 '타이머 맞추기'면 할 일 이름을 미리 채워 두고, 커서는 분 칸에 둡니다.
+    var label by remember { mutableStateOf(initialLabel) }
+    var withLabel by remember { mutableStateOf(initialLabel.isNotEmpty()) }
+    var labelAsked by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val labelFocus = remember { FocusRequester() }
     val windowFocused = LocalWindowInfo.current.isWindowFocused
-    LaunchedEffect(windowFocused) { if (windowFocused && !withLabel) focus.requestFocus() }
-    LaunchedEffect(withLabel) { if (withLabel) labelFocus.requestFocus() }
+    LaunchedEffect(windowFocused) { if (windowFocused && !labelAsked) focus.requestFocus() }
+    LaunchedEffect(labelAsked) { if (labelAsked) labelFocus.requestFocus() }
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
             value = System.currentTimeMillis()
@@ -1271,7 +1306,10 @@ internal fun AlarmSheet(onStart: (Long, String) -> Unit, onCancel: () -> Unit, o
                     .fillMaxWidth()
                     .height(40.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable(role = Role.Button) { withLabel = true },
+                    .clickable(role = Role.Button) {
+                        withLabel = true
+                        labelAsked = true
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
