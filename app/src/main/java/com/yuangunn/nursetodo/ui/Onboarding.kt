@@ -32,6 +32,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,10 +74,11 @@ fun Onboarding() {
     val finish = { TaskStore.updateSettings { it.copy(onboarded = true) } }
     BackHandler(enabled = step > 0) { step-- }
 
+    // Surface 가 글자 기본색(onBackground)을 정함. 바탕만 칠하면 다크 테마에서 제목이 검은 글자로 안 보였음.
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding(),
     ) {
         // 건너뛰기가 없는 마지막 단계에서도 높이가 그대로이게 48
@@ -121,6 +123,7 @@ fun Onboarding() {
                 Modifier.weight(if (step > 0) 2f else 1f),
             )
         }
+    }
     }
 }
 
@@ -277,7 +280,7 @@ private fun NotiApps() {
 private fun Ready() {
     Spacer(Modifier.height(24.dp))
     Title("준비됐어요", "화면을 끄고 다시 켜 보세요. 잠금화면 위에 할 일 화면이 떠요.")
-    Bullet("체크는 동그라미만", "글씨를 누르면 잠금을 풀고 앱이 열리고, 길게 누르면 이름을 고쳐요.")
+    Bullet("체크는 동그라미만", "글씨를 누르면 메뉴가 떠요: 타이머, 근무로 옮기기, 이름 고치기, 지우기.")
     Bullet("위로 밀어서 잠금 해제", "맨 아래 손잡이나 화면 아무 데서나 위로 밀어요.")
     Bullet("바로가기 편집", "아래 바로가기를 길게 누르면 넣고 빼고 순서를 바꿔요.")
     Text(

@@ -116,7 +116,7 @@ fun TopBar(title: String, onClose: () -> Unit, actions: @Composable RowScope.() 
     }
 }
 
-/** 강조 채움 버튼(높이 48, 15/20 600). */
+/** 강조 채움 버튼(높이 48, 15/20 600). 가로 여백 24: '저장'처럼 짧은 글자도 원이 아닌 알약으로 보이게. */
 @Composable
 fun FillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, colors: androidx.compose.material3.ButtonColors = ButtonDefaults.buttonColors()) {
     Button(
@@ -124,7 +124,7 @@ fun FillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
         enabled = enabled,
         shape = Pill,
         colors = colors,
-        contentPadding = PaddingValues(horizontal = 16.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp),
         modifier = modifier.heightIn(min = 48.dp),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
@@ -262,11 +262,11 @@ fun ValueRow(title: String, value: String, badge: String = "", onClick: () -> Un
  * 계산기 종류, 사용기한 단위, 포켓북 글/미리 보기.
  */
 @Composable
-fun Segmented(options: List<String>, chosen: Int, modifier: Modifier = Modifier, onChoose: (Int) -> Unit) {
+fun Segmented(options: List<String>, chosen: Int, modifier: Modifier = Modifier, height: Dp = 48.dp, onChoose: (Int) -> Unit) {
     Row(
         modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height)
             .border(1.dp, MaterialTheme.colorScheme.outline, Pill)
             .padding(4.dp),
     ) {

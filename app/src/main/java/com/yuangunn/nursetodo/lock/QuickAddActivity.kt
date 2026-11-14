@@ -114,6 +114,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -582,24 +584,27 @@ private fun LockPage(
             if (!typing && !askingAlarm && alarms.isNotEmpty()) {
                 AlarmRow(alarms, panel == Panel.ALARMS, onToggleList = { if (panel == Panel.ALARMS) closePanel() else panel = Panel.ALARMS }, onOff = offAlarm)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PageTabs(
-                    pages.map {
-                        when (it) {
-                            PAGE_DUTY -> "근무"
-                            PAGE_POCKET -> "포켓북"
-                            else -> "할 일"
-                        }
-                    },
-                    pager.currentPage + pager.currentPageOffsetFraction,
-                    pager.currentPage,
-                ) { i -> scope.launch { pager.animateScrollToPage(i) } }
-                Spacer(Modifier.weight(1f))
-                if (page != PAGE_TODO && NotiListener.available(context)) {
-                    BellButton(notis, panel == Panel.NOTIS) { if (panel == Panel.NOTIS) closePanel() else panel = Panel.NOTIS }
-                }
-                SettingsButton { onOpen(MainActivity.settingsIntent(context)) }
-            }
+            // 페이지가 하나면 탭 없이(고를 것이 없는 탭 하나는 빈 알약처럼 보임)
+            PageRow(
+                tabs = if (pages.size < 2) null else {
+                    {
+                        PageTabs(
+                            pages.map {
+                                when (it) {
+                                    PAGE_DUTY -> "근무"
+                                    PAGE_POCKET -> "포켓북"
+                                    else -> "할 일"
+                                }
+                            },
+                            pager.currentPage + pager.currentPageOffsetFraction,
+                            pager.currentPage,
+                        ) { i -> scope.launch { pager.animateScrollToPage(i) } }
+                    }
+                },
+                bell = if (page != PAGE_TODO && NotiListener.available(context)) {
+                    { BellButton(notis, panel == Panel.NOTIS) { if (panel == Panel.NOTIS) closePanel() else panel = Panel.NOTIS } }
+                } else null,
+            ) { SettingsButton { onOpen(MainActivity.settingsIntent(context)) } }
 
             // 카드: 세 페이지의 목록, 그 자리를 채우는 알림·알람 목록, 아래 되돌리기 토스트
             val cardShape = RoundedCornerShape(24.dp)
@@ -788,9 +793,10 @@ private fun TodoPage(
             LazyColumn(
                 Modifier
                     .fillMaxSize()
-                    .fadeEdges(),
+                    .fadeEdges(scrolled = { state.scrolledPx() }),
                 state = state,
-                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                // 카드 안 추가 버튼(바닥에서 16 + 36)에 마지막 줄이 가리지 않게
+                contentPadding = PaddingValues(top = 8.dp, bottom = if (addInCard) 64.dp else 24.dp),
             ) {
                 if (list.isEmpty()) {
                     item(key = "empty") {
@@ -823,12 +829,16 @@ private fun TodoPage(
                     }
                 }
             }
+            // 카드 안 추가 버튼: 동그라미 36 을 오른쪽·아래 16 씩(누르는 칸 44 는 12). 알림 세로 줄(오른쪽 12, 폭 44)과
+            // 가운데 세로선이 같아 알림이 있든 없든 같은 자리이고, 알림 줄은 그 위 8 에 쌓는다.
+            // 동그라미는 모서리 24 와 같은 중심이 되려면 간격 6(= 24 − 18)이라 모서리에 붙어 보여서 간격을 같게만 맞춤.
             if (addInCard) {
-                Box(Modifier.align(Alignment.BottomEnd).padding(end = side, bottom = 8.dp)) { MemoButton(onAdd) }
+                Box(Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp)) { MemoButton(onAdd) }
             }
-            // 되돌리기 토스트(카드 바닥에서 8 + 높이 56)에 가리지 않게: 완료 줄이 있으면 그 위 24, 없으면 52
+            // 되돌리기 토스트(카드 바닥에서 8 + 높이 56)에 가리지 않게: 완료 줄이 있으면 그 위 24, 없으면 52. 추가 버튼이 있으면 그 위.
             if (showRail) {
-                NotiRail(notis, onRail, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = if (done.isEmpty()) 52.dp else 24.dp))
+                val railBottom = if (addInCard) 60.dp else if (done.isEmpty()) 52.dp else 24.dp
+                NotiRail(notis, onRail, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = railBottom))
             }
         }
         if (done.isNotEmpty()) DoneBar(done, today, onOpenDone)
@@ -1130,7 +1140,7 @@ private fun DutyPage(
             onSubs = { open = if (t.id in open) open - t.id else open + t.id },
         )
     }
-    LazyColumn(Modifier.fillMaxSize().fadeEdges(), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().fadeEdges(scrolled = { state.scrolledPx() }), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "head") { header() }
         items(carried, key = { it.id }) { t ->
             Column(Modifier.animateItem()) {
@@ -1204,29 +1214,38 @@ private fun DutyRow(
                 },
                 enabled = !editing,
             )
-            // 시각 칸: 시각이 있거나 미체크·다음 표시가 있을 때만(이번 근무 할 일은 글자를 동그라미 바로 옆에)
+            // 시각 칸: 시각이 있거나 미체크·다음 표시가 있을 때만(이번 근무 할 일은 글자를 동그라미 바로 옆에).
+            // 폭은 글꼴 배율만큼 넓혀 '00:00'·'미체크'가 큰 글씨에서도 한 줄에 들어가게.
             if (time.isNotEmpty() || strong) Column(
                 Modifier
                     .padding(start = 2.dp, top = 10.dp)
-                    .width(44.dp),
+                    .width(dutyTimeWidth()),
             ) {
-                Text(
-                    time,
-                    style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
-                    fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
-                    color = when (st) {
-                        Duty.MISSED -> Lk.Missed
-                        Duty.NEXT -> Lk.Text
-                        else -> Lk.Muted
-                    },
-                )
-                if (strong) {
+                if (time.isNotEmpty()) {
                     Text(
-                        if (st == Duty.MISSED) "미체크" else "다음",
-                        style = Lk.Caption,
-                        fontWeight = Lk.Strong,
-                        color = if (st == Duty.MISSED) Lk.Missed else Lk.Text,
+                        time,
+                        style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
+                        fontWeight = if (strong) Lk.Strong else FontWeight.Normal,
+                        color = when (st) {
+                            Duty.MISSED -> Lk.Missed
+                            Duty.NEXT -> Lk.Text
+                            else -> Lk.Muted
+                        },
+                        maxLines = 1,
                     )
+                }
+                if (strong) {
+                    // 시각 없는 줄(넘어온 이번 근무 할 일)은 표시를 첫 줄 자리에, 글자 첫 줄과 같은 높이 가운데로
+                    val firstLine = with(LocalDensity.current) { Lk.Body15.lineHeight.toDp() }
+                    Box(Modifier.then(if (time.isEmpty()) Modifier.height(firstLine) else Modifier), contentAlignment = Alignment.CenterStart) {
+                        Text(
+                            if (st == Duty.MISSED) "미체크" else "다음",
+                            style = Lk.Caption,
+                            fontWeight = Lk.Strong,
+                            color = if (st == Duty.MISSED) Lk.Missed else Lk.Text,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
             if (editing) {
@@ -1391,16 +1410,21 @@ private fun DutyHeader(head: DutyHead?, s: Settings, now: Long, missed: Int, nex
     }
 }
 
+/** 근무 줄 시각 칸 폭: 기본 44, 글꼴 배율만큼 넓힘('00:00'·'미체크'가 한 줄). */
+@Composable
+private fun dutyTimeWidth(): Dp = 44.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+
 /** 교대 받을 때 앞 근무의 미체크 항목: 카드 자리에 항목, 아래에 가져오기 · 취소 · 지우고 받기(목록만 스크롤). */
 @Composable
 private fun HandoffPanel(head: DutyHead, items: List<Task>, onCarry: () -> Unit, onDrop: () -> Unit, onCancel: () -> Unit) {
     val name = head.target.name
+    val scroll = rememberScrollState()
     Column(Modifier.fillMaxSize().semantics { contentDescription = "미체크 항목 처리" }) {
         Column(
             Modifier
                 .weight(1f)
-                .fadeEdges()
-                .verticalScroll(rememberScrollState())
+                .fadeEdges(scrolled = { scroll.value.toFloat() })
+                .verticalScroll(scroll)
                 .padding(vertical = 8.dp),
         ) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
@@ -1415,7 +1439,8 @@ private fun HandoffPanel(head: DutyHead, items: List<Task>, onCarry: () -> Unit,
                         style = Lk.Body15.merge(TextStyle(fontFeatureSettings = "tnum")),
                         fontWeight = Lk.Strong,
                         color = Lk.Missed,
-                        modifier = Modifier.width(44.dp),
+                        maxLines = 1,
+                        modifier = Modifier.width(dutyTimeWidth()),
                     )
                     Text(
                         itemText(t.title) + if (t.subs.isNotEmpty()) " (${t.subsDone.size}/${t.subs.size})" else "",
@@ -1491,7 +1516,8 @@ private fun PocketPage(pockets: List<Pocket>, onClear: (Pocket) -> Unit) {
     var open by remember { mutableStateOf(setOf<String>()) }
     val lines = remember(pockets, open) { pocketLines(pockets, open) }
     val toggle = { key: String -> open = if (key in open) open - key else open + key }
-    LazyColumn(Modifier.fillMaxSize().fadeEdges(), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
+    val state = rememberLazyListState()
+    LazyColumn(Modifier.fillMaxSize().fadeEdges(scrolled = { state.scrolledPx() }), state = state, contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
         items(lines, key = { it.key }) { line ->
             when {
                 line.clear -> Box(Modifier.padding(start = 48.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {

@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -96,18 +97,23 @@ internal val LocalLockAccent = staticCompositionLocalOf { Color(0xFF6EA8FF) }
 internal fun Modifier.cover(shape: Shape): Modifier = background(Lk.Cover, shape).border(Lk.Edge, shape)
 
 /** 목록 위아래 끝에서 서서히 사라지게 (스크롤 신호). */
-internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp, scrolled: (() -> Float)? = null): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
         val h = size.height
         if (h <= 0f) return@drawWithContent
-        val t = (top.toPx() / h).coerceIn(0f, 0.5f)
+        // 스크롤한 만큼(최대 24) 위도 흐리게: 맨 위에선 0, 내리면 잘린 윗줄이 뚝 끊기지 않게
+        val topPx = scrolled?.let { minOf(it(), 24.dp.toPx()) } ?: top.toPx()
+        val t = (topPx / h).coerceIn(0f, 0.5f)
         val b = 1f - (bottom.toPx() / h).coerceIn(0f, 0.5f)
         drawRect(
             Brush.verticalGradient(0f to (if (t > 0f) Color.Transparent else Color.Black), t to Color.Black, b to Color.Black, 1f to Color.Transparent),
             blendMode = BlendMode.DstIn,
         )
     }
+
+/** [fadeEdges] 의 scrolled 값: 첫 줄이 넘어갔으면 충분히 큰 값, 아니면 첫 줄이 올라간 만큼(px). */
+internal fun LazyListState.scrolledPx(): Float = if (firstVisibleItemIndex > 0) Float.MAX_VALUE else firstVisibleItemScrollOffset.toFloat()
 
 /**
  * 누르면 0.96배로 줄었다 돌아오는 버튼 바탕. [color] 를 [shape] 로 칠하고, [label] 은 화면 낭독기 이름.

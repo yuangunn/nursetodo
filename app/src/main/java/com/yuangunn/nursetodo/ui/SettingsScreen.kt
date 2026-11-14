@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Add
@@ -37,6 +38,7 @@ import android.app.TimePickerDialog
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
+import android.content.Context
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -55,6 +57,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -153,11 +156,18 @@ private val AlarmModes = listOf("소리+진동", "소리만", "진동만")
  * 말투는 안내가 ~요, 안전 문구가 ~하세요.
  */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(home: Int = 0) {
     val s by TaskStore.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var sheet by remember { mutableStateOf("") }
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    // [home] 이 늘면 첫 화면으로. 다른 탭에 다녀와 다시 그릴 때는 본 값과 같아 그대로 둠.
+    // 본 값은 상태가 아닌 배열이라 읽은 뒤 바꿔도 다시 그리기를 부르지 않음(page 는 아래에서 읽으므로 앞쪽 쓰기)
+    val seenHome = rememberSaveable { intArrayOf(home) }
+    if (home != seenHome[0]) {
+        seenHome[0] = home
+        page = null
+    }
     BackHandler(enabled = page != null) { page = null }
     // 라이트는 칸 색 바탕 위에 흰 묶음, 다크는 검정 바탕 위에 #1C1C1E 묶음
     val bg = if (s.isDark()) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surfaceContainer
@@ -342,18 +352,25 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
             NavRow("새 할 일 위치", if (s.newOnTop) "맨 위" else "맨 아래", icon = { icon(Icons.Outlined.Add) }) { onSheet("newOnTop") }
         }
         Group("기타", foot = "데이터는 이 폰에만 저장돼요. 인터넷 권한이 없어 밖으로 나가지 않아요.") {
-            NavRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요", chevron = false, icon = { icon(Icons.Outlined.Info) }) {
+            NavRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요", chevron = false, icon = { icon(Icons.Outlined.PlayArrow) }) {
                 TaskStore.updateSettings { it.copy(onboarded = false) }
             }
             NavRow("지난 완료 항목 정리", "어제까지 끝낸 할 일을 지워요. 루틴은 남겨요", chevron = false, icon = { icon(Icons.Outlined.Delete) }) {
                 val n = TaskStore.clearOldDone()
                 Toast.makeText(context, if (n > 0) "${n}개 정리했어요" else "정리할 항목이 없어요", Toast.LENGTH_SHORT).show()
             }
+            NavRow("버전", remember { appVersion(context) }, chevron = false, icon = { icon(Icons.Outlined.Info) }, onClick = null)
         }
     }
 }
 
 private val Warn = Color(0xFFFF9F0A)
+
+/** '2.6.1 · 알림판': versionName 의 판 꼬리(-noti)는 떼고 판 이름으로. */
+private fun appVersion(context: Context): String {
+    val name = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty().removeSuffix("-noti")
+    return name + if (NotiListener.available(context)) " · 알림판" else " · 기본판"
+}
 
 /** 잠금화면 줄의 지금 값: 꺼짐 / 할 일 화면 · 보일 페이지 / 잠금화면 카드(라이브 알림). */
 private fun lockSummary(s: Settings): String = when {
@@ -368,13 +385,13 @@ private fun lockSummary(s: Settings): String = when {
  * 줄 사이 선은 이름 글자 앞(16 + 24 + 16)부터.
  */
 @Composable
-private fun NavRow(title: String, summary: String, warn: Boolean = false, chevron: Boolean = true, icon: @Composable () -> Unit, onClick: () -> Unit) {
+private fun NavRow(title: String, summary: String, warn: Boolean = false, chevron: Boolean = true, icon: @Composable () -> Unit, onClick: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
             .rowLine(start = 56.dp)
             .heightIn(min = 64.dp)
-            .clickable(onClick = onClick)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -438,7 +455,12 @@ private fun LockSettings(s: Settings, onSheet: (String) -> Unit) {
     if (!s.lockEnabled) return
     Group(
         "보이는 방식",
-        foot = if (s.lockPage) "화면을 켜면 잠금 위에 할 일 화면이 먼저 떠요." else "잠금화면 알림 카드로 보여요. 줄을 누르면 잠금을 풀지 않고 체크해요.",
+        foot = when {
+            s.lockPage -> "화면을 켜면 잠금 위에 할 일 화면이 먼저 떠요."
+            // 라이브 알림은 글자만 보이는 알림이라 줄마다 누를 수 없고 알림 아래 ✓ 버튼(남은 할 일 위 3개)으로 체크
+            s.lockLive && Build.VERSION.SDK_INT >= 36 -> "잠금화면 알림으로 늘 펼쳐 보여요. 알림 아래 ✓ 버튼(위에서 3개)으로 잠금을 풀지 않고 체크해요."
+            else -> "잠금화면 알림 카드로 보여요. 줄을 누르면 잠금을 풀지 않고 체크해요."
+        },
     ) {
         SwitchSetRow("화면 켜면 할 일 먼저", s.lockPage) { v ->
             TaskStore.updateSettings { it.copy(lockPage = v) }
@@ -641,7 +663,8 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     if (noTime > 0) {
                         Text("시각이 없는 줄 ${noTime}개는 저장하면 '이번 근무 할 일'로 가요.", style = MaterialTheme.typography.bodySmall, color = warningColor(s.isDark()), modifier = Modifier.padding(start = 4.dp))
                     }
-                    Row {
+                    // 글 버튼 안쪽 여백(12)만큼 당겨 글자를 위 글과 같은 왼쪽 끝에
+                    Row(Modifier.offset(x = (-12).dp)) {
                         TextButton(onClick = { repeating = true }) { Text("반복해서 넣기") }
                         // 예시는 지운 것 없이 맨 아래에 붙입니다.
                         TextButton(onClick = { timedText = (timedLines + Preset.DayExample).joinToString("\n") }) { Text("예시 불러오기 (Day)") }
@@ -684,7 +707,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     }
                 }
             }
-            Row(Modifier.padding(start = 4.dp, top = 16.dp, bottom = 16.dp)) {
+            Row(Modifier.padding(top = 16.dp, bottom = 16.dp).offset(x = (-12).dp)) {
                 if (!isNew) {
                     // 고친 내용을 저장하고, 시각 없는 복사본을 만들어 바로 엽니다.
                     TextButton(onClick = {
