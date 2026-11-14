@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -263,7 +264,7 @@ internal fun setupSteps(context: Context, settings: Settings, askNotifications: 
             StepSpec(
                 state = if (settings.tileAdded) State.Done else if (Setup.canRequestTile) State.Todo else State.Manual,
                 optional = true,
-                title = "잠금화면에서 바로 추가 (상단바 버튼)",
+                title = "잠금화면에서 바로 추가 (상단바 버튼, 선택)",
                 body = if (Setup.canRequestTile) "상단바를 내려 '할 일 추가'(✓)를 누르면 잠금을 풀지 않고 적을 수 있어요. " +
                     "삼성은 오른쪽 위에서 내린 빠른 설정창 맨 아래에 있어요."
                 else "상단바를 내려 연필(편집) 버튼 → '할 일 추가' 타일을 끌어다 놓으세요.",
@@ -304,7 +305,8 @@ private fun Step(n: Int, step: StepSpec) {
     val state = step.state
     val (icon: ImageVector, tint: Color) = when (state) {
         State.Done -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
-        State.Todo -> Icons.Default.Warning to Color(0xFFFF9F0A)
+        // 선택 단계는 안 해도 '모두 켜짐'이라 경고 대신 흐린 더하기
+        State.Todo -> if (step.optional) Icons.Default.AddCircle to MaterialTheme.colorScheme.onSurfaceVariant else Icons.Default.Warning to Color(0xFFFF9F0A)
         State.Manual -> Icons.Default.Info to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(verticalAlignment = Alignment.Top) {

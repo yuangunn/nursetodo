@@ -229,9 +229,12 @@ object TaskStore {
 
     /** 근무 루틴 알림 '09:00 정규 라운딩(…)'이 울리면, 이름이 그렇게 시작하는 포켓북('정규 라운딩')의 체크를 새로 시작합니다. */
     fun restartPocketsFor(routine: String) {
-        val text = itemText(routine)
-        if (_pockets.value.none { it.checks.isNotEmpty() && text.startsWith(it.doc.title) }) return
-        commitPockets(_pockets.value.map { if (text.startsWith(it.doc.title)) it.copy(checks = emptySet()) else it })
+        // 띄어쓰기는 보지 않음: '정규라운딩' 알림도 '정규 라운딩' 포켓북을 새로 시작
+        val squeeze = { t: String -> t.filterNot(Char::isWhitespace) }
+        val text = squeeze(itemText(routine))
+        val hit = { p: Pocket -> squeeze(p.doc.title).let { it.isNotEmpty() && text.startsWith(it) } }
+        if (_pockets.value.none { it.checks.isNotEmpty() && hit(it) }) return
+        commitPockets(_pockets.value.map { if (hit(it)) it.copy(checks = emptySet()) else it })
     }
 
     private fun commitPockets(list: List<Pocket>) {

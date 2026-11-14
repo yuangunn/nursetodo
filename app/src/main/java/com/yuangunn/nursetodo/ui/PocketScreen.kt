@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -236,7 +237,8 @@ fun PocketScreen() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                    Row {
+                    // 글 버튼 안쪽 여백(12)만큼 당겨 글자를 위 글과 같은 왼쪽 끝에
+                    Row(Modifier.offset(x = (-12).dp)) {
                         TextButton(onClick = { saveText.launch("포켓북-양식.txt") }) { Text("양식 저장 (글)") }
                         TextButton(onClick = { saveTable.launch("포켓북-양식.tsv") }) { Text("양식 저장 (표)") }
                         if (pockets.isNotEmpty()) TextButton(onClick = loadExamples) { Text("예시 넣기") }

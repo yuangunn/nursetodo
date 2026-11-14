@@ -179,15 +179,72 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
             Preset(3, "Night", 23 * 60, emptyList()),
         )
 
-        /** 설정의 '예시 불러오기' (외과 병동 Day). */
-        val DayExample = listOf(
-            "07:00 정규 라운딩(환자상태 확인, V/S check, 아침식전약, 주사약, 혈당측정, 수술부위, 주사부위)",
-            "08:00 아침식후약 투여",
-            "09:00 정규 라운딩(환자상태 확인, 수액 라운딩)",
-            "11:00 정규 라운딩(환자상태 확인, 수액 라운딩, V/S check)",
-            "12:00 점심식전약 투여, 혈당측정",
-            "13:00 정규 라운딩(환자상태 확인, 수액 라운딩, I/O check)",
+        /** 프리셋 고치기의 '예시 불러오기': 근무마다 시간별 할 일과 이번 근무 할 일. 이름은 [Defaults] 와 같음. */
+        val Examples: Map<String, Pair<List<String>, List<String>>> = mapOf(
+            "Day" to (
+                listOf(
+                    "07:00 정규라운딩",
+                    "07:00 혈당측정, V/S CHECK",
+                    "09:00 정규라운딩",
+                    "11:00 정규라운딩",
+                    "13:00 정규라운딩",
+                    "13:00 I/O Check",
+                ) to listOf("루틴 차팅", "시계열", "처치물품fee")
+                ),
+            "Evening" to (
+                listOf(
+                    "15:00 정규라운딩",
+                    "15:00 V/S check",
+                    "17:00 정규라운딩",
+                    "17:00 혈당 측정",
+                    "19:00 정규라운딩",
+                    "19:00 V/S check",
+                    "21:00 정규라운딩",
+                    "21:00 I/O check, 혈당측정",
+                ) to listOf("루틴 차팅", "시계열", "신환fee", "식사 처방", "익일 검사 설명")
+                ),
+            "Night" to (
+                listOf(
+                    "23:00 정규라운딩",
+                    "01:00 정규라운딩",
+                    "03:00 정규라운딩",
+                    "05:00 정규라운딩",
+                    "05:00 I/O check",
+                ) to listOf(
+                    "루틴 차팅",
+                    "중앙부멸균물품 신청",
+                    "각종 기기 충전",
+                    "오더 확인 및 시계열 리뷰",
+                    "익일 아침약 확인",
+                    "익일 수술환자 전처치 확인",
+                    "비급여동의서 서식 작성",
+                    "미시행 검사 확인",
+                    "익일 검사 확인 및 SBAR출력(이송신청)",
+                    "식사 확인",
+                    "간호필요도 입력",
+                    "조무사워크시트 작성",
+                    "(주말) 드레싱장부 작성",
+                    "신환 EMR누락 확인",
+                    "처치fee 누락 확인",
+                    "처치전담/정맥전담 의뢰",
+                    "퇴원환자 퇴원봉투 정리",
+                    "POCT QC test",
+                    "약 반환",
+                    "카트채우기 및 환경청소",
+                    "필수기록서식 확인",
+                )
+                ),
         )
+
+        /**
+         * [p] 에 맞는 예시 이름: 같은 이름(대소문자 무시)이 있으면 그것, 없으면 근무 시작 시각이 가장 가까운 기본 근무
+         * (07:00 Day · 15:00 Evening · 23:00 Night, 자정을 넘겨 잼).
+         */
+        fun exampleFor(p: Preset): String {
+            Examples.keys.firstOrNull { it.equals(p.name.trim(), ignoreCase = true) }?.let { return it }
+            val start = p.start ?: return "Day"
+            return Defaults.minBy { d -> (((d.start!! - start) % 1440 + 1440) % 1440).let { minOf(it, 1440 - it) } }.name
+        }
     }
 }
 
@@ -320,8 +377,14 @@ fun Settings.reminders(now: Long): List<Reminder> {
 private fun Settings.dutyEnd(): Long =
     presets.nextShift(Instant.ofEpochMilli(dutyShift).atZone(ZoneId.systemDefault()).toLocalDateTime()) ?: Long.MAX_VALUE
 
-/** 이 폰이 [now] 에 근무를 받은 상태인지: '근무 교대 받았습니다'를 누른 교대가 끝나기 전. 키워드 알림은 이때만 울립니다. */
+/** 이 폰이 [now] 에 근무를 받은 상태인지: '근무 교대 받았습니다'를 누른 교대가 끝나기 전. */
 fun Settings.onDuty(now: Long): Boolean = presetMode && dutyShift != 0L && now < dutyEnd()
+
+/**
+ * 키워드 알림이 [now] 에 울릴지(켜기·키워드·볼 앱은 따로 봄). 교대 프리셋을 쓰면 공용폰 여러 대 중 근무를 받은 폰만([onDuty]),
+ * 안 쓰면 '근무를 받은 폰'이 없으니 늘. 예전엔 프리셋을 끄면 영영 안 울렸음.
+ */
+fun Settings.keywordActive(now: Long): Boolean = !presetMode || onDuty(now)
 
 /**
  * [now] 가 속한 교대: 시작 시각이 지난 프리셋 중 가장 늦은 것과 그 시작 시각(ms). 오늘 아직 아무것도 시작 안 했으면

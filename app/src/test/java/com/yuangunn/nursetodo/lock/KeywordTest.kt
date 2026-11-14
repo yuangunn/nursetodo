@@ -16,6 +16,7 @@ import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.currentShift
 import com.yuangunn.nursetodo.data.keywordHit
 import com.yuangunn.nursetodo.data.keywordList
+import com.yuangunn.nursetodo.data.keywordActive
 import com.yuangunn.nursetodo.data.onDuty
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -91,6 +92,28 @@ class KeywordTest {
     }
 
     @Test
+    fun keywordActiveAlwaysWithoutPresets() {
+        val now = LocalDateTime.of(2026, 11, 12, 10, 0)
+        fun ms(t: LocalDateTime) = t.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        // 교대 프리셋을 안 쓰면 근무를 받았든 말든 늘
+        assertTrue(Settings(presetMode = false).keywordActive(ms(now)))
+        assertTrue(Settings(presetMode = false, dutyShift = ms(now.withHour(7))).keywordActive(ms(now.withHour(20))))
+        // 쓰면 받은 근무 동안만
+        val day = Settings(presetMode = true, dutyShift = ms(now.withHour(7)))
+        assertTrue(day.keywordActive(ms(now)))
+        assertFalse(day.keywordActive(ms(now.withHour(15))))
+        assertFalse(day.copy(dutyShift = 0).keywordActive(ms(now)))
+    }
+
+    @Test
+    fun alertsWithoutPresetsWhenNoShiftReceived() {
+        TaskStore.updateSettings { it.copy(presetMode = false, dutyShift = 0, keywords = "배정되었습니다") }
+        val s = sbn(chat("702호 배정되었습니다" to 50L))
+        KeywordAlert.check(context, s)
+        assertNotNull(nm.getNotification(s.key, 5_000))
+    }
+
+    @Test
     fun latestTakesNewestChatMessage() {
         assertEquals(20L to "점심 드세요", KeywordAlert.latest(chat("702호 배정되었습니다" to 10L, "점심 드세요" to 20L)))
         val plain = NotificationCompat.Builder(context, "x").setSmallIcon(android.R.drawable.sym_def_app_icon)
@@ -101,8 +124,8 @@ class KeywordTest {
     @Test
     fun alertsOnceOnDutyForChosenApps() {
         val hit = chat("702호 배정되었습니다" to 10L)
-        // 근무를 안 받았으면 울리지 않음
-        TaskStore.updateSettings { it.copy(keywords = "배정되었습니다") }
+        // 교대 프리셋을 쓰는데 근무를 안 받았으면 울리지 않음
+        TaskStore.updateSettings { it.copy(presetMode = true, keywords = "배정되었습니다") }
         KeywordAlert.check(context, sbn(hit))
         assertEquals(0, nm.size())
 

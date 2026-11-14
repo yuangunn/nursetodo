@@ -157,7 +157,8 @@ internal fun ExpiryCalc(clear: Int) {
                     .heightIn(min = 48.dp)
                     .focusRequester(amountFocus),
             )
-            Segmented(Expiry.UNITS, unit, Modifier.weight(1f).padding(bottom = 4.dp)) {
+            // 옆 기간 칸(OutlinedTextField 테두리 56)과 높이를 같게
+            Segmented(Expiry.UNITS, unit, Modifier.weight(1f), height = 56.dp) {
                 unit = it
                 name = ""
             }

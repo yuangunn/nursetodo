@@ -107,6 +107,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.yuangunn.nursetodo.R
@@ -190,7 +193,7 @@ internal fun Badge(count: Int, modifier: Modifier = Modifier, inline: Boolean = 
         textAlign = TextAlign.Center,
         modifier = modifier
             .offset(if (inline) 0.dp else 4.dp, if (inline) 0.dp else (-4).dp)
-            .height(18.dp)
+            .heightIn(min = 18.dp)
             .widthIn(min = 18.dp)
             .background(Lk.Badge, Pill)
             .padding(horizontal = 5.dp),
@@ -472,12 +475,13 @@ internal fun PanelFrame(
     action: Pair<String, () -> Unit>? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val scroll = rememberScrollState()
     Column(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .weight(1f)
-                .fadeEdges()
-                .verticalScroll(rememberScrollState())
+                .fadeEdges(scrolled = { scroll.value.toFloat() })
+                .verticalScroll(scroll)
                 .padding(vertical = 8.dp),
         ) {
             Box(
@@ -749,7 +753,16 @@ internal fun AlarmPanel(alarms: List<Alarm>, onOff: (Alarm) -> Unit, onClose: ()
 /** 페이지 이름 줄: 고른 칸은 페이지를 넘기는 만큼 따라 미끄러집니다([position] = 페이지 + 넘긴 비율). */
 @Composable
 internal fun PageTabs(names: List<String>, position: Float, current: Int, onTap: (Int) -> Unit) {
-    val tabW = 62.dp
+    // 칸 폭: 가장 긴 이름(굵게) + 20, 최소 62 — 큰 글씨에서 '포켓북'이 칸 끝에 붙거나 잘리지 않게
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val want = remember(names, density) {
+        val w = names.maxOf { measurer.measure(it, Lk.Body15.copy(fontWeight = Lk.Strong), maxLines = 1).size.width }
+        maxOf(62.dp, with(density) { w.toDp() } + 20.dp)
+    }
+    BoxWithConstraints {
+    // 줄 폭이 모자라면(아주 큰 글씨) 칸을 줄이고 글자는 말줄임
+    val tabW = minOf(want, (maxWidth - 12.dp) / names.size)
     Box(
         Modifier
             .height(44.dp)
@@ -774,9 +787,33 @@ internal fun PageTabs(names: List<String>, position: Float, current: Int, onTap:
                         .semantics { selected = on },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(name, style = Lk.Body15, fontWeight = if (on) Lk.Strong else FontWeight.Normal, color = if (on) Lk.Text else Lk.Muted, maxLines = 1)
+                    Text(name, style = Lk.Body15, fontWeight = if (on) Lk.Strong else FontWeight.Normal, color = if (on) Lk.Text else Lk.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+    }
+    }
+}
+
+/**
+ * 할 일 화면의 페이지 줄: 왼쪽 탭 · 오른쪽 알림 버튼 · 설정(사이 8). 큰 글씨·큰 화면 배율에서도 설정이 밀려 잘리지 않게
+ * 설정 → 탭 → 알림 버튼 순으로 폭을 나눠 주고, 알림 버튼은 남은 폭에 맞춰 앱 아이콘 수를 줄입니다([BellButton]).
+ */
+@Composable
+internal fun PageRow(tabs: (@Composable () -> Unit)?, bell: (@Composable () -> Unit)?, settings: @Composable () -> Unit) {
+    Layout(contents = listOf(tabs ?: {}, bell ?: {}, settings)) { (tm, bm, sm), c ->
+        val gap = 8.dp.roundToPx()
+        val s = sm.first().measure(Constraints(maxWidth = c.maxWidth))
+        // 알림 버튼은 가장 작은 모양(44 원)만큼 먼저 비워 두고 탭에 나머지를 줌
+        val bellMin = if (bm.isEmpty()) 0 else 44.dp.roundToPx() + gap
+        val t = tm.firstOrNull()?.measure(Constraints(maxWidth = (c.maxWidth - s.width - gap - bellMin).coerceAtLeast(0)))
+        val used = s.width + (t?.let { it.width + gap } ?: 0)
+        val b = bm.firstOrNull()?.measure(Constraints(maxWidth = (c.maxWidth - used - gap).coerceAtLeast(0)))
+        val h = listOfNotNull(s, t, b).maxOf { it.height }
+        layout(c.maxWidth, h) {
+            t?.place(0, (h - t.height) / 2)
+            s.place(c.maxWidth - s.width, (h - s.height) / 2)
+            b?.place(c.maxWidth - s.width - gap - b.width, (h - b.height) / 2)
         }
     }
 }
@@ -813,7 +850,35 @@ internal fun BellButton(notis: List<Noti>, open: Boolean, onClick: () -> Unit) {
         }
         return
     }
-    val apps = notis.map { it.pkg }.distinct().take(2)
+    // 남은 폭에 들어가는 만큼만 앱 아이콘(최근 2개 → 1개 → 없음): 알약 = 앞 12 · 종 16 · (6 + 아이콘 24) × n · 6 · 배지 · 뒤 10
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val badgeW = remember(notis.size, density) {
+        val w = measurer.measure(if (notis.size > 9) "9+" else "${notis.size}", Lk.Caption.merge(Tnum).copy(fontWeight = Lk.Strong), maxLines = 1).size.width
+        maxOf(18.dp, with(density) { w.toDp() } + 10.dp)
+    }
+    val recent = notis.map { it.pkg }.distinct().take(2)
+    BoxWithConstraints {
+    val fixed = 12.dp + 16.dp + 6.dp + badgeW + 10.dp
+    if (fixed > maxWidth) {
+        // 알약도 안 들어가면(아주 큰 글씨) 설정과 같은 44 원 안에 종, 개수는 원 밖 오른쪽 위 배지
+        Box {
+            Press(
+                onClick,
+                Modifier
+                    .size(44.dp)
+                    .semantics {
+                        contentDescription = "알림 ${notis.size}개 보기"
+                        stateDescription = if (open) "펼침" else "접힘"
+                    },
+                color = if (open) Lk.Selected else Lk.Rail,
+                border = Lk.Edge,
+            ) { Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(20.dp)) }
+            Badge(notis.size, Modifier.align(Alignment.TopEnd).clearAndSetSemantics {})
+        }
+        return@BoxWithConstraints
+    }
+    val apps = recent.take((0..recent.size).lastOrNull { fixed + 30.dp * it <= maxWidth } ?: 0)
     Press(
         onClick,
         Modifier
@@ -835,6 +900,7 @@ internal fun BellButton(notis: List<Noti>, open: Boolean, onClick: () -> Unit) {
             apps.forEach { AppIcon(it, 24.dp) }
             Badge(notis.size, Modifier.clearAndSetSemantics {}, inline = true)
         }
+    }
     }
 }
 

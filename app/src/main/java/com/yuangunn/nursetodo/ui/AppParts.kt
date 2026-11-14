@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -116,7 +117,7 @@ fun TopBar(title: String, onClose: () -> Unit, actions: @Composable RowScope.() 
     }
 }
 
-/** 강조 채움 버튼(높이 48, 15/20 600). */
+/** 강조 채움 버튼(높이 48, 15/20 600). 가로 여백 24: '저장'처럼 짧은 글자도 원이 아닌 알약으로 보이게. */
 @Composable
 fun FillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, colors: androidx.compose.material3.ButtonColors = ButtonDefaults.buttonColors()) {
     Button(
@@ -124,7 +125,7 @@ fun FillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
         enabled = enabled,
         shape = Pill,
         colors = colors,
-        contentPadding = PaddingValues(horizontal = 16.dp),
+        contentPadding = PaddingValues(horizontal = 24.dp),
         modifier = modifier.heightIn(min = 48.dp),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
@@ -262,11 +263,11 @@ fun ValueRow(title: String, value: String, badge: String = "", onClick: () -> Un
  * 계산기 종류, 사용기한 단위, 포켓북 글/미리 보기.
  */
 @Composable
-fun Segmented(options: List<String>, chosen: Int, modifier: Modifier = Modifier, onChoose: (Int) -> Unit) {
+fun Segmented(options: List<String>, chosen: Int, modifier: Modifier = Modifier, height: Dp = 48.dp, onChoose: (Int) -> Unit) {
     Row(
         modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height)
             .border(1.dp, MaterialTheme.colorScheme.outline, Pill)
             .padding(4.dp),
     ) {
@@ -343,6 +344,7 @@ fun PickSheet(
     onDismiss: () -> Unit,
     extra: @Composable ColumnScope.() -> Unit = {},
     done: Boolean = multi,
+    disabled: Map<Int, String> = emptyMap(),
     onPick: (Int) -> Unit,
 ) {
     ModalBottomSheet(
@@ -370,15 +372,21 @@ fun PickSheet(
                 options.forEachIndexed { i, label ->
                     if (i > 0) RowLine()
                     val on = i in selected
+                    // 고를 수 없는 칸: 흐리게, 누르지 않음, 이름 아래 이유
+                    val why = disabled[i]
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
-                            .clickable(role = if (multi) Role.Checkbox else Role.RadioButton) { onPick(i) }
+                            .clickable(enabled = why == null, role = if (multi) Role.Checkbox else Role.RadioButton) { onPick(i) }
+                            .alpha(if (why == null) 1f else 0.38f)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            if (why != null) Text(why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         val color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         Box(
                             Modifier
