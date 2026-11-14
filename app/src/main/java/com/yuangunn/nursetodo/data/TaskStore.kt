@@ -41,6 +41,22 @@ object TaskStore {
         load()
         // 코드 패키지가 바뀌어 시스템이 옛 상단바 타일을 지웠으므로 설정 안내에서 다시 추가하게 합니다.
         if (moved && _settings.value.tileAdded) updateSettings { it.copy(tileAdded = false) }
+        if (!_settings.value.examplesFilled) fillExamples()
+    }
+
+    /**
+     * 2.6.2 전에 깐 폰: 비어 있는 Day·Evening·Night(이름이 같은) 프리셋을 예시로 한 번 채웁니다. 적어 둔 프리셋과 다른 이름은 그대로.
+     * 지금 근무가 그 빈 프리셋이었고 근무 할 일이 하나도 없으면 바로 불러와 잠금화면 근무 페이지에도 보이게 합니다.
+     */
+    internal fun fillExamples() {
+        val s = _settings.value
+        val filled = s.presets.map { p -> if (p.items.isEmpty()) Preset.exampleItems(p.name)?.let { p.copy(items = it) } ?: p else p }
+        updateSettings { it.copy(presets = filled, examplesFilled = true) }
+        val wasEmpty = s.presets.firstOrNull { it.id == s.presetLoaded }?.items?.isEmpty() == true
+        val now = filled.firstOrNull { it.id == s.presetLoaded }
+        if (s.presetMode && s.presetApplied != 0L && wasEmpty && now != null && now.items.isNotEmpty() && _tasks.value.none { it.shift == s.presetApplied }) {
+            loadPreset(now, s.presetApplied)
+        }
     }
 
     fun tasksFor(day: Long, today: Long = Day.today()): List<Task> =
@@ -418,6 +434,7 @@ object TaskStore {
         put("expiryFirstDay", expiryFirstDay)
         put("keywordApps", JSONArray(keywordApps.sorted()))
         put("onboarded", onboarded)
+        put("examplesFilled", examplesFilled)
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -486,6 +503,7 @@ object TaskStore {
             keywordApps = optJSONArray("keywordApps")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: d.keywordApps,
             // 2.1.0 전 저장 파일엔 없음 = 이미 쓰던 사람이라 안내를 건너뜀
             onboarded = optBoolean("onboarded", true),
+            examplesFilled = optBoolean("examplesFilled", false),
         )
     }
 }

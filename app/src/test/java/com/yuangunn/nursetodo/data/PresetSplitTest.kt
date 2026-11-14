@@ -45,4 +45,17 @@ class PresetSplitTest {
         assertEquals("Day", Preset.exampleFor(Preset(9, "오전", 8 * 60, emptyList())))
         assertEquals("Evening", Preset.exampleFor(Preset(9, "오후", 14 * 60, emptyList())))
     }
+
+    @Test
+    fun sameTimeLinesMerge() {
+        // 예시엔 같은 시각 줄이 없음
+        Preset.Examples.values.forEach { (timed, _) -> assertEquals(timed.size, timed.map { itemMinute(it) }.toSet().size) }
+        val now = listOf("07:00 정규라운딩", "  환자상태 확인", "09:00 정규라운딩", "인계")
+        // 같은 시각은 그 줄에 ', 내용'(하위 줄은 그대로), 이미 있는 내용은 그대로, 새 시각은 맨 뒤
+        assertEquals(
+            listOf("07:00 정규라운딩, V/S", "  환자상태 확인", "09:00 정규라운딩", "인계", "11:00 V/S"),
+            mergeTimed(now, listOf("07:00 V/S", "09:00 정규라운딩", "11:00 V/S")),
+        )
+        assertEquals(listOf("17:00 정규라운딩, 혈당 측정"), mergeTimed(listOf("17:00 정규라운딩"), listOf("17:00 혈당 측정", "17:00 혈당 측정")))
+    }
 }
