@@ -36,6 +36,28 @@ class LockLogicTest {
     }
 
     @Test
+    fun timedSplitShowsOnlyWhatIsDueNow() {
+        fun ms(h: Int, m: Int) = LocalDateTime.of(2026, 11, 12, h, m).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val shift = ms(15, 0)
+        val rows = listOf("15:30 인계", "16:00 V/S", "16:30 투약", "18:00 저녁", "18:00 혈당", "20:00 I/O").mapIndexed { i, t ->
+            Task(i.toLong(), t, 0, shift = shift, doneOn = if (i == 0) 1L else null)
+        }
+        // 16:40: 16:00 은 미체크, 16:30 은 시각이 됐고(유예 안) 다음, 18:00 두 줄과 20:00 은 나중, 15:30 은 끝냄
+        val now = ms(16, 40)
+        val split = splitTimed(rows, dutyStates(rows, now), now)
+        assertEquals(listOf(1L, 2L), split.now.map { it.id })
+        assertEquals(listOf(3L, 4L, 5L), split.later.map { it.id })
+        assertEquals(listOf(0L), split.done.map { it.id })
+        // 17:10: 16:30 도 미체크, 다음은 18:00 — 같은 시각 두 줄 모두 위 칸
+        val later = ms(17, 10)
+        assertEquals(listOf(1L, 2L, 3L, 4L), splitTimed(rows, dutyStates(rows, later), later).now.map { it.id })
+        // 방금 끝낸 줄(keep)은 접지 않고 제자리
+        val checked = rows.map { if (it.id == 2L) it.copy(doneOn = 1L) else it }
+        assertEquals(listOf(1L, 2L, 3L, 4L), splitTimed(checked, dutyStates(checked, later), later, keep = setOf(2L)).now.map { it.id })
+        assertEquals(listOf(0L, 2L), splitTimed(checked, dutyStates(checked, later), later).done.map { it.id })
+    }
+
+    @Test
     fun doneSectionInOrderOfFinishing() {
         val today = 20_000L
         val tasks = listOf(

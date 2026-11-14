@@ -97,7 +97,7 @@ internal val LocalLockAccent = staticCompositionLocalOf { Color(0xFF6EA8FF) }
 internal fun Modifier.cover(shape: Shape): Modifier = background(Lk.Cover, shape).border(Lk.Edge, shape)
 
 /** 목록 위아래 끝에서 서서히 사라지게 (스크롤 신호). */
-internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp, scrolled: (() -> Float)? = null): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp, scrolled: (() -> Float)? = null, moreBelow: (() -> Boolean)? = null): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
         val h = size.height
@@ -105,7 +105,8 @@ internal fun Modifier.fadeEdges(top: Dp = 0.dp, bottom: Dp = 24.dp, scrolled: ((
         // 스크롤한 만큼(최대 24) 위도 흐리게: 맨 위에선 0, 내리면 잘린 윗줄이 뚝 끊기지 않게
         val topPx = scrolled?.let { minOf(it(), 24.dp.toPx()) } ?: top.toPx()
         val t = (topPx / h).coerceIn(0f, 0.5f)
-        val b = 1f - (bottom.toPx() / h).coerceIn(0f, 0.5f)
+        // moreBelow 가 있으면 아래에 더 있을 때만 흐리게(내용이 칸에 다 들어가면 마지막 줄을 흐리지 않음)
+        val b = if (moreBelow?.invoke() == false) 1f else 1f - (bottom.toPx() / h).coerceIn(0f, 0.5f)
         drawRect(
             Brush.verticalGradient(0f to (if (t > 0f) Color.Transparent else Color.Black), t to Color.Black, b to Color.Black, 1f to Color.Transparent),
             blendMode = BlendMode.DstIn,

@@ -143,6 +143,12 @@ import com.yuangunn.nursetodo.ui.MainActivity
 import com.yuangunn.nursetodo.ui.NurseTodoTheme
 import com.yuangunn.nursetodo.ui.lockAccent
 import java.time.LocalDateTime
+import androidx.compose.foundation.ScrollState
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.runtime.key
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -319,7 +325,8 @@ private fun LockPage(
         if (!preset) emptyList() else dutyOrder(all.filter { it.shift != null && it.shift == settings.presetApplied })
     }
     val listState = rememberLazyListState()
-    val dutyListState = rememberLazyListState()
+    val dutyTop = rememberScrollState()
+    val dutyBottom = rememberScrollState()
     val scope = rememberCoroutineScope()
     var adding by remember { mutableStateOf(startAdding) }
     var editingId by remember { mutableStateOf<Long?>(null) }
@@ -511,7 +518,10 @@ private fun LockPage(
                 onUndo = { TaskStore.restore(snap) },
             ),
         )
-        scope.launch { dutyListState.scrollToItem(0) }
+        scope.launch {
+            dutyTop.scrollTo(0)
+            dutyBottom.scrollTo(0)
+        }
     }
     val receive: (DutyHead) -> Unit = { h ->
         if (h.shift != settings.presetApplied && pendingDuty.isNotEmpty()) {
@@ -625,7 +635,7 @@ private fun LockPage(
                     verticalAlignment = Alignment.Top,
                 ) { i ->
                     when (pages[i]) {
-                        PAGE_DUTY -> DutyPage(duty, head, settings, now, dutyListState, editingId, { editingId = it }, menuId, { menuId = it }, { rowMenu(it, true) }, receive)
+                        PAGE_DUTY -> DutyPage(duty, head, settings, now, dutyTop, dutyBottom, editingId, { editingId = it }, menuId, { menuId = it }, { rowMenu(it, true) }, receive)
                         PAGE_POCKET -> PocketPage(pockets) { p ->
                             val old = p.checks
                             TaskStore.clearPocketChecks(p.id)
@@ -1091,9 +1101,27 @@ internal fun withRo(name: String): String {
 }
 
 /**
- * 근무 페이지: 맨 위 상태(교대 받기 · 근무 중), 아래 시각순 목록. 줄은 동그라미 · 시각 칸 44 · 내용.
- * 시각이 지나고 30분 넘게 안 한 것은 미체크(빨강), 그 밖의 첫 안 한 것은 다음(진하게), 끝낸 것은 체크 시각과 함께 남깁니다.
- * 앞 근무에서 가져온 항목은 'Evening에서 넘어옴' 아래 맨 위에 둡니다. 하위 항목이 있는 줄은 끝낸 수/전체 칩으로 펼칩니다.
+ * 근무 위 칸 나누기: [now] 늘 보이는 것(미체크 · 시각이 된 것 · 다음 시각의 것, 같은 시각이면 모두),
+ * [later] 그 뒤 안 한 것, [done] 끝낸 것. 모두 [timed] 순서 그대로. [keep] 은 방금 체크해 잠깐 제자리에 둘 것.
+ */
+internal class TimedSplit(val now: List<Task>, val later: List<Task>, val done: List<Task>)
+
+internal fun splitTimed(timed: List<Task>, states: Map<Long, Duty>, now: Long, keep: Set<Long> = emptySet()): TimedSplit {
+    val nextDue = timed.firstOrNull { states[it.id] == Duty.NEXT }?.due
+    val (done, open) = timed.partition { it.doneOn != null && it.id !in keep }
+    val (cur, later) = open.partition { t ->
+        val due = t.due
+        t.id in keep || states[t.id] == Duty.MISSED || due == null || due <= now || (nextDue != null && due <= nextDue)
+    }
+    return TimedSplit(cur, later, done)
+}
+
+/**
+ * 근무 페이지: 맨 위 상태(교대 받기 · 근무 중)는 고정, 그 아래 두 칸이 따로 스크롤.
+ * - 위 '지금 할 일': 시각 있는 항목 중 미체크 · 시각이 된 것 · 다음 것만. 끝낸 것과 나중 것은 '이후 N개 · HH:MM부터' 한 줄로 접어 두고
+ *   누르면 전체 시간표. 방금 체크한 것은 4초 동안 제자리에 남았다가 접힘(눌린 게 보이고 바로 되돌릴 수 있게).
+ * - 아래 '이번 근무 할 일': 시각 없는 항목(앞 근무에서 넘어온 것이 맨 위). 끝낸 것도 제자리에 체크 시각과 함께, 끝낸 수/전체와 진행 막대.
+ * 두 칸은 내용만큼 차지하고 둘 다 넘치면 반반([DutySplitLayout]). 시간별만 있는 프리셋은 접지 않고 전체 시간표 하나.
  */
 @Composable
 private fun DutyPage(
@@ -1101,7 +1129,8 @@ private fun DutyPage(
     head: DutyHead?,
     s: Settings,
     now: Long,
-    state: LazyListState,
+    topScroll: ScrollState,
+    bottomScroll: ScrollState,
     editingId: Long?,
     onEditing: (Long?) -> Unit,
     menuId: Long?,
@@ -1115,58 +1144,202 @@ private fun DutyPage(
     val nextAt = list.firstOrNull { states[it.id] == Duty.NEXT }?.due
     val pending = list.count { it.doneOn == null }
     var open by remember { mutableStateOf(setOf<Long>()) }
-    val header = @Composable { DutyHeader(head, s, now, missed, nextAt, pending, onReceive) }
-    if (list.isEmpty()) {
-        Column(Modifier.fillMaxSize()) {
-            header()
-            EmptyState(Icons.Outlined.DateRange, "이번 근무 할 일이 없어요", "앱 › 설정 › 교대 프리셋에서 적어요.", Modifier.weight(1f).fillMaxWidth())
+    // 방금 체크한 줄: 위 칸에서 4초 동안 접지 않음(마지막 체크부터)
+    var recent by remember { mutableStateOf(setOf<Long>()) }
+    LaunchedEffect(recent) {
+        if (recent.isNotEmpty()) {
+            delay(4_000)
+            recent = emptySet()
         }
-        return
     }
-    val lastCarried = list.lastOrNull { it.carried != null }?.id
-    // 앞 근무에서 넘어온 것 · 시간별(시각순) · 이번 근무 할 일(시각 없음, 끝낸 수/전체). dutyOrder 순서를 그대로 나눕니다.
-    val carried = list.filter { it.carried != null }
-    val timed = list.filter { it.carried == null && it.due != null }
-    val other = list.filter { it.carried == null && it.due == null }
-    val row: @Composable (Task) -> Unit = { t ->
-        DutyRow(
-            t, states[t.id] ?: Duty.REST, today,
-            editing = t.id == editingId,
-            onEditing = { on -> onEditing(if (on) t.id else null) },
-            menuOpen = t.id == menuId,
-            onMenu = { o -> onMenu(if (o) t.id else null) },
-            menu = { menuFor(t) },
-            subsOpen = t.id in open,
-            onSubs = { open = if (t.id in open) open - t.id else open + t.id },
-        )
-    }
-    LazyColumn(Modifier.fillMaxSize().fadeEdges(scrolled = { state.scrolledPx() }), state = state, contentPadding = PaddingValues(bottom = 24.dp)) {
-        item(key = "head") { header() }
-        items(carried, key = { it.id }) { t ->
-            Column(Modifier.animateItem()) {
-                if (t.id == carried.first().id) {
-                    Text("${t.carried}에서 넘어옴", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp))
-                }
-                row(t)
-                if (t.id == lastCarried) Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp).fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(Lk.Divider))
+    var showAll by remember(s.presetApplied) { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        DutyHeader(head, s, now, missed, nextAt, pending, onReceive)
+        if (list.isEmpty()) {
+            EmptyState(Icons.Outlined.DateRange, "이번 근무 할 일이 없어요", "앱 › 설정 › 교대 프리셋에서 적어요.", Modifier.weight(1f).fillMaxWidth())
+            return@Column
+        }
+        // 위: 시각 있는 것(넘어온 것 먼저, dutyOrder 그대로) · 아래: 시각 없는 것(넘어온 것 먼저)
+        val timed = list.filter { itemMinute(it.title) != null }
+        val untimed = list - timed.toSet()
+        val row: @Composable (Task, Boolean) -> Unit = { t, checklist ->
+            DutyRow(
+                t, states[t.id] ?: Duty.REST, today,
+                editing = t.id == editingId,
+                onEditing = { on -> onEditing(if (on) t.id else null) },
+                menuOpen = t.id == menuId,
+                onMenu = { o -> onMenu(if (o) t.id else null) },
+                menu = { menuFor(t) },
+                subsOpen = t.id in open,
+                onSubs = { open = if (t.id in open) open - t.id else open + t.id },
+                checklist = checklist,
+                onToggled = { if (t.doneOn == null) recent = recent + t.id },
+            )
+        }
+        val carriedLabel = @Composable { rows: List<Task> ->
+            rows.firstOrNull { it.carried != null }?.let { t ->
+                Text("${t.carried}에서 넘어옴", style = Lk.Caption, color = Lk.Muted, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
             }
         }
-        // 두 묶음이 다 있을 때만 '시간별' 이름을 붙입니다(시간별만 있으면 예전처럼 이름 없이).
-        if (timed.isNotEmpty() && other.isNotEmpty()) item(key = "timedHead") { SectionHead("시간별") }
-        items(timed, key = { it.id }) { t -> Box(Modifier.animateItem()) { row(t) } }
-        if (other.isNotEmpty()) {
-            item(key = "otherHead") { SectionHead("이번 근무 할 일", "${other.count { it.doneOn != null }}/${other.size}") }
-            items(other, key = { it.id }) { t -> Box(Modifier.animateItem()) { row(t) } }
+        // 넘어온 줄 묶음 끝 선
+        val rows = @Composable { items: List<Task>, checklist: Boolean ->
+            carriedLabel(items)
+            val lastCarried = items.lastOrNull { it.carried != null }?.id
+            items.forEach { t ->
+                key(t.id) {
+                    row(t, checklist)
+                    if (t.id == lastCarried && t.id != items.last().id) {
+                        Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp).fillMaxWidth().height(1.dp).background(Lk.Divider))
+                    }
+                }
+            }
+        }
+        val topSection = @Composable {
+            if (untimed.isEmpty()) {
+                // 시간별만: 접으면 거의 비므로 전체 시간표(예전처럼 묶음 이름 없이)
+                ScrollArea(topScroll, Modifier.fillMaxSize()) { rows(timed, false) }
+            } else {
+                val split = splitTimed(timed, states, now, recent)
+                val doneN = timed.count { it.doneOn != null }
+                val foldable = split.later.isNotEmpty() || split.done.isNotEmpty()
+                Column {
+                    SectionHead(
+                        if (showAll) "시간별 전체" else "지금 할 일",
+                        "끝낸 $doneN/${timed.size}",
+                        expanded = if (foldable || showAll) showAll else null,
+                    ) { showAll = !showAll }
+                    ScrollArea(topScroll, Modifier.weight(1f, fill = false)) {
+                        if (showAll) {
+                            rows(timed, false)
+                        } else {
+                            rows(split.now, false)
+                            if (split.now.isEmpty()) {
+                                Text(
+                                    if (split.later.isEmpty()) "시간별 할 일을 다 했어요" else "지금 할 시간별 일은 없어요",
+                                    style = Lk.Caption,
+                                    color = Lk.Muted,
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
+                        if (foldable) FoldLine(showAll, split) { showAll = !showAll }
+                    }
+                }
+            }
+        }
+        val bottomSection = @Composable {
+            val doneN = untimed.count { it.doneOn != null }
+            Column {
+                if (timed.isNotEmpty()) Box(Modifier.fillMaxWidth().height(1.dp).background(Lk.Divider))
+                SectionHead("이번 근무 할 일", "$doneN/${untimed.size}")
+                ProgressLine(if (untimed.isEmpty()) 0f else doneN.toFloat() / untimed.size)
+                ScrollArea(bottomScroll, Modifier.weight(1f, fill = false)) { rows(untimed, true) }
+            }
+        }
+        when {
+            untimed.isEmpty() -> Box(Modifier.weight(1f)) { topSection() }
+            timed.isEmpty() -> Box(Modifier.weight(1f)) { bottomSection() }
+            else -> DutySplitLayout(Modifier.weight(1f), topSection, bottomSection)
         }
     }
 }
 
-/** 근무 페이지 묶음 이름(13/18 600 흐리게, 위 12): '시간별', '이번 근무 할 일 2/4'. */
+/** 칸 안 스크롤: 위는 스크롤한 만큼, 아래는 더 있을 때만 흐리게. 마지막 줄 아래 8. */
 @Composable
-private fun SectionHead(title: String, right: String = "") {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ScrollArea(scroll: ScrollState, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .fadeEdges(scrolled = { scroll.value.toFloat() }, moreBelow = { scroll.canScrollForward })
+            .verticalScroll(scroll)
+            .padding(bottom = 8.dp),
+        content = content,
+    )
+}
+
+/**
+ * 위·아래 두 칸 높이: 둘 다 들어가면 위는 내용만큼·아래는 나머지, 넘치면 짧은 쪽은 내용만큼·긴 쪽이 나머지,
+ * 둘 다 반을 넘으면 반반. 칸 안은 각자 스크롤.
+ */
+@Composable
+private fun DutySplitLayout(modifier: Modifier, top: @Composable () -> Unit, bottom: @Composable () -> Unit) {
+    Layout(contents = listOf(top, bottom), modifier = modifier) { (tm, bm), c ->
+        val h = c.maxHeight
+        val w = c.maxWidth
+        val topNeed = tm.sumOf { it.maxIntrinsicHeight(w) }
+        val bottomNeed = bm.sumOf { it.maxIntrinsicHeight(w) }
+        val half = h / 2
+        val topH = when {
+            topNeed + bottomNeed <= h || topNeed <= half -> topNeed
+            bottomNeed <= half -> h - bottomNeed
+            else -> half
+        }.coerceIn(0, h)
+        val t = tm.map { it.measure(Constraints.fixed(w, topH)) }
+        val b = bm.map { it.measure(Constraints.fixed(w, h - topH)) }
+        layout(w, h) {
+            t.forEach { it.place(0, 0) }
+            b.forEach { it.place(0, topH) }
+        }
+    }
+}
+
+/** 위 칸 맨 아래 접기 줄(높이 40, 누르면 접고 폄): '이후 4개 · 04:00부터 · 끝낸 2' / '지금 할 것만 보기'. */
+@Composable
+private fun FoldLine(all: Boolean, split: TimedSplit, onClick: () -> Unit) {
+    val text = if (all) {
+        "지금 할 것만 보기"
+    } else {
+        listOfNotNull(
+            split.later.takeIf { it.isNotEmpty() }?.let { l -> "이후 ${l.size}개" + (l.first().due?.let { " · ${hhmm(it)}부터" } ?: "") },
+            split.done.takeIf { it.isNotEmpty() }?.let { "끝낸 ${it.size}" },
+        ).joinToString(" · ")
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .clickable(role = Role.Button, onClickLabel = if (all) "접기" else "시간별 전체 보기", onClick = onClick)
+            .padding(start = 16.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // 접고 펴는 표시(⌄/⌃)는 묶음 이름 줄에만 — 같은 버튼 표시가 두 번 보이지 않게
+        Text(text, style = Lk.Caption.merge(Tnum), color = Lk.Muted, modifier = Modifier.weight(1f))
+    }
+}
+
+/** 이번 근무 할 일 진행 막대(높이 3, 옆 16): 바탕 흰 10% 위 강조색. */
+@Composable
+private fun ProgressLine(fraction: Float) {
+    val accent = LocalLockAccent.current
+    Box(
+        Modifier
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .fillMaxWidth()
+            .height(3.dp)
+            .background(Lk.Divider, CircleShape),
+    ) {
+        Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).fillMaxHeight().background(accent, CircleShape))
+    }
+}
+
+/**
+ * 근무 페이지 묶음 이름(13/18 600 흐리게, 위 12): '지금 할 일 · 끝낸 1/6', '이번 근무 할 일 1/3'.
+ * [expanded] 가 있으면 줄 전체가 접고 펴는 버튼(오른쪽 ⌄/⌃) — 펼친 시간표가 길어 아래 접기 줄까지 내리지 않아도 되게.
+ */
+@Composable
+private fun SectionHead(title: String, right: String = "", expanded: Boolean? = null, onClick: () -> Unit = {}) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (expanded != null) Modifier.clickable(role = Role.Button, onClickLabel = if (expanded) "지금 할 것만 보기" else "시간별 전체 보기", onClick = onClick) else Modifier)
+            .padding(start = 16.dp, end = if (expanded != null) 12.dp else 16.dp, top = 12.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(title, style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Muted, modifier = Modifier.weight(1f))
         if (right.isNotEmpty()) Text(right, style = Lk.Caption.merge(Tnum), color = Lk.Muted)
+        if (expanded != null) {
+            Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null, tint = Lk.Muted, modifier = Modifier.padding(start = 4.dp).size(18.dp))
+        }
     }
 }
 
@@ -1183,6 +1356,8 @@ private fun DutyRow(
     menu: () -> List<RowMenuItem>,
     subsOpen: Boolean,
     onSubs: () -> Unit,
+    checklist: Boolean = false,
+    onToggled: () -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
     val time = itemMinute(task.title)?.let { "%02d:%02d".format(it / 60, it % 60) } ?: ""
@@ -1210,6 +1385,7 @@ private fun DutyRow(
                     } + (doneAt?.let { ", $it 체크" } ?: ""),
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onToggled()
                     TaskStore.toggle(task.id, task.doneOn ?: today)
                 },
                 enabled = !editing,
@@ -1278,11 +1454,15 @@ private fun DutyRow(
                             Duty.DONE -> Lk.Muted
                             Duty.REST -> Lk.Body
                         },
-                        textDecoration = if (on) TextDecoration.LineThrough else null,
+                        // 체크리스트(이번 근무 할 일)는 끝낸 것도 읽기 쉽게 취소선 없이, 체크 시각은 오른쪽에
+                        textDecoration = if (on && !checklist) TextDecoration.LineThrough else null,
                     )
-                    if (doneAt != null) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
+                    if (doneAt != null && !checklist) Text("$doneAt 체크", style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted)
                 }
                 }
+            }
+            if (doneAt != null && checklist && !editing) {
+                Text(doneAt, style = Lk.Caption.merge(TextStyle(fontFeatureSettings = "tnum")), color = Lk.Muted, modifier = Modifier.padding(start = 8.dp, top = 12.dp))
             }
             if (subs.isNotEmpty() && !editing) {
                 Box(Modifier.padding(start = 8.dp)) {
@@ -1301,6 +1481,7 @@ private fun DutyRow(
                 Row(Modifier.fillMaxWidth().padding(start = 94.dp, end = 16.dp), verticalAlignment = Alignment.Top) {
                     CheckCircle(sOn, Lk.Body, (if (sOn) "체크 풀기: " else "완료: ") + "$sub ($time $text)".replace("( ", "("), onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onToggled()
                         TaskStore.toggleSub(task.id, i, task.doneOn ?: today)
                     })
                     Text(
