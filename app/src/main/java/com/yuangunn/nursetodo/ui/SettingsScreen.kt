@@ -1,5 +1,6 @@
 package com.yuangunn.nursetodo.ui
 
+import com.yuangunn.nursetodo.data.mergeTimed
 import com.yuangunn.nursetodo.data.repeatLines
 import com.yuangunn.nursetodo.data.splitPresetItems
 import androidx.compose.material3.FilterChip
@@ -371,6 +372,10 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
 
 private val Warn = Color(0xFFFF9F0A)
 
+/** 비어 있는 프리셋 칸의 회색 안내 글: 이 근무 예시를 6줄까지, 더 있으면 '…'. */
+private fun examplePlaceholder(lines: List<String>): String =
+    (lines.take(6) + if (lines.size > 6) listOf("…") else emptyList()).joinToString("\n")
+
 /** '2.6.1 · 알림판': versionName 의 판 꼬리(-noti)는 떼고 판 이름으로. */
 private fun appVersion(context: Context): String {
     val name = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty().removeSuffix("-noti")
@@ -659,7 +664,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     OutlinedTextField(
                         value = timedText,
                         onValueChange = { timedText = it },
-                        placeholder = { Text("07:00 정규라운딩\n07:00 혈당측정, V/S CHECK\n09:00 정규라운딩") },
+                        placeholder = { Text(examplePlaceholder(Preset.Examples.getValue(Preset.exampleFor(Preset(p.id, name, start, emptyList()))).first)) },
                         supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
                         minLines = 5,
                         modifier = Modifier.fillMaxWidth(),
@@ -676,7 +681,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                         val ex = Preset.exampleFor(Preset(p.id, name, start, emptyList()))
                         TextButton(onClick = {
                             val (t, o) = Preset.Examples.getValue(ex)
-                            timedText = (timedLines + t.filter { it !in timedLines }).joinToString("\n")
+                            timedText = mergeTimed(timedLines, t).joinToString("\n")
                             otherText = (otherLines + o.filter { it !in otherLines }).joinToString("\n")
                         }) { Text("예시 불러오기 ($ex)") }
                     }
@@ -688,7 +693,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     OutlinedTextField(
                         value = otherText,
                         onValueChange = { otherText = it },
-                        placeholder = { Text("루틴 차팅\n시계열\n처치물품fee") },
+                        placeholder = { Text(examplePlaceholder(Preset.Examples.getValue(Preset.exampleFor(Preset(p.id, name, start, emptyList()))).second)) },
                         supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
@@ -700,7 +705,8 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                 }
                 if (repeating) {
                     RepeatDialog(defaultStart = start ?: (8 * 60), onDismiss = { repeating = false }) { added ->
-                        timedText = (timedLines + added).joinToString("\n")
+                        // 같은 시각 줄이 있으면 그 줄에 합침
+                        timedText = mergeTimed(timedLines, added).joinToString("\n")
                         repeating = false
                     }
                 }

@@ -156,6 +156,8 @@ data class Settings(
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
     /** 첫 실행 안내를 끝냈거나 건너뜀. 새로 깔면 false, 2.1.0 전부터 쓰던 설치(저장 파일에 이 값이 없음)는 true. */
     val onboarded: Boolean = false,
+    /** 비어 있던 Day·Evening·Night 프리셋을 예시로 한 번 채웠음. 새로 깔면 이미 채워져 true, 2.6.2 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 채움. */
+    val examplesFilled: Boolean = true,
 )
 
 /** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */
@@ -173,34 +175,22 @@ fun keywordHit(keywords: List<String>, text: String): String? {
  */
 data class Preset(val id: Long, val name: String, val start: Int?, val items: List<String>, val quiet: Set<String> = emptySet()) {
     companion object {
-        val Defaults = listOf(
-            Preset(1, "Day", 7 * 60, emptyList()),
-            Preset(2, "Evening", 15 * 60, emptyList()),
-            Preset(3, "Night", 23 * 60, emptyList()),
-        )
-
-        /** 프리셋 고치기의 '예시 불러오기': 근무마다 시간별 할 일과 이번 근무 할 일. 이름은 [Defaults] 와 같음. */
+        /** 근무마다 시간별 할 일과 이번 근무 할 일. 처음 프리셋([Defaults])과 프리셋 고치기의 '예시 불러오기'. */
         val Examples: Map<String, Pair<List<String>, List<String>>> = mapOf(
             "Day" to (
                 listOf(
-                    "07:00 정규라운딩",
-                    "07:00 혈당측정, V/S CHECK",
+                    "07:00 정규라운딩, 혈당측정, V/S CHECK",
                     "09:00 정규라운딩",
                     "11:00 정규라운딩",
-                    "13:00 정규라운딩",
-                    "13:00 I/O Check",
+                    "13:00 정규라운딩, I/O Check",
                 ) to listOf("루틴 차팅", "시계열", "처치물품fee")
                 ),
             "Evening" to (
                 listOf(
-                    "15:00 정규라운딩",
-                    "15:00 V/S check",
-                    "17:00 정규라운딩",
-                    "17:00 혈당 측정",
-                    "19:00 정규라운딩",
-                    "19:00 V/S check",
-                    "21:00 정규라운딩",
-                    "21:00 I/O check, 혈당측정",
+                    "15:00 정규라운딩, V/S check",
+                    "17:00 정규라운딩, 혈당 측정",
+                    "19:00 정규라운딩, V/S check",
+                    "21:00 정규라운딩, I/O check, 혈당측정",
                 ) to listOf("루틴 차팅", "시계열", "신환fee", "식사 처방", "익일 검사 설명")
                 ),
             "Night" to (
@@ -208,8 +198,7 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
                     "23:00 정규라운딩",
                     "01:00 정규라운딩",
                     "03:00 정규라운딩",
-                    "05:00 정규라운딩",
-                    "05:00 I/O check",
+                    "05:00 정규라운딩, I/O check",
                 ) to listOf(
                     "루틴 차팅",
                     "중앙부멸균물품 신청",
@@ -234,6 +223,17 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
                     "필수기록서식 확인",
                 )
                 ),
+        )
+
+        /** [name] 과 같은 이름(대소문자 무시)의 예시를 저장 형식(시간별 줄 다음 이번 근무 할 일 줄)으로. 없으면 null. */
+        fun exampleItems(name: String): List<String>? =
+            Examples.entries.firstOrNull { it.key.equals(name.trim(), ignoreCase = true) }?.value?.let { (timed, other) -> timed + other }
+
+        /** 처음 깔았을 때의 프리셋: Day · Evening · Night 와 그 예시 할 일. [Examples] 를 쓰므로 그 뒤에 둡니다. */
+        val Defaults = listOf(
+            Preset(1, "Day", 7 * 60, exampleItems("Day")!!),
+            Preset(2, "Evening", 15 * 60, exampleItems("Evening")!!),
+            Preset(3, "Night", 23 * 60, exampleItems("Night")!!),
         )
 
         /**
@@ -307,6 +307,26 @@ fun splitPresetItems(items: List<String>): Pair<List<String>, List<String>> {
  * 반복해서 넣기: [start] 부터 [every] 분마다 [end] 까지(둘 다 포함) '08:00 라운딩' 줄들. 끝이 시작보다 이르면 자정을 넘깁니다(Night 23:00 → 05:00).
  * 회차마다 따로 체크하고 따로 알리도록 줄을 나눠 넣습니다.
  */
+/**
+ * [added] 시각 줄을 [existing] 에 넣되, 같은 시각의 줄(하위 줄 아님)이 있으면 그 줄 뒤에 ', 내용'으로 합칩니다
+ * (07:00 정규라운딩 + 07:00 V/S → '07:00 정규라운딩, V/S'). 이미 그 내용이 있으면 그대로, 같은 시각이 없으면 맨 뒤에.
+ * 같은 시각 줄이 둘이면 근무 루틴 알림도 두 번 울리고 근무 페이지에 같은 시각이 두 줄이라 한 줄로 둡니다.
+ */
+fun mergeTimed(existing: List<String>, added: List<String>): List<String> {
+    val out = existing.toMutableList()
+    added.forEach { line ->
+        val m = itemMinute(line)
+        val text = itemText(line).trim()
+        val i = if (m == null) -1 else out.indexOfFirst { !isSubLine(it) && itemMinute(it) == m }
+        when {
+            i < 0 -> out += line
+            text.isEmpty() || itemText(out[i]).split(",").map { it.trim() }.any { it.equals(text, ignoreCase = true) } -> Unit
+            else -> out[i] = out[i].trimEnd() + ", " + text
+        }
+    }
+    return out
+}
+
 fun repeatLines(text: String, start: Int, every: Int, end: Int): List<String> {
     if (every <= 0 || text.isBlank()) return emptyList()
     val span = ((end - start) % 1440 + 1440) % 1440

@@ -138,4 +138,27 @@ class ShiftTest {
         // 키워드는 한 줄에 하나(예전 쉼표도)
         assertEquals(listOf("배정되었습니다", "응급", "ICU"), Settings(keywords = "배정되었습니다\n응급, ICU").keywordList)
     }
+
+    @Test
+    fun fillsOnlyEmptyDefaultPresetsOnceAndLoadsCurrentShift() {
+        // 새로 깔면 Day·Evening·Night 가 예시로 차 있음
+        assertEquals(listOf("07:00 정규라운딩, 혈당측정, V/S CHECK", "09:00 정규라운딩"), Settings().presets[0].items.take(2))
+        assertEquals("필수기록서식 확인", Settings().presets[2].items.last())
+        // 2.6.2 전 폰: Day 는 비었고(지금 근무, 할 일 없음), Evening 은 적어 둠, 다른 이름은 비었음
+        val shift = ms(at(7))
+        val old = listOf(
+            Preset(1, "Day", 7 * 60, emptyList()),
+            Preset(2, "Evening", 15 * 60, listOf("15:00 내 인계")),
+            Preset(9, "병동 회의", 12 * 60, emptyList()),
+        )
+        TaskStore.updateSettings { Settings(presetMode = true, presets = old, presetApplied = shift, presetLoaded = 1, examplesFilled = false) }
+        TaskStore.fillExamples()
+        val now = TaskStore.settings.value
+        assertTrue(now.examplesFilled)
+        assertEquals(Preset.exampleItems("Day"), now.presets[0].items)
+        assertEquals(listOf("15:00 내 인계"), now.presets[1].items)
+        assertEquals(emptyList<String>(), now.presets[2].items)
+        // 지금 근무(Day)가 비어 있었으니 바로 불러옴
+        assertEquals(presetRows(Preset.exampleItems("Day")!!).map { it.first }.sorted(), dutyTitles().sorted())
+    }
 }
