@@ -14,7 +14,7 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.keywordHit
 import com.yuangunn.nursetodo.data.keywordList
-import com.yuangunn.nursetodo.data.onDuty
+import com.yuangunn.nursetodo.data.keywordActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -115,7 +115,7 @@ object KeywordAlert {
         val n = sbn.notification
         if (!s.keywordOn || sbn.packageName == context.packageName || sbn.packageName !in s.keywordApps) return
         if (n.flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT) != 0) return
-        if (!s.onDuty(System.currentTimeMillis())) return
+        if (!s.keywordActive(System.currentTimeMillis())) return
         val title = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val (time, text) = latest(n)
         val hit = keywordHit(s.keywordList, "$title\n$text") ?: return

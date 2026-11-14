@@ -32,4 +32,17 @@ class PresetSplitTest {
         assertEquals(listOf("09:00 I/O", "09:30 I/O", "10:00 I/O"), repeatLines("I/O", 9 * 60, 30, 10 * 60 + 15))
         assertEquals(emptyList<String>(), repeatLines("", 8 * 60, 60, 10 * 60))
     }
+
+    @Test
+    fun examplesMatchShiftByNameOrStart() {
+        // 예시는 시간별 칸엔 시각 줄만, 이번 근무 할 일 칸엔 시각 없는 줄만
+        Preset.Examples.forEach { (name, ex) ->
+            assertEquals(name, ex.first to ex.second, splitPresetItems(ex.first + ex.second))
+        }
+        assertEquals("Evening", Preset.exampleFor(Preset(9, "evening", 900, emptyList())))
+        assertEquals("Night", Preset.exampleFor(Preset(9, "N근무", 22 * 60, emptyList())))
+        assertEquals("Night", Preset.exampleFor(Preset(9, "새벽", 60, emptyList())))
+        assertEquals("Day", Preset.exampleFor(Preset(9, "오전", 8 * 60, emptyList())))
+        assertEquals("Evening", Preset.exampleFor(Preset(9, "오후", 14 * 60, emptyList())))
+    }
 }

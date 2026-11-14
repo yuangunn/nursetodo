@@ -43,6 +43,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -343,6 +344,7 @@ fun PickSheet(
     onDismiss: () -> Unit,
     extra: @Composable ColumnScope.() -> Unit = {},
     done: Boolean = multi,
+    disabled: Map<Int, String> = emptyMap(),
     onPick: (Int) -> Unit,
 ) {
     ModalBottomSheet(
@@ -370,15 +372,21 @@ fun PickSheet(
                 options.forEachIndexed { i, label ->
                     if (i > 0) RowLine()
                     val on = i in selected
+                    // 고를 수 없는 칸: 흐리게, 누르지 않음, 이름 아래 이유
+                    val why = disabled[i]
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
-                            .clickable(role = if (multi) Role.Checkbox else Role.RadioButton) { onPick(i) }
+                            .clickable(enabled = why == null, role = if (multi) Role.Checkbox else Role.RadioButton) { onPick(i) }
+                            .alpha(if (why == null) 1f else 0.38f)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            if (why != null) Text(why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         val color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         Box(
                             Modifier

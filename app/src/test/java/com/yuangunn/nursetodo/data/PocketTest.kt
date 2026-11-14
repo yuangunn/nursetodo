@@ -74,6 +74,10 @@ class PocketTest {
         TaskStore.togglePocketCheck(liver.id, "0")
         TaskStore.restartPocketsFor("09:00 정규 라운딩(환자상태 확인, 수액 라운딩)")
         assertEquals(listOf(emptySet(), setOf("0")), TaskStore.pockets.value.map { it.checks })
+        // 띄어쓰기는 보지 않음: '정규라운딩' 알림도 '정규 라운딩' 포켓북을 새로 시작
+        TaskStore.togglePocketCheck(round.id, "0")
+        TaskStore.restartPocketsFor("11:00 정규라운딩")
+        assertEquals(listOf(emptySet(), setOf("0")), TaskStore.pockets.value.map { it.checks })
         // 글을 고치면 자리가 바뀔 수 있어 체크를 비움
         TaskStore.updatePocket(liver.id, "# 간경화\n- 복부둘레\n- 체중")
         assertEquals(emptySet<String>(), TaskStore.pockets.value.last().checks)

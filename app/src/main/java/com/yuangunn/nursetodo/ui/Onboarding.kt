@@ -175,7 +175,7 @@ private fun Features(preset: Boolean, keyword: Boolean, noti: Boolean) {
             TaskStore.updateSettings { it.copy(presetMode = v) }
         }
         if (noti) {
-            SwitchSetRow("키워드 알림", keyword, "근무 중에 고른 앱 알림에 키워드가 있으면 진동하고 잠금화면 맨 위에 남겨요.") { v ->
+            SwitchSetRow("키워드 알림", keyword, "고른 앱 알림에 키워드가 있으면 진동하고 잠금화면 맨 위에 남겨요. " + if (preset) "근무 루틴을 쓰면 교대를 받은 폰에서 그 근무 동안만 울려요." else "근무 루틴을 안 쓰면 늘 울려요.") { v ->
                 TaskStore.updateSettings { it.copy(keywordOn = v) }
             }
         }

@@ -134,6 +134,10 @@ import kotlin.math.roundToInt
 
 private val PageNames = listOf("할 일", "근무", "포켓북")
 
+/** 잠금화면에 실제로 보일 페이지 이름: 근무는 교대 프리셋을 켰을 때만(잠금화면도 그때만 근무 페이지를 둠). 하나도 없으면 할 일. */
+private fun shownPages(s: Settings): List<String> =
+    PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 && (i != 1 || s.presetMode) }.ifEmpty { listOf(PageNames[0]) }
+
 /** 설정 하위 화면. 첫 화면 줄 이름과 하위 화면 제목이 같습니다. */
 private enum class SettingsPage(val title: String) {
     LOCK("잠금화면"),
@@ -194,10 +198,10 @@ fun SettingsScreen(home: Int = 0) {
                     }
                     SettingsPage.NOTI -> NotiSettings(s)
                     SettingsPage.SETUP -> SetupGuide(Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp), showTitle = false)
-                    SettingsPage.PRESET -> Group("", foot = "교대를 받으면 그 근무 할 일로 바뀌어요. '07:00 정규 라운딩'처럼 시각을 쓴 줄은 받은 폰에서만 그 시각에 알려요.") {
+                    SettingsPage.PRESET -> Group("", foot = "교대를 받으면 그 근무 할 일로 바뀌어요. '07:00 정규라운딩'처럼 시각을 쓴 줄은 받은 폰에서만 그 시각에 알려요.") {
                         PresetSettings(s)
                     }
-                    SettingsPage.KEYWORD -> Group("", foot = "고른 앱 알림에 키워드가 있으면 화면을 켜고 진동해요. 교대를 받은 폰에서만 그 근무 동안 알려요.") {
+                    SettingsPage.KEYWORD -> Group("", foot = "고른 앱 알림에 키워드가 있으면 화면을 켜고 진동해요. " + if (s.presetMode) "교대 프리셋을 쓰니 교대를 받은 폰에서만 그 근무 동안 알려요." else "교대 프리셋을 안 쓰니 켜 둔 동안 늘 알려요.") {
                         KeywordSettings(s) { sheet = it }
                     }
                     SettingsPage.ALARM -> Group("", foot = "할 일 화면 '알람'으로 맞춘 알람이에요. 화면이 꺼져 있어도 정시에 울리고, 끌 때까지(최대 10분) 울려요.") {
@@ -221,7 +225,8 @@ fun SettingsScreen(home: Int = 0) {
     when (sheet) {
         "pages" -> PickSheet(
             "보일 페이지", "잠금화면에서 좌우로 넘기는 페이지예요. 하나 이상 골라야 해요.", PageNames,
-            PageNames.indices.filter { s.pageMask and (1 shl it) != 0 }.toSet(), multi = true, onDismiss = close,
+            PageNames.indices.filter { s.pageMask and (1 shl it) != 0 && (it != 1 || s.presetMode) }.toSet(), multi = true, onDismiss = close,
+            disabled = if (s.presetMode) emptyMap() else mapOf(1 to "교대 프리셋을 켜야 보여요"),
         ) { i ->
             val next = s.pageMask xor (1 shl i)
             if (next != 0) TaskStore.updateSettings { it.copy(pageMask = next) }
@@ -328,7 +333,7 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
                     when {
                         !s.keywordOn -> "꺼짐"
                         s.keywordList.isEmpty() -> "키워드 없음"
-                        else -> "${s.keywordList.size}개 · " + if (s.keywordSound) "소리와 진동" else "진동만"
+                        else -> "${s.keywordList.size}개 · " + (if (s.keywordSound) "소리와 진동" else "진동만") + if (s.presetMode) " · 근무 받은 동안" else " · 늘"
                     },
                     icon = { icon(Icons.Outlined.Search) },
                 ) { open(SettingsPage.KEYWORD) }
@@ -375,7 +380,7 @@ private fun appVersion(context: Context): String {
 /** 잠금화면 줄의 지금 값: 꺼짐 / 할 일 화면 · 보일 페이지 / 잠금화면 카드(라이브 알림). */
 private fun lockSummary(s: Settings): String = when {
     !s.lockEnabled -> "꺼짐"
-    s.lockPage -> "할 일 화면 · " + PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 }.joinToString(", ")
+    s.lockPage -> "할 일 화면 · " + shownPages(s).joinToString(", ")
     Build.VERSION.SDK_INT >= 36 && s.lockLive -> "잠금화면 카드 · 라이브 알림"
     else -> "잠금화면 카드"
 }
@@ -468,7 +473,7 @@ private fun LockSettings(s: Settings, onSheet: (String) -> Unit) {
             if (v) Setup.requestOverlay(context)
         }
         if (s.lockPage) {
-            ValueRow("보일 페이지", PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 }.joinToString(" · ")) { onSheet("pages") }
+            ValueRow("보일 페이지", shownPages(s).joinToString(" · ")) { onSheet("pages") }
             if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
                 SetRow("할 일 추가 버튼", "아래 바로가기의 '할 일 추가'를 써요")
             } else {
@@ -654,7 +659,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     OutlinedTextField(
                         value = timedText,
                         onValueChange = { timedText = it },
-                        placeholder = { Text("08:00 정규 라운딩\n  V/S check\n12:00 점심식전약 · 혈당측정") },
+                        placeholder = { Text("07:00 정규라운딩\n07:00 혈당측정, V/S CHECK\n09:00 정규라운딩") },
                         supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
                         minLines = 5,
                         modifier = Modifier.fillMaxWidth(),
@@ -667,7 +672,13 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     Row(Modifier.offset(x = (-12).dp)) {
                         TextButton(onClick = { repeating = true }) { Text("반복해서 넣기") }
                         // 예시는 지운 것 없이 맨 아래에 붙입니다.
-                        TextButton(onClick = { timedText = (timedLines + Preset.DayExample).joinToString("\n") }) { Text("예시 불러오기 (Day)") }
+                        // 이 근무에 맞는 예시를 두 칸 모두에. 이미 있는 줄은 빼고 뒤에 붙입니다(지운 것 없음).
+                        val ex = Preset.exampleFor(Preset(p.id, name, start, emptyList()))
+                        TextButton(onClick = {
+                            val (t, o) = Preset.Examples.getValue(ex)
+                            timedText = (timedLines + t.filter { it !in timedLines }).joinToString("\n")
+                            otherText = (otherLines + o.filter { it !in otherLines }).joinToString("\n")
+                        }) { Text("예시 불러오기 ($ex)") }
                     }
                 }
                 // 이번 근무 할 일: 시간과 상관없이 근무마다 하는 일
@@ -677,7 +688,7 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     OutlinedTextField(
                         value = otherText,
                         onValueChange = { otherText = it },
-                        placeholder = { Text("차팅\n물품 카운트\n처치 물품 수가 매기기\n익일 식사 넣기") },
+                        placeholder = { Text("루틴 차팅\n시계열\n처치물품fee") },
                         supportingText = { Text("한 줄에 하나, 두 칸 들여 쓰면 위 줄의 하위 항목이에요.") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth(),
