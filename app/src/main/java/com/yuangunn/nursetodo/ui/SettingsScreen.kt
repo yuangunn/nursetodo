@@ -135,6 +135,12 @@ import kotlin.math.roundToInt
 
 private val PageNames = listOf("할 일", "근무", "포켓북")
 
+private val OpenOnUnlockNames = listOf("끔", "근무 받은 동안", "늘")
+
+/** '잠금 해제하면 열기' 지금 값. 근무 받은 동안인데 교대 프리셋이 꺼져 있으면 열리지 않으니 그렇게 적음. */
+private fun openOnUnlockSummary(s: Settings): String =
+    if (s.openOnUnlock == 1 && !s.presetMode) "꺼짐 · 교대 프리셋 꺼짐" else OpenOnUnlockNames[s.openOnUnlock.coerceIn(0, 2)]
+
 /** 잠금화면에 실제로 보일 페이지 이름: 근무는 교대 프리셋을 켰을 때만(잠금화면도 그때만 근무 페이지를 둠). 하나도 없으면 할 일. */
 private fun shownPages(s: Settings): List<String> =
     PageNames.filterIndexed { i, _ -> s.pageMask and (1 shl i) != 0 && (i != 1 || s.presetMode) }.ifEmpty { listOf(PageNames[0]) }
@@ -231,6 +237,15 @@ fun SettingsScreen(home: Int = 0) {
         ) { i ->
             val next = s.pageMask xor (1 shl i)
             if (next != 0) TaskStore.updateSettings { it.copy(pageMask = next) }
+        }
+        "unlockOpen" -> PickSheet(
+            "잠금 해제하면 열기",
+            "지문·얼굴 인식이 화면보다 먼저 잠금을 풀어 할 일 화면을 못 봤을 때, 잠금을 풀면 근무 페이지를 띄워요. 할 일 화면을 이미 봤으면 띄우지 않아요.",
+            OpenOnUnlockNames, setOf(s.openOnUnlock.coerceIn(0, 2)), onDismiss = close,
+            disabled = if (s.presetMode) emptyMap() else mapOf(1 to "교대 프리셋을 켜야 써요"),
+        ) { i ->
+            TaskStore.updateSettings { it.copy(openOnUnlock = i) }
+            close()
         }
         "addPos" -> PickSheet("할 일 추가 버튼", "", listOf("카드 아래", "카드 안"), setOf(s.addButton), onDismiss = close) { i ->
             TaskStore.updateSettings { it.copy(addButton = i) }
@@ -479,6 +494,7 @@ private fun LockSettings(s: Settings, onSheet: (String) -> Unit) {
         }
         if (s.lockPage) {
             ValueRow("보일 페이지", shownPages(s).joinToString(" · ")) { onSheet("pages") }
+            ValueRow("잠금 해제하면 열기", openOnUnlockSummary(s)) { onSheet("unlockOpen") }
             if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
                 SetRow("할 일 추가 버튼", "아래 바로가기의 '할 일 추가'를 써요")
             } else {

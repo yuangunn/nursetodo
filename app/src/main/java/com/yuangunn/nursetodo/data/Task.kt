@@ -158,6 +158,11 @@ data class Settings(
     val onboarded: Boolean = false,
     /** 비어 있던 Day·Evening·Night 프리셋을 예시로 한 번 채웠음. 새로 깔면 이미 채워져 true, 2.6.2 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 채움. */
     val examplesFilled: Boolean = true,
+    /**
+     * 잠금을 풀었는데 이번에 할 일 화면을 못 봤으면(지문·얼굴이 화면보다 먼저 풀어 건너뜀) 근무 페이지를 띄울지:
+     * 0 끔 · 1 근무 받은 동안([onDuty]) · 2 늘. 할 일 화면 모드(lockPage)에서만.
+     */
+    val openOnUnlock: Int = 0,
 )
 
 /** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */
@@ -405,6 +410,13 @@ fun Settings.onDuty(now: Long): Boolean = presetMode && dutyShift != 0L && now <
  * 안 쓰면 '근무를 받은 폰'이 없으니 늘. 예전엔 프리셋을 끄면 영영 안 울렸음.
  */
 fun Settings.keywordActive(now: Long): Boolean = !presetMode || onDuty(now)
+
+/** 잠금을 풀 때 할 일 화면을 띄울 때인지([Settings.openOnUnlock]). */
+fun Settings.openOnUnlockNow(now: Long): Boolean = lockEnabled && lockPage && when (openOnUnlock) {
+    2 -> true
+    1 -> onDuty(now)
+    else -> false
+}
 
 /**
  * [now] 가 속한 교대: 시작 시각이 지난 프리셋 중 가장 늦은 것과 그 시작 시각(ms). 오늘 아직 아무것도 시작 안 했으면

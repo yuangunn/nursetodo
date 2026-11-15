@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.yuangunn.nursetodo.data.TaskStore
+import com.yuangunn.nursetodo.data.openOnUnlockNow
 
 /**
  * 화면이 켜질 때마다 잠금화면 위에 할 일 화면(오늘 할 일)을 먼저 띄웁니다. 툭의 잠금화면 카드에 해당.
@@ -41,10 +42,39 @@ class LockPageService : Service() {
         }
     }
 
+    /**
+     * 잠금 해제: 지문·얼굴이 화면보다 먼저 잠금을 풀면 화면 켜짐 때 잠금이 이미 없어 할 일 화면을 건너뜁니다.
+     * 그럴 때([shownThisWake] 가 아님) 설정([openOnUnlockNow])에 맞으면 풀린 화면 위에 근무 페이지를 띄웁니다.
+     * 할 일 화면을 이미 본 경우(그 화면에서 밀어 풀었거나 알림을 열려고 풀었을 때)는 띄우지 않습니다 — 열려던 앱을 가리지 않게.
+     * 화면 잠금이 없는 폰은 화면 켜짐 때 이미 띄우므로 건너뜁니다.
+     */
+    private val unlocked = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> shownThisWake = false
+                Intent.ACTION_USER_PRESENT -> {
+                    val km = getSystemService(KeyguardManager::class.java)
+                    if (shownThisWake || !km.isDeviceSecure || !Settings.canDrawOverlays(context) || Alarms.ringing() || inCall(context)) return
+                    if (!TaskStore.settings.value.openOnUnlockNow(System.currentTimeMillis())) return
+                    startActivity(QuickAddActivity.dutyIntent(context, wake = false).putExtra(QuickAddActivity.EXTRA_LOOK_FIRST, true))
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         TaskStore.init(this)
         ContextCompat.registerReceiver(this, screenOn, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
+        // USER_PRESENT 는 매니페스트로는 받을 수 없는(8.0+) 방송이라 이 상시 서비스에서 받습니다.
+        ContextCompat.registerReceiver(
+            this, unlocked,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -57,12 +87,17 @@ class LockPageService : Service() {
 
     override fun onDestroy() {
         unregisterReceiver(screenOn)
+        unregisterReceiver(unlocked)
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?) = null
 
     companion object {
+        /** 이번에 화면이 켜진 뒤 할 일 화면이 한 번이라도 보였는지. 화면이 꺼지면 false, [QuickAddActivity] 가 보이면 true. */
+        @Volatile
+        internal var shownThisWake = false
+
         /**
          * 전화가 울리거나 통화 중인지. 일반 전화는 기본 전화 앱이 무엇이든(삼성·에이닷·익시오) 시스템이 오디오 모드를 바꾸고,
          * 인터넷 전화(내선 앱 등)는 통화 모드나 '전화' 종류 알림으로 압니다. 알림은 알림 접근이 켜져 있을 때만 보입니다.

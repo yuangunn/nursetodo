@@ -435,6 +435,7 @@ object TaskStore {
         put("keywordApps", JSONArray(keywordApps.sorted()))
         put("onboarded", onboarded)
         put("examplesFilled", examplesFilled)
+        put("openOnUnlock", openOnUnlock)
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -504,6 +505,7 @@ object TaskStore {
             // 2.1.0 전 저장 파일엔 없음 = 이미 쓰던 사람이라 안내를 건너뜀
             onboarded = optBoolean("onboarded", true),
             examplesFilled = optBoolean("examplesFilled", false),
+            openOnUnlock = optInt("openOnUnlock", d.openOnUnlock).coerceIn(0, 2),
         )
     }
 }

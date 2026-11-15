@@ -230,6 +230,12 @@ class QuickAddActivity : ComponentActivity() {
         hide(WindowInsetsCompat.Type.navigationBars())
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 이번에 할 일 화면을 봤으니 잠금을 풀 때 다시 띄우지 않음(LockPageService)
+        LockPageService.shownThisWake = true
+    }
+
     override fun onStop() {
         super.onStop()
         // 다음에 늦게 열릴 때 꺼진 화면을 다시 켜지 않게 되돌립니다.
