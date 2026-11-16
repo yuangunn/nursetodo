@@ -156,8 +156,11 @@ data class Settings(
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
     /** 첫 실행 안내를 끝냈거나 건너뜀. 새로 깔면 false, 2.1.0 전부터 쓰던 설치(저장 파일에 이 값이 없음)는 true. */
     val onboarded: Boolean = false,
-    /** 비어 있던 Day·Evening·Night 프리셋을 예시로 한 번 채웠음. 새로 깔면 이미 채워져 true, 2.6.2 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 채움. */
-    val examplesFilled: Boolean = true,
+    /**
+     * 2.6.2 가 빈 Day·Evening·Night 프리셋에 실제 할 일로 채운 예시를 한 번 비웠음. 새로 깔면 할 일이 없으니 true,
+     * 2.7.0 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 예시와 똑같은(손대지 않은) 프리셋만 비움.
+     */
+    val examplesCleared: Boolean = true,
     /**
      * 잠금을 풀었는데 이번에 할 일 화면을 못 봤으면(지문·얼굴이 화면보다 먼저 풀어 건너뜀) 근무 페이지를 띄울지:
      * 0 끔 · 1 근무 받은 동안([onDuty]) · 2 늘. 할 일 화면 모드(lockPage)에서만.
@@ -234,11 +237,14 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
         fun exampleItems(name: String): List<String>? =
             Examples.entries.firstOrNull { it.key.equals(name.trim(), ignoreCase = true) }?.value?.let { (timed, other) -> timed + other }
 
-        /** 처음 깔았을 때의 프리셋: Day · Evening · Night 와 그 예시 할 일. [Examples] 를 쓰므로 그 뒤에 둡니다. */
+        /**
+         * 처음 깔았을 때의 프리셋: Day · Evening · Night, 할 일은 비어 있음. 예시는 실제 할 일로 넣지 않고
+         * 프리셋 고치기의 빈 칸에 회색 안내 글(placeholder)로만 보이고, '예시 불러오기'를 눌러야 들어갑니다.
+         */
         val Defaults = listOf(
-            Preset(1, "Day", 7 * 60, exampleItems("Day")!!),
-            Preset(2, "Evening", 15 * 60, exampleItems("Evening")!!),
-            Preset(3, "Night", 23 * 60, exampleItems("Night")!!),
+            Preset(1, "Day", 7 * 60, emptyList()),
+            Preset(2, "Evening", 15 * 60, emptyList()),
+            Preset(3, "Night", 23 * 60, emptyList()),
         )
 
         /**
