@@ -741,7 +741,8 @@ private fun PresetEditor(p: Preset, s: Settings, onDone: (Preset?) -> Unit) {
                     }
                 }
             }
-            Row(Modifier.padding(top = 16.dp, bottom = 16.dp).offset(x = (-12).dp)) {
+            // 위 칸들과 같은 안쪽 16 에서 글 버튼 여백(12)만큼 당김
+            Row(Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp).offset(x = (-12).dp)) {
                 if (!isNew) {
                     // 고친 내용을 저장하고, 시각 없는 복사본을 만들어 바로 엽니다.
                     TextButton(onClick = {

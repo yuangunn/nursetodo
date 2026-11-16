@@ -50,7 +50,8 @@ object TaskStore {
      */
     internal fun clearUntouchedExamples() {
         val s = _settings.value
-        val cleared = s.presets.map { p -> if (p.items.isNotEmpty() && p.items == Preset.exampleItems(p.name)) p.copy(items = emptyList(), quiet = emptySet()) else p }
+        val untouched = { p: Preset -> p.items == Preset.exampleItems(p.name) || Preset.OldExamples.entries.any { it.key.equals(p.name.trim(), ignoreCase = true) && it.value == p.items } }
+        val cleared = s.presets.map { p -> if (p.items.isNotEmpty() && untouched(p)) p.copy(items = emptyList(), quiet = emptySet()) else p }
         updateSettings { it.copy(presets = cleared, examplesCleared = true) }
         val now = cleared.firstOrNull { it.id == s.presetLoaded }
         val wasExample = s.presets.firstOrNull { it.id == s.presetLoaded }?.items?.isNotEmpty() == true && now?.items?.isEmpty() == true

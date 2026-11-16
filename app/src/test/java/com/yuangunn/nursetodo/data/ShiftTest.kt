@@ -160,5 +160,9 @@ class ShiftTest {
         assertEquals(night.items, now.presets[2].items)
         // 지금 근무(Day)의 못 끝낸 예시 할 일은 치우고 끝낸 것은 남김
         assertEquals(listOf(firstRow.title), dutyTitles())
+        // 2.6.2 때 예시(지금과 줄이 다름)로 채워진 Day 도 손대지 않았으면 비움
+        TaskStore.updateSettings { Settings(presets = listOf(Preset(1, "Day", 7 * 60, Preset.OldExamples.getValue("Day"))), examplesCleared = false) }
+        TaskStore.clearUntouchedExamples()
+        assertEquals(emptyList<String>(), TaskStore.settings.value.presets[0].items)
     }
 }

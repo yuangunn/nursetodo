@@ -193,7 +193,7 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
                     "09:00 정규라운딩",
                     "11:00 정규라운딩",
                     "13:00 정규라운딩, I/O Check",
-                ) to listOf("루틴 차팅", "시계열", "처치물품fee")
+                ) to listOf("루틴 차팅", "시계열", "처치물품fee", "퇴원간호기록 작성", "퇴원환자 지참약 챙기기", "수술전처치표 작성")
                 ),
             "Evening" to (
                 listOf(
@@ -233,6 +233,17 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
                     "필수기록서식 확인",
                 )
                 ),
+        )
+
+        /**
+         * 예전 예시(v2.6.2 가 실제 할 일로 채웠던 것) 중 지금 [Examples] 와 달라진 것. [TaskStore.clearUntouchedExamples] 가
+         * 2.6.2 에서 바로 올라온 폰의 손대지 않은 프리셋을 알아보는 데만 씀.
+         */
+        val OldExamples: Map<String, List<String>> = mapOf(
+            "Day" to listOf(
+                "07:00 정규라운딩, 혈당측정, V/S CHECK", "09:00 정규라운딩", "11:00 정규라운딩", "13:00 정규라운딩, I/O Check",
+                "루틴 차팅", "시계열", "처치물품fee",
+            ),
         )
 
         /** [name] 과 같은 이름(대소문자 무시)의 예시를 저장 형식(시간별 줄 다음 이번 근무 할 일 줄)으로. 없으면 null. */
