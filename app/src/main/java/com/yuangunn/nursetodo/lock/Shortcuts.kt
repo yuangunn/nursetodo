@@ -21,7 +21,7 @@ object Shortcuts {
 
     /** 앱이 지워졌으면 null. */
     fun defaultName(context: Context, s: Shortcut): String? = when (s.id) {
-        Shortcut.CALC -> "항암계산기"
+        Shortcut.CALC -> "간호계산기"
         Shortcut.ALARM -> "알람"
         Shortcut.ADD -> "할 일 추가"
         Shortcut.CALENDAR -> "캘린더"

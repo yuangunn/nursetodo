@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    // 설정 첫 화면으로: 설정 탭을 다시 누르거나 잠금화면 설정 버튼으로 열 때 하나씩 늘림(하위 화면이 남아 있지 않게)
+    // 설정 첫 화면으로: 설정 탭을 누르거나(다른 탭에서 와도) 잠금화면 설정 버튼으로 열 때 하나씩 늘림(하위 화면이 남아 있지 않게)
     var settingsHome by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(requestedTab) {
         if (requestedTab >= 0) {
@@ -198,7 +198,11 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
                     val on = tab == index
                     NavigationBarItem(
                         selected = on,
-                        onClick = { if (tab == index && index == 4) settingsHome++ else tab = index },
+                        // 설정 탭은 누를 때마다 첫 화면부터(다른 탭에 다녀와도 하위 화면에 남아 있지 않게)
+                        onClick = {
+                            if (index == 4) settingsHome++
+                            tab = index
+                        },
                         icon = { Icon(icon, null, modifier = Modifier.size(22.dp)) },
                         label = { Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = NavigationBarItemDefaults.colors(

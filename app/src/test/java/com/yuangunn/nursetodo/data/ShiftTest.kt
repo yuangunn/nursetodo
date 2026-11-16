@@ -140,25 +140,25 @@ class ShiftTest {
     }
 
     @Test
-    fun fillsOnlyEmptyDefaultPresetsOnceAndLoadsCurrentShift() {
-        // 새로 깔면 Day·Evening·Night 가 예시로 차 있음
-        assertEquals(listOf("07:00 정규라운딩, 혈당측정, V/S CHECK", "09:00 정규라운딩"), Settings().presets[0].items.take(2))
-        assertEquals("필수기록서식 확인", Settings().presets[2].items.last())
-        // 2.6.2 전 폰: Day 는 비었고(지금 근무, 할 일 없음), Evening 은 적어 둠, 다른 이름은 비었음
+    fun defaultsEmptyAndUntouchedExamplesClearedOnce() {
+        // 새로 깔면 Day·Evening·Night 는 비어 있음(예시는 편집기의 회색 안내 글로만)
+        assertTrue(Settings().presets.all { it.items.isEmpty() })
+        // 2.6.2 가 채운 폰: Day 는 예시 그대로(지금 근무), Evening 은 예시를 고침, Night 는 직접 적음
         val shift = ms(at(7))
-        val old = listOf(
-            Preset(1, "Day", 7 * 60, emptyList()),
-            Preset(2, "Evening", 15 * 60, listOf("15:00 내 인계")),
-            Preset(9, "병동 회의", 12 * 60, emptyList()),
-        )
-        TaskStore.updateSettings { Settings(presetMode = true, presets = old, presetApplied = shift, presetLoaded = 1, examplesFilled = false) }
-        TaskStore.fillExamples()
+        val day = Preset(1, "Day", 7 * 60, Preset.exampleItems("Day")!!)
+        val evening = Preset(2, "Evening", 15 * 60, Preset.exampleItems("Evening")!! + "내가 넣은 줄")
+        val night = Preset(3, "Night", 23 * 60, listOf("23:00 인계"))
+        TaskStore.updateSettings { Settings(presetMode = true, presets = listOf(day, evening, night), examplesCleared = false) }
+        TaskStore.loadPreset(day, shift)
+        val firstRow = TaskStore.tasks.value.first { it.shift == shift }
+        TaskStore.toggle(firstRow.id, firstRow.createdDay)
+        TaskStore.clearUntouchedExamples()
         val now = TaskStore.settings.value
-        assertTrue(now.examplesFilled)
-        assertEquals(Preset.exampleItems("Day"), now.presets[0].items)
-        assertEquals(listOf("15:00 내 인계"), now.presets[1].items)
-        assertEquals(emptyList<String>(), now.presets[2].items)
-        // 지금 근무(Day)가 비어 있었으니 바로 불러옴
-        assertEquals(presetRows(Preset.exampleItems("Day")!!).map { it.first }.sorted(), dutyTitles().sorted())
+        assertTrue(now.examplesCleared)
+        assertEquals(emptyList<String>(), now.presets[0].items)
+        assertEquals(evening.items, now.presets[1].items)
+        assertEquals(night.items, now.presets[2].items)
+        // 지금 근무(Day)의 못 끝낸 예시 할 일은 치우고 끝낸 것은 남김
+        assertEquals(listOf(firstRow.title), dutyTitles())
     }
 }

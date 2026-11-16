@@ -116,8 +116,8 @@ data class Settings(
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
     /** 할 일 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
-    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.CALENDAR)),
-    /** 바로가기 모양: 0 이름 3줄(9칸), 1 이름 2줄(6칸), 2 아이콘만 4개씩 2줄(8칸). */
+    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.CALENDAR), Shortcut(Shortcut.ALARM)),
+    /** 바로가기 모양: 0 한 줄 3칸 × 2줄(6칸), 1 한 줄 2칸 × 3줄(6칸), 2 아이콘만 5개씩(8칸). 빈 칸은 '+'(누르면 바로 넣기). */
     val shortcutStyle: Int = 0,
     /** 할 일 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
     val addButton: Int = 0,
@@ -146,7 +146,7 @@ data class Settings(
     val keywordSound: Boolean = false,
     /** 앱 테마: 0 시스템 따라감, 1 라이트, 2 다크. 잠금화면은 늘 어둡습니다. */
     val theme: Int = 0,
-    /** 항암계산기 주입속도 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
+    /** 간호계산기(항암 주입속도) 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
     val rateLimit: Int = 1000,
     /** 사용기한 계산기의 자주 쓰는 기한(칩). */
     val expiryPresets: List<ExpiryPreset> = Expiry.DEFAULTS,
@@ -156,8 +156,16 @@ data class Settings(
     val keywordApps: Set<String> = setOf("com.samsung.android.messaging", "com.google.android.apps.messaging", "com.microsoft.teams"),
     /** 첫 실행 안내를 끝냈거나 건너뜀. 새로 깔면 false, 2.1.0 전부터 쓰던 설치(저장 파일에 이 값이 없음)는 true. */
     val onboarded: Boolean = false,
-    /** 비어 있던 Day·Evening·Night 프리셋을 예시로 한 번 채웠음. 새로 깔면 이미 채워져 true, 2.6.2 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 채움. */
-    val examplesFilled: Boolean = true,
+    /**
+     * 2.6.2 가 빈 Day·Evening·Night 프리셋에 실제 할 일로 채운 예시를 한 번 비웠음. 새로 깔면 할 일이 없으니 true,
+     * 2.7.0 전 저장 파일(값 없음)은 false → [TaskStore.init] 이 예시와 똑같은(손대지 않은) 프리셋만 비움.
+     */
+    val examplesCleared: Boolean = true,
+    /**
+     * 잠금을 풀었는데 이번에 할 일 화면을 못 봤으면(지문·얼굴이 화면보다 먼저 풀어 건너뜀) 근무 페이지를 띄울지:
+     * 0 끔 · 1 근무 받은 동안([onDuty]) · 2 늘. 할 일 화면 모드(lockPage)에서만.
+     */
+    val openOnUnlock: Int = 0,
 )
 
 /** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */
@@ -229,11 +237,14 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
         fun exampleItems(name: String): List<String>? =
             Examples.entries.firstOrNull { it.key.equals(name.trim(), ignoreCase = true) }?.value?.let { (timed, other) -> timed + other }
 
-        /** 처음 깔았을 때의 프리셋: Day · Evening · Night 와 그 예시 할 일. [Examples] 를 쓰므로 그 뒤에 둡니다. */
+        /**
+         * 처음 깔았을 때의 프리셋: Day · Evening · Night, 할 일은 비어 있음. 예시는 실제 할 일로 넣지 않고
+         * 프리셋 고치기의 빈 칸에 회색 안내 글(placeholder)로만 보이고, '예시 불러오기'를 눌러야 들어갑니다.
+         */
         val Defaults = listOf(
-            Preset(1, "Day", 7 * 60, exampleItems("Day")!!),
-            Preset(2, "Evening", 15 * 60, exampleItems("Evening")!!),
-            Preset(3, "Night", 23 * 60, exampleItems("Night")!!),
+            Preset(1, "Day", 7 * 60, emptyList()),
+            Preset(2, "Evening", 15 * 60, emptyList()),
+            Preset(3, "Night", 23 * 60, emptyList()),
         )
 
         /**
@@ -406,6 +417,13 @@ fun Settings.onDuty(now: Long): Boolean = presetMode && dutyShift != 0L && now <
  */
 fun Settings.keywordActive(now: Long): Boolean = !presetMode || onDuty(now)
 
+/** 잠금을 풀 때 할 일 화면을 띄울 때인지([Settings.openOnUnlock]). */
+fun Settings.openOnUnlockNow(now: Long): Boolean = lockEnabled && lockPage && when (openOnUnlock) {
+    2 -> true
+    1 -> onDuty(now)
+    else -> false
+}
+
 /**
  * [now] 가 속한 교대: 시작 시각이 지난 프리셋 중 가장 늦은 것과 그 시작 시각(ms). 오늘 아직 아무것도 시작 안 했으면
  * 어제 마지막 교대(자정 넘긴 Night). 같은 시각이면 목록에서 위의 것.
@@ -450,7 +468,7 @@ val RowGapRange = 0..24
 fun Settings.cardTextSp(): Float = cardSp.coerceIn(CardSpRange).toFloat()
 
 /** 할 일 화면에 보이는 바로가기 칸 수. */
-fun Settings.shortcutSlots(): Int = listOf(9, 6, 8)[shortcutStyle.coerceIn(0, 2)]
+fun Settings.shortcutSlots(): Int = listOf(6, 6, 8)[shortcutStyle.coerceIn(0, 2)]
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()

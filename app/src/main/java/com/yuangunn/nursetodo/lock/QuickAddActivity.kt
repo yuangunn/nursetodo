@@ -230,6 +230,12 @@ class QuickAddActivity : ComponentActivity() {
         hide(WindowInsetsCompat.Type.navigationBars())
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 이번에 할 일 화면을 봤으니 잠금을 풀 때 다시 띄우지 않음(LockPageService)
+        LockPageService.shownThisWake = true
+    }
+
     override fun onStop() {
         super.onStop()
         // 다음에 늦게 열릴 때 꺼진 화면을 다시 켜지 않게 되돌립니다.
@@ -287,7 +293,7 @@ internal const val GRACE_MS = 30 * 60_000L
 /** 이만큼 위로 밀고 떼면 잠금 해제 */
 private val UNLOCK_DRAG = 120.dp
 
-private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF, SHORTCUTS, DONE }
+private enum class Panel { NONE, NOTIS, ALARMS, HANDOFF, SHORTCUTS, ADD_SHORTCUT, DONE }
 
 @Composable
 private fun LockPage(
@@ -689,6 +695,9 @@ private fun LockPage(
                 Reveal(panel == Panel.SHORTCUTS, enter = enter, exit = exit) {
                     ShortcutPanel(settings, onClose = closePanel)
                 }
+                Reveal(panel == Panel.ADD_SHORTCUT, enter = enter, exit = exit) {
+                    AddShortcutPanel(settings, onClose = closePanel)
+                }
                 Reveal(panel == Panel.HANDOFF && handoff != null && page == PAGE_DUTY, enter = enter, exit = exit) {
                     handoff?.let { h ->
                         HandoffPanel(h, pendingDuty, onCarry = { take(h, true) }, onDrop = { take(h, false) }, onCancel = {
@@ -758,7 +767,11 @@ private fun LockPage(
                     )
                 }
                 if (!typing) {
-                    if (shortcuts.isNotEmpty()) ShortcutGrid(shortcuts, settings.shortcutStyle, onShortcut, onEdit = { panel = Panel.SHORTCUTS })
+                    ShortcutGrid(
+                        shortcuts, settings.shortcutStyle, settings.shortcutSlots(), onShortcut,
+                        onEdit = { panel = Panel.SHORTCUTS },
+                        onAdd = { panel = if (panel == Panel.ADD_SHORTCUT) Panel.NONE else Panel.ADD_SHORTCUT },
+                    )
                     UnlockHint(locked, onUnlock)
                 }
             }
