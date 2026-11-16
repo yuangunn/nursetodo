@@ -495,6 +495,7 @@ private fun LockSettings(s: Settings, onSheet: (String) -> Unit) {
         if (s.lockPage) {
             ValueRow("보일 페이지", shownPages(s).joinToString(" · ")) { onSheet("pages") }
             ValueRow("잠금 해제하면 열기", openOnUnlockSummary(s)) { onSheet("unlockOpen") }
+            SwitchSetRow("할 일이 없으면 카드 숨기기", s.hideEmptyTodo) { v -> TaskStore.updateSettings { it.copy(hideEmptyTodo = v) } }
             if (s.shortcuts.take(s.shortcutSlots()).any { it.id == Shortcut.ADD }) {
                 SetRow("할 일 추가 버튼", "아래 바로가기의 '할 일 추가'를 써요")
             } else {
@@ -937,7 +938,7 @@ internal fun ShortcutPickerDialog(present: Set<String>, onPick: (Shortcut) -> Un
     run {
         val apps = remember { Shortcuts.installedApps(context) }
         var query by remember { mutableStateOf("") }
-        val builtIn = listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }
+        val builtIn = Shortcuts.builtIns(context)
         val choices = (builtIn.map { it to Shortcuts.name(context, it) } + apps)
             .filter { (sc, label) -> sc.id !in present && label.contains(query.trim(), ignoreCase = true) }
         AlertDialog(

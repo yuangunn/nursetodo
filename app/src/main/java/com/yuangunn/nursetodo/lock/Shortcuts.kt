@@ -25,6 +25,8 @@ object Shortcuts {
         Shortcut.ALARM -> "알람"
         Shortcut.ADD -> "할 일 추가"
         Shortcut.CALENDAR -> "캘린더"
+        // 플래시가 없는 기기면 없는 버튼으로 봄(목록·화면에서 빠짐)
+        Shortcut.TORCH -> "손전등".takeIf { Torch.available(context) }
         else -> component(s)?.let { c ->
             runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
         }
@@ -32,13 +34,18 @@ object Shortcuts {
 
     fun name(context: Context, s: Shortcut): String = s.name.ifBlank { defaultName(context, s) ?: "지워진 앱" }
 
-    /** 계산기·알람·할 일 추가·캘린더 버튼의 아이콘 (앱이 아닐 때). */
+    /** 계산기·알람·할 일 추가·캘린더·손전등 버튼의 아이콘 (앱이 아닐 때). */
     fun builtInIcon(s: Shortcut): Int = when (s.id) {
         Shortcut.ALARM -> R.drawable.ic_alarm
         Shortcut.ADD -> R.drawable.ic_memo
         Shortcut.CALENDAR -> R.drawable.ic_calendar
+        Shortcut.TORCH -> R.drawable.ic_flashlight
         else -> R.drawable.ic_calc
     }
+
+    /** 넣을 수 있는 기본 버튼(앱이 아닌 것). 손전등은 플래시가 있는 기기만. */
+    fun builtIns(context: Context): List<Shortcut> =
+        listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR, Shortcut.TORCH).map { Shortcut(it) }.filter { defaultName(context, it) != null }
 
     /** 앱 아이콘. 계산기·알람·할 일 추가거나 지워진 앱이면 null. */
     fun icon(context: Context, s: Shortcut): ImageBitmap? = component(s)?.let { c ->

@@ -149,6 +149,11 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.key
+import kotlin.math.abs
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import android.widget.Toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -369,8 +374,11 @@ private fun LockPage(
     }
     // 추가 버튼은 한 군데만: 바로가기에 '할 일 추가'가 있으면 아래 버튼은 숨기고, 적는 동안엔 카드 안 버튼도 숨깁니다.
     val addInShortcuts = shortcuts.any { it.id == Shortcut.ADD }
-    val addBar = !addInShortcuts && settings.addButton == 0
-    val addInCard = !addInShortcuts && settings.addButton == 1 && !typing
+    // 할 일이 없으면 '할 일' 페이지의 카드를 그리지 않음(설정, 끝낸 일만 있어도). 카드 안 추가 버튼·알림 세로 줄은 둘 자리가 없어
+    // 카드 아래 추가 버튼·위 줄 알림 버튼으로 옮김.
+    val hideTodo = settings.hideEmptyTodo && todo.isEmpty()
+    val addBar = !addInShortcuts && (settings.addButton == 0 || hideTodo)
+    val addInCard = !addInShortcuts && settings.addButton == 1 && !typing && !hideTodo
     val onShortcut: (Shortcut) -> Unit = { sc ->
         when (sc.id) {
             Shortcut.CALC -> onOpen(MainActivity.calcIntent(context))
@@ -381,6 +389,9 @@ private fun LockPage(
             }
             Shortcut.ADD -> adding = true
             Shortcut.CALENDAR -> onOpen(MainActivity.calendarIntent(context))
+            Shortcut.TORCH -> if (!Torch.toggle(context)) {
+                Toast.makeText(context, "손전등을 켤 수 없어요. 다른 앱이 카메라를 쓰는 중일 수 있어요.", Toast.LENGTH_SHORT).show()
+            }
             else -> Shortcuts.launchIntent(sc)?.let(onOpen)
         }
     }
@@ -617,18 +628,31 @@ private fun LockPage(
                         ) { i -> scope.launch { pager.animateScrollToPage(i) } }
                     }
                 },
-                bell = if (page != PAGE_TODO && NotiListener.available(context)) {
+                bell = if ((page != PAGE_TODO || hideTodo) && NotiListener.available(context)) {
                     { BellButton(notis, panel == Panel.NOTIS) { if (panel == Panel.NOTIS) closePanel() else panel = Panel.NOTIS } }
                 } else null,
             ) { SettingsButton { onOpen(MainActivity.settingsIntent(context)) } }
 
             // 카드: 세 페이지의 목록, 그 자리를 채우는 알림·알람 목록, 아래 되돌리기 토스트
             val cardShape = RoundedCornerShape(24.dp)
+            // 카드 바탕: 빈 '할 일' 페이지에선 넘기는 만큼 사라짐(패널이 열리면 늘 보임)
+            val todoIndex = pages.indexOf(PAGE_TODO)
+            val coverAlpha = {
+                if (!hideTodo || todoIndex < 0 || panel != Panel.NONE) 1f
+                else abs(pager.currentPage + pager.currentPageOffsetFraction - todoIndex).coerceIn(0f, 1f)
+            }
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .cover(cardShape)
+                    .drawBehind {
+                        val a = coverAlpha()
+                        if (a > 0f) {
+                            val outline = cardShape.createOutline(size, layoutDirection, this)
+                            drawOutline(outline, Lk.Cover, alpha = a)
+                            drawOutline(outline, Lk.Edge.brush, alpha = a, style = Stroke(Lk.Edge.width.toPx()))
+                        }
+                    }
                     .clip(cardShape),
             ) {
                 val listAlpha by animateFloatAsState(if (panel != Panel.NONE) 0f else 1f, tween(200), label = "list")
@@ -647,7 +671,7 @@ private fun LockPage(
                             TaskStore.clearPocketChecks(p.id)
                             show(Undo("체크 ${old.size}개 지움", PAGE_POCKET, onUndo = { TaskStore.setPocketChecks(p.id, old) }))
                         }
-                        else -> TodoPage(
+                        else -> if (hideTodo) Box(Modifier.fillMaxSize()) else TodoPage(
                             todo, done, today, listState, editingId, { editingId = it }, menuId, { menuId = it }, { rowMenu(it, false) }, toggleTodo,
                             onOpenDone = { panel = Panel.DONE },
                             notis = notis,
@@ -753,6 +777,7 @@ private fun LockPage(
                     AddBar(
                         adding = adding,
                         onAdding = { adding = it },
+                        empty = todo.isEmpty(),
                         onAdd = { text ->
                             val t = TaskStore.add(text, top = true)
                             adding = false

@@ -110,6 +110,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.yuangunn.nursetodo.R
@@ -676,7 +677,7 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
         }
         SectionLabel(if (full) "넣기 · ${slots}칸이 다 찼어요" else "넣기")
         val present = list.map { it.id }.toSet()
-        val builtIn = listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }.filter { it.id !in present }
+        val builtIn = Shortcuts.builtIns(context).filter { it.id !in present }
         var appsOpen by remember { mutableStateOf(false) }
         val apps = remember(appsOpen) { if (appsOpen) Shortcuts.installedApps(context) else emptyList() }
         val addRow: @Composable (Shortcut, String) -> Unit = { sc, name ->
@@ -725,7 +726,7 @@ internal fun AddShortcutPanel(settings: Settings, onClose: () -> Unit) {
     val present = list.map { it.id }.toSet()
     val apps = remember { Shortcuts.installedApps(context) }
     val choices = remember(present) {
-        listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }.filter { it.id !in present }
+        Shortcuts.builtIns(context).filter { it.id !in present }
             .map { it to Shortcuts.name(context, it) } + apps.filter { it.first.id !in present }
     }
     // 칸이 적은 모양에서 뒤에 저장만 된 것이 있으면 보이는 칸 바로 뒤에 넣어 바로 보이게
@@ -860,13 +861,13 @@ internal fun PageRow(tabs: (@Composable () -> Unit)?, bell: (@Composable () -> U
 
 /** 둥근 유리 버튼 44(설정·종). */
 @Composable
-internal fun RoundButton(label: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
+internal fun RoundButton(label: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, color: Color = Lk.Cover, content: @Composable () -> Unit) {
     Press(
         onClick,
         Modifier
             .size(44.dp)
             .semantics { contentDescription = label },
-        color = Lk.Cover,
+        color = color,
         border = Lk.Edge,
         onLongClick = onLongClick,
         onLongClickLabel = onLongClick?.let { "바로가기 편집" },
@@ -984,7 +985,7 @@ internal fun NotiRail(notis: List<Noti>, onTap: () -> Unit, modifier: Modifier =
  * 추가나 키보드 완료면 맨 위에 넣고 닫습니다.
  */
 @Composable
-internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String) -> Unit) {
+internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String) -> Unit, empty: Boolean = false) {
     val accent = LocalLockAccent.current
     if (!adding) {
         Press(
@@ -999,7 +1000,12 @@ internal fun AddBar(adding: Boolean, onAdding: (Boolean) -> Unit, onAdd: (String
         ) {
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(20.dp))
-                Text("할 일 추가", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text)
+                // 할 일이 없으면(카드도 숨어 있을 때) 적어 두라는 한마디
+                if (empty) {
+                    Text("할 일이 생기면 여기에 적어 두세요", style = Lk.Body15, color = Lk.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                } else {
+                    Text("할 일 추가", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text)
+                }
             }
         }
         return
@@ -1157,6 +1163,11 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
     }
     val context = LocalContext.current
     val rows = shortcutRows(items, style, slots)
+    // 손전등 버튼은 켜져 있는 동안 강조색으로 채움(빠른 설정에서 켜고 꺼도 따라감)
+    val accent = LocalLockAccent.current
+    val torchOn by Torch.on.collectAsState()
+    LaunchedEffect(Unit) { Torch.watch(context) }
+    val lit = { sc: Shortcut -> sc.id == Shortcut.TORCH && torchOn }
     val plus = @Composable { modifier: Modifier ->
         // 빈 칸: 옅은 테두리 안 '+'만, 눌러서 바로 넣기
         Press(
@@ -1178,7 +1189,10 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
                             plus(Modifier.size(44.dp))
                         } else {
                             val name = remember(sc) { Shortcuts.name(context, sc) }
-                            RoundButton(name, { onTap(sc) }, onLongClick = edit) { ShortcutIcon(sc, 20.dp) }
+                            RoundButton(
+                                if (lit(sc)) "$name 켜짐" else name, { onTap(sc) }, onLongClick = edit,
+                                color = if (lit(sc)) accent else Lk.Cover,
+                            ) { ShortcutIcon(sc, 20.dp, if (lit(sc)) Lk.OnAccent else Lk.Text) }
                         }
                     }
                 }
@@ -1200,16 +1214,17 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
                         { onTap(sc) },
                         Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .height(44.dp)
+                            .semantics { if (sc.id == Shortcut.TORCH) stateDescription = if (lit(sc)) "켜짐" else "꺼짐" },
                         shape = Pill,
-                        color = Lk.Cover,
+                        color = if (lit(sc)) accent else Lk.Cover,
                         border = Lk.Edge,
                         onLongClick = edit,
                         onLongClickLabel = "바로가기 편집",
                     ) {
                         Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            ShortcutIcon(sc, 16.dp)
-                            Text(name, style = Lk.Caption, fontWeight = Lk.Strong, color = Lk.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            ShortcutIcon(sc, 16.dp, if (lit(sc)) Lk.OnAccent else Lk.Text)
+                            Text(name, style = Lk.Caption, fontWeight = Lk.Strong, color = if (lit(sc)) Lk.OnAccent else Lk.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -1220,14 +1235,14 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
 }
 
 @Composable
-internal fun ShortcutIcon(sc: Shortcut, size: Dp) {
+internal fun ShortcutIcon(sc: Shortcut, size: Dp, tint: Color = Lk.Text) {
     val context = LocalContext.current
     val icon = remember(sc.id) { Shortcuts.icon(context, sc) }
     if (icon != null) {
         // 앱 아이콘은 동그랗게, 글자 아이콘보다 한 단계 크게
         Image(icon, contentDescription = null, modifier = Modifier.size(size + 4.dp).clip(CircleShape))
     } else {
-        Icon(painterResource(Shortcuts.builtInIcon(sc)), contentDescription = null, tint = Lk.Text, modifier = Modifier.size(size))
+        Icon(painterResource(Shortcuts.builtInIcon(sc)), contentDescription = null, tint = tint, modifier = Modifier.size(size))
     }
 }
 

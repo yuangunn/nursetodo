@@ -434,6 +434,7 @@ object TaskStore {
         put("onboarded", onboarded)
         put("examplesCleared", examplesCleared)
         put("openOnUnlock", openOnUnlock)
+        put("hideEmptyTodo", hideEmptyTodo)
     }
 
     internal fun Preset.toJson() = JSONObject().apply {
@@ -504,6 +505,7 @@ object TaskStore {
             onboarded = optBoolean("onboarded", true),
             examplesCleared = optBoolean("examplesCleared", false),
             openOnUnlock = optInt("openOnUnlock", d.openOnUnlock).coerceIn(0, 2),
+            hideEmptyTodo = optBoolean("hideEmptyTodo", d.hideEmptyTodo),
         )
     }
 }
