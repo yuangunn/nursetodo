@@ -116,7 +116,7 @@ data class Settings(
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
     /** 할 일 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
-    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.CALENDAR), Shortcut(Shortcut.ALARM)),
+    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.TORCH)),
     /** 바로가기 모양: 0 한 줄 3칸 × 2줄(6칸), 1 한 줄 2칸 × 3줄(6칸), 2 아이콘만 5개씩(8칸). 빈 칸은 '+'(누르면 바로 넣기). */
     val shortcutStyle: Int = 0,
     /** 할 일 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
@@ -166,6 +166,8 @@ data class Settings(
      * 0 끔 · 1 근무 받은 동안([onDuty]) · 2 늘. 할 일 화면 모드(lockPage)에서만.
      */
     val openOnUnlock: Int = 0,
+    /** 할 일 화면에서 '할 일' 페이지에 남은 할 일이 없으면 카드를 그리지 않음(끝낸 일만 있어도). 근무·포켓북 페이지는 그대로. */
+    val hideEmptyTodo: Boolean = true,
 )
 
 /** [Settings.keywords] 를 줄(또는 쉼표)로 나눈 목록. */
@@ -457,6 +459,7 @@ data class Shortcut(val id: String, val name: String = "") {
         const val ALARM = "alarm"
         const val ADD = "add"
         const val CALENDAR = "calendar"
+        const val TORCH = "torch"
         const val MAX = 9
         fun app(component: String) = Shortcut("app:$component")
     }
