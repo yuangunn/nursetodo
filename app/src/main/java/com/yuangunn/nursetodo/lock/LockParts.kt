@@ -714,6 +714,46 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
     }
 }
 
+/**
+ * 바로가기 넣기(빈 칸 '+'로 열림, 카드 자리): 넣을 수 있는 기본 버튼과 폰의 앱을 바로 보여 주고 누르면 넣고 닫습니다.
+ * 넣은 것은 다음 빈 칸(아래 줄부터)에 들어갑니다.
+ */
+@Composable
+internal fun AddShortcutPanel(settings: Settings, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val list = settings.shortcuts
+    val present = list.map { it.id }.toSet()
+    val apps = remember { Shortcuts.installedApps(context) }
+    val choices = remember(present) {
+        listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }.filter { it.id !in present }
+            .map { it to Shortcuts.name(context, it) } + apps.filter { it.first.id !in present }
+    }
+    // 칸이 적은 모양에서 뒤에 저장만 된 것이 있으면 보이는 칸 바로 뒤에 넣어 바로 보이게
+    val slots = settings.shortcutSlots()
+    PanelFrame("바로가기 넣기", "모바일 EMR·내선 전화처럼 자주 여는 앱을 넣어요. 빼거나 순서를 바꾸려면 바로가기를 길게 눌러요.", onClose) {
+        choices.forEach { (sc, name) ->
+            Press(
+                {
+                    val at = list.size.coerceAtMost(slots)
+                    TaskStore.updateSettings { it.copy(shortcuts = list.take(at) + sc + list.drop(at)) }
+                    onClose()
+                },
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .semantics { contentDescription = "$name 넣기" },
+                shape = RoundedCornerShape(0.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(Modifier.padding(start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { ShortcutIcon(sc, 20.dp) }
+                    Text(name, style = Lk.Body15, color = Lk.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
 /** 패널 안 묶음 이름(13/18 600, 흐리게). */
 @Composable
 private fun SectionLabel(text: String) {
@@ -1085,24 +1125,61 @@ internal fun CloseWhenImeHides(onClose: () -> Unit) {
 }
 
 /**
- * 아래 바로가기(높이 44): [style] 0 한 줄 3개, 1 한 줄 2개(아이콘 16 + 이름 13/18 600), 2 아이콘만(44 원, 사이 16, 가운데).
+ * 바로가기 칸 배치: 아래 줄부터 채우고(목록의 처음이 맨 아래 줄 왼쪽) 남는 칸은 null('+').
+ * 한 줄 3칸·2칸은 [slots] 만큼 칸을 다 그리고, 아이콘만은 바로가기 뒤에 '+' 하나만(칸이 남을 때).
+ */
+internal fun shortcutRows(items: List<Shortcut>, style: Int, slots: Int): List<List<Shortcut?>> {
+    val shown = items.take(slots)
+    val cells: List<Shortcut?> = if (style == 2) {
+        shown + if (shown.size < slots) listOf(null) else emptyList()
+    } else {
+        shown + List(slots - shown.size) { null }
+    }
+    val perRow = when (style) {
+        1 -> 2
+        2 -> 5
+        else -> 3
+    }
+    return cells.chunked(perRow).reversed()
+}
+
+/**
+ * 아래 바로가기(높이 44): [style] 0 한 줄 3칸, 1 한 줄 2칸(아이콘 16 + 이름 13/18 600), 2 아이콘만(44 원, 사이 16, 가운데).
+ * 아래 줄부터 채우고 빈 칸은 '+'([onAdd]: 바로 앱 고르기, 모바일 EMR·내선 전화처럼 자주 여는 앱을 잠금화면에서 넣음).
  * 길게 누르면 [onEdit](카드 자리에 편집 패널).
  */
 @Composable
-internal fun ShortcutGrid(items: List<Shortcut>, style: Int, onTap: (Shortcut) -> Unit, onEdit: () -> Unit) {
+internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: (Shortcut) -> Unit, onEdit: () -> Unit, onAdd: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val edit = {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         onEdit()
     }
     val context = LocalContext.current
+    val rows = shortcutRows(items, style, slots)
+    val plus = @Composable { modifier: Modifier ->
+        // 빈 칸: 옅은 테두리 안 '+'만, 눌러서 바로 넣기
+        Press(
+            onAdd,
+            modifier.semantics { contentDescription = "바로가기 넣기" },
+            shape = if (style == 2) CircleShape else Pill,
+            color = Lk.Cover,
+            border = Lk.Edge,
+            onLongClick = edit,
+            onLongClickLabel = "바로가기 편집",
+        ) { Icon(Icons.Default.Add, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp)) }
+    }
     if (style == 2) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items.chunked(5).forEach { row ->
+            rows.forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     row.forEach { sc ->
-                        val name = remember(sc) { Shortcuts.name(context, sc) }
-                        RoundButton(name, { onTap(sc) }, onLongClick = edit) { ShortcutIcon(sc, 20.dp) }
+                        if (sc == null) {
+                            plus(Modifier.size(44.dp))
+                        } else {
+                            val name = remember(sc) { Shortcuts.name(context, sc) }
+                            RoundButton(name, { onTap(sc) }, onLongClick = edit) { ShortcutIcon(sc, 20.dp) }
+                        }
                     }
                 }
             }
@@ -1111,9 +1188,13 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, onTap: (Shortcut) -
     }
     val perRow = if (style == 1) 2 else 3
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(perRow).forEach { row ->
+        rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { sc ->
+                    if (sc == null) {
+                        plus(Modifier.weight(1f).height(44.dp))
+                        return@forEach
+                    }
                     val name = remember(sc) { Shortcuts.name(context, sc) }
                     Press(
                         { onTap(sc) },

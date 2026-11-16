@@ -2,6 +2,7 @@ package com.yuangunn.nursetodo.lock
 
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
+import com.yuangunn.nursetodo.data.Shortcut
 import com.yuangunn.nursetodo.data.Task
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -33,6 +34,25 @@ class LockLogicTest {
         // 다 지나면 모두 미체크, 시각 없는 줄은 그대로
         val late = dutyStates(rows, ms(5, 0, plusDays = 1))
         assertEquals(listOf(Duty.DONE, Duty.MISSED, Duty.MISSED, Duty.MISSED, Duty.REST), rows.map { late[it.id] })
+    }
+
+    @Test
+    fun shortcutRowsFillFromBottomWithPlus() {
+        val a = Shortcut("calc")
+        val b = Shortcut("calendar")
+        val c = Shortcut("alarm")
+        val d = Shortcut("app:x/y")
+        // 기본 3개는 아랫줄, 윗줄은 '+' 3칸
+        assertEquals(listOf(listOf(null, null, null), listOf(a, b, c)), shortcutRows(listOf(a, b, c), 0, 6))
+        // 넣은 것은 윗줄 왼쪽부터
+        assertEquals(listOf(listOf(d, null, null), listOf(a, b, c)), shortcutRows(listOf(a, b, c, d), 0, 6))
+        // 한 줄 2칸 × 3줄
+        assertEquals(listOf(listOf(null, null), listOf(c, null), listOf(a, b)), shortcutRows(listOf(a, b, c), 1, 6))
+        // 아이콘만은 '+' 하나만, 칸이 다 차면 없음
+        assertEquals(listOf(listOf(a, b, c, null)), shortcutRows(listOf(a, b, c), 2, 8))
+        assertEquals(listOf(listOf(d, d, d), listOf(a, a, a, a, a)), shortcutRows(List(5) { a } + List(3) { d }, 2, 8))
+        // 칸보다 많으면 칸까지만
+        assertEquals(6, shortcutRows(List(9) { a }, 0, 6).flatten().size)
     }
 
     @Test

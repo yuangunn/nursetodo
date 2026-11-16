@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -55,6 +56,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuangunn.nursetodo.NurseTodoApp
 import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.TaskStore
+import com.yuangunn.nursetodo.lock.ShortcutGrid
+import com.yuangunn.nursetodo.data.shortcutSlots
+import androidx.compose.runtime.mutableStateOf
 import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.Setup
 
@@ -69,7 +73,7 @@ fun Onboarding() {
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val noti = remember { NotiListener.available(context) }
     // 알림판이 아니면 '알림 볼 앱' 단계는 없습니다.
-    val steps = if (noti) 5 else 4
+    val steps = if (noti) 6 else 5
     var step by rememberSaveable { mutableIntStateOf(0) }
     val finish = { TaskStore.updateSettings { it.copy(onboarded = true) } }
     BackHandler(enabled = step > 0) { step-- }
@@ -108,6 +112,7 @@ fun Onboarding() {
                 1 -> Features(settings.presetMode, settings.keywordOn, noti)
                 2 -> Permissions(noti)
                 3 -> NotiApps()
+                4 -> ShortcutSetup()
                 else -> Ready()
             }
         }
@@ -147,7 +152,7 @@ private fun ColumnScope.Welcome() {
     Title("널스투두", "화면을 켜면 잠금화면 위에 오늘 할 일이 먼저 보여요. 잠금을 풀지 않고 체크하고 적어요.")
     Bullet("근무 루틴", "Day·Evening·Night 할 일을 교대를 받을 때 불러오고, 시각이 되면 알려요.")
     Bullet("키워드 알림", "문자·메신저에 '배정되었습니다' 같은 낱말이 오면 잠금화면 맨 위에 크게 남겨요.")
-    Bullet("포켓북 · 항암계산기 · 알람", "라운딩 체크리스트, 주입속도 계산, '몇 분 뒤' 알람을 잠금화면에서 바로.")
+    Bullet("포켓북 · 간호계산기 · 알람", "라운딩 체크리스트, 주입속도·사용기한 계산, '몇 분 뒤' 알람을 잠금화면에서 바로.")
     Text(
         "인터넷을 쓰지 않아요. 적은 내용과 알림은 이 폰 밖으로 나가지 않아요.",
         style = MaterialTheme.typography.bodySmall,
@@ -245,6 +250,45 @@ private fun Permissions(noti: Boolean) {
 private class Perm(val title: String, val body: String, val done: Boolean, val onAsk: () -> Unit)
 
 /** 알림판: 할 일 화면에 보일 알림 앱과 키워드를 찾을 앱·키워드. 알림 접근을 아직 안 했으면 그것부터. */
+/**
+ * 바로가기: 모양(한 줄 3칸 · 2칸 · 아이콘만)과 칸을 잠금화면과 같은 모습으로 보여 주고, 빈 칸 '+'를 누르면 앱을 고릅니다
+ * (모바일 EMR·내선 전화처럼 근무 중 자주 여는 앱). 넣은 버튼을 누르면 뺍니다.
+ */
+@Composable
+private fun ShortcutSetup() {
+    val s by TaskStore.settings.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf(false) }
+    Title("잠금화면 바로가기", "할 일 화면 아래에 둘 버튼이에요. 빈 칸 '+'를 눌러 모바일 EMR·내선 전화처럼 근무 중 자주 여는 앱을 넣어요.")
+    Segmented(listOf("한 줄 3칸", "한 줄 2칸", "아이콘만"), s.shortcutStyle.coerceIn(0, 2)) { i -> TaskStore.updateSettings { it.copy(shortcutStyle = i) } }
+    // 잠금화면과 같은 모습(어두운 바탕)으로 미리 보기. 모서리는 안쪽 알약(반지름 22)과 같은 중심: 22 + 여백 12
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(34.dp))
+            .background(androidx.compose.ui.graphics.Color(0xFF1C1C1E))
+            .padding(12.dp),
+    ) {
+        ShortcutGrid(
+            s.shortcuts, s.shortcutStyle, s.shortcutSlots(),
+            onTap = { sc -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts - sc) } },
+            onEdit = {},
+            onAdd = { picking = true },
+        )
+    }
+    Text(
+        "넣은 버튼을 누르면 빠져요. 이름·순서는 나중에 설정 › 바로가기에서 바꾸고, 잠금화면에서 바로가기를 길게 눌러도 돼요.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (picking) {
+        ShortcutPickerDialog(
+            s.shortcuts.map { it.id }.toSet(),
+            onPick = { sc -> TaskStore.updateSettings { it.copy(shortcuts = (it.shortcuts.take(it.shortcutSlots()) + sc) + it.shortcuts.drop(it.shortcutSlots())) } },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
 @Composable
 private fun NotiApps() {
     val context = LocalContext.current

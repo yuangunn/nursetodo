@@ -116,8 +116,8 @@ data class Settings(
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
     /** 할 일 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
-    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.CALENDAR)),
-    /** 바로가기 모양: 0 이름 3줄(9칸), 1 이름 2줄(6칸), 2 아이콘만 4개씩 2줄(8칸). */
+    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.CALENDAR), Shortcut(Shortcut.ALARM)),
+    /** 바로가기 모양: 0 한 줄 3칸 × 2줄(6칸), 1 한 줄 2칸 × 3줄(6칸), 2 아이콘만 5개씩(8칸). 빈 칸은 '+'(누르면 바로 넣기). */
     val shortcutStyle: Int = 0,
     /** 할 일 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
     val addButton: Int = 0,
@@ -146,7 +146,7 @@ data class Settings(
     val keywordSound: Boolean = false,
     /** 앱 테마: 0 시스템 따라감, 1 라이트, 2 다크. 잠금화면은 늘 어둡습니다. */
     val theme: Int = 0,
-    /** 항암계산기 주입속도 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
+    /** 간호계산기(항암 주입속도) 상한(cc/hr). 넘으면 결과를 주황으로. ponytail: 1000 은 임시값, 기관·펌프 기준으로 정할 것 */
     val rateLimit: Int = 1000,
     /** 사용기한 계산기의 자주 쓰는 기한(칩). */
     val expiryPresets: List<ExpiryPreset> = Expiry.DEFAULTS,
@@ -468,7 +468,7 @@ val RowGapRange = 0..24
 fun Settings.cardTextSp(): Float = cardSp.coerceIn(CardSpRange).toFloat()
 
 /** 할 일 화면에 보이는 바로가기 칸 수. */
-fun Settings.shortcutSlots(): Int = listOf(9, 6, 8)[shortcutStyle.coerceIn(0, 2)]
+fun Settings.shortcutSlots(): Int = listOf(6, 6, 8)[shortcutStyle.coerceIn(0, 2)]
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()

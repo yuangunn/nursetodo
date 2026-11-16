@@ -154,7 +154,7 @@ private enum class SettingsPage(val title: String) {
     PRESET("교대 프리셋"),
     KEYWORD("키워드 알림"),
     ALARM("알람"),
-    CALC("항암계산기"),
+    CALC("간호계산기"),
     LOOK("테마·강조색"),
 }
 
@@ -361,7 +361,7 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
                 if (s.alarmMode == 2) AlarmModes[2] else "크기 ${s.alarmVolume} · ${AlarmModes[s.alarmMode.coerceIn(0, 2)]}",
                 icon = { res(R.drawable.ic_alarm) },
             ) { open(SettingsPage.ALARM) }
-            NavRow("항암계산기", "주입속도 상한 ${s.rateLimit} cc/hr", icon = { res(R.drawable.ic_calc) }) { open(SettingsPage.CALC) }
+            NavRow("간호계산기", "항암 주입속도 상한 ${s.rateLimit} cc/hr", icon = { res(R.drawable.ic_calc) }) { open(SettingsPage.CALC) }
         }
         Group("화면") {
             val accent = (if (s.isDark()) AccentDark else AccentLight)[s.accent.coerceIn(AccentNames.indices)]
@@ -926,14 +926,22 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
     }
 
     if (picking) {
+        ShortcutPickerDialog(s.shortcuts.map { it.id }.toSet(), onPick = { sc -> save(s.shortcuts + sc) }, onDismiss = { picking = false })
+    }
+}
+
+/** 바로가기 고르기 창(설정·처음 안내): 기본 버튼과 폰의 앱, 이름으로 찾기. 고르면 [onPick] 뒤 닫힘. 이미 있는 것([present])은 빼고. */
+@Composable
+internal fun ShortcutPickerDialog(present: Set<String>, onPick: (Shortcut) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    run {
         val apps = remember { Shortcuts.installedApps(context) }
         var query by remember { mutableStateOf("") }
-        val present = s.shortcuts.map { it.id }.toSet()
         val builtIn = listOf(Shortcut.ADD, Shortcut.CALC, Shortcut.ALARM, Shortcut.CALENDAR).map { Shortcut(it) }
         val choices = (builtIn.map { it to Shortcuts.name(context, it) } + apps)
             .filter { (sc, label) -> sc.id !in present && label.contains(query.trim(), ignoreCase = true) }
         AlertDialog(
-            onDismissRequest = { picking = false },
+            onDismissRequest = onDismiss,
             title = { Text("바로가기 추가") },
             text = {
                 Column {
@@ -950,8 +958,8 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        save(s.shortcuts + sc)
-                                        picking = false
+                                        onPick(sc)
+                                        onDismiss()
                                     }
                                     .padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -964,7 +972,7 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { picking = false }) { Text("닫기") } },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
         )
     }
 }
