@@ -105,6 +105,9 @@ class NotiListener : NotificationListenerService() {
         /** 지금 떠 있는 다른 앱 알림, 최근 것부터. 알림 접근이 꺼져 있으면 비어 있음. */
         val notis: StateFlow<List<Noti>> = _notis.asStateFlow()
 
+        /** 잠금화면 체험의 예시 알림. 있으면 할 일 화면은 실제 알림 대신 이것을 보이고, 지우기도 여기서만. */
+        val practice = MutableStateFlow<List<Noti>?>(null)
+
         /** 이 설치본에 알림 읽기 서비스가 있는지 (알림판만). */
         fun available(context: Context): Boolean =
             runCatching { context.packageManager.getServiceInfo(ComponentName(context, NotiListener::class.java), 0) }.isSuccess
@@ -152,6 +155,10 @@ class NotiListener : NotificationListenerService() {
          * 묶음의 마지막 알림이면 묶음 요약도 함께 지웁니다 — 요약만 남으면 알림 창에 빈 묶음('앱 이름 · 시각')이 남습니다.
          */
         fun dismiss(keys: List<String>) {
+            practice.value?.let { list ->
+                practice.value = list.filter { it.key !in keys }
+                return
+            }
             val l = instance ?: return
             if (keys.isEmpty()) return
             runCatching {

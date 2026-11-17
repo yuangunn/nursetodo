@@ -179,6 +179,7 @@ class QuickAddActivity : ComponentActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
         }
         TaskStore.init(this)
+        if (intent.getBooleanExtra(Practice.EXTRA, false)) Practice.begin(this)
         TaskStore.refreshPreset()
         // 화면을 켜거나 카드를 눌러 열면 보고 체크가 먼저라 입력칸을 접어 둡니다. 타일·위젯 `+` 로 열면 바로 입력.
         val adding = !intent.getBooleanExtra(EXTRA_LOOK_FIRST, false) && !intent.getBooleanExtra(EXTRA_DUTY, false)
@@ -218,6 +219,7 @@ class QuickAddActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(Practice.EXTRA, false)) Practice.begin(this)
         handleDuty(intent)
     }
 
@@ -245,16 +247,33 @@ class QuickAddActivity : ComponentActivity() {
         super.onStop()
         // 다음에 늦게 열릴 때 꺼진 화면을 다시 켜지 않게 되돌립니다.
         if (Build.VERSION.SDK_INT >= 27) setTurnScreenOn(false)
+        // 체험은 화면이 가려지면(밀어서 끝냄·화면 꺼짐·홈) 끝내고 원래 데이터로. 예시가 실제 잠금화면에 남지 않게 닫습니다.
+        if (Practice.active.value) {
+            Practice.end(this)
+            Toast.makeText(this, "체험을 마쳤어요. 원래 할 일은 그대로예요.", Toast.LENGTH_SHORT).show()
+            finish()
+        }
+    }
+
+    /** 체험에서는 다른 화면을 열지 않고 알려만 줍니다. */
+    private fun practiceBlocks(): Boolean {
+        if (!Practice.active.value) return false
+        Toast.makeText(this, "체험에서는 열지 않아요. 실제로는 잠금을 풀고 열려요.", Toast.LENGTH_SHORT).show()
+        return true
     }
 
     /** 잠금을 풀고 앱(의 [target] 화면)으로. 밀어서 잠금이면 바로, PIN 이 걸려 있으면 PIN 을 넣은 뒤 열립니다. */
-    private fun openApp(target: Intent) = unlockThen { startActivity(target) }
+    private fun openApp(target: Intent) {
+        if (!practiceBlocks()) unlockThen { startActivity(target) }
+    }
 
     /** 다른 앱 알림을 누르면 잠금을 풀고 그 알림의 화면으로. */
-    private fun openNoti(n: Noti) = unlockThen { NotiListener.open(this, n) }
+    private fun openNoti(n: Noti) {
+        if (!practiceBlocks()) unlockThen { NotiListener.open(this, n) }
+    }
 
     /** 키워드 카드의 '열기': 잠금을 풀고 원래 알림(문자·팀즈)의 화면으로. 연 것은 확인한 것으로 봅니다. */
-    private fun openHit(h: KeywordAlert.Hit) = unlockThen {
+    private fun openHit(h: KeywordAlert.Hit) = if (practiceBlocks()) Unit else unlockThen {
         KeywordAlert.dismiss(this, h.key)
         NotiListener.open(this, Noti(h.key, h.pkg, h.title, h.text, 0, h.open, autoCancel = false))
     }
@@ -316,7 +335,10 @@ private fun LockPage(
     val alarms by TaskStore.alarms.collectAsStateWithLifecycle()
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val allNotis by NotiListener.notis.collectAsStateWithLifecycle()
-    val notis = allNotis.filter { settings.notiApps.isEmpty() || it.pkg in settings.notiApps }
+    // 잠금화면 체험이면 예시 알림만
+    val practicing by Practice.active.collectAsStateWithLifecycle()
+    val practiceNotis by NotiListener.practice.collectAsStateWithLifecycle()
+    val notis = (practiceNotis ?: allNotis).filter { settings.notiApps.isEmpty() || it.pkg in settings.notiApps }
     val hitsVersion by KeywordAlert.version.collectAsStateWithLifecycle()
     val hits = remember(hitsVersion) { KeywordAlert.active(context) }
     val pockets by TaskStore.pockets.collectAsStateWithLifecycle()
@@ -390,6 +412,8 @@ private fun LockPage(
             Shortcut.ADD -> adding = true
             Shortcut.CALENDAR -> onOpen(MainActivity.calendarIntent(context))
             Shortcut.RECORD -> when {
+                practicing && Recorder.since.value == null ->
+                    Toast.makeText(context, "체험에서는 녹음하지 않아요. 실제로는 누르면 바로 녹음돼요.", Toast.LENGTH_SHORT).show()
                 Recorder.since.value != null -> Recorder.stop(context)
                 Recorder.allowed(context) -> Recorder.start(context)
                 // 권한 창은 잠금 위에 못 띄워 잠금을 풀고 앱에서 묻고, 허용하면 바로 녹음
@@ -592,7 +616,30 @@ private fun LockPage(
                 .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (!askingAlarm) ClockRow()
+            if (!askingAlarm && !practicing) ClockRow()
+            // 체험: 시계 자리에 단계 안내. 적는 동안에도 단계를 이어 가도록 늘 두고 보이기만 끔
+            if (practicing) {
+                PracticeCoach(
+                    PracticeSignals(
+                        page = page,
+                        dutyShift = settings.dutyShift,
+                        dutyDone = duty.count { it.doneOn != null },
+                        todoDone = all.count { it.shift == null && it.doneOn == today },
+                        todoCount = all.count { it.shift == null },
+                        menuOpen = menuId != null,
+                        donePanel = panel == Panel.DONE,
+                        notis = notis.size,
+                        hits = hits.size,
+                        alarms = alarms.size,
+                        shortcutPanel = panel == Panel.SHORTCUTS,
+                    ),
+                    pocketPage = PAGE_POCKET,
+                    noti = NotiListener.available(context),
+                    hasAlarm = shortcuts.any { it.id == Shortcut.ALARM },
+                    show = !typing && !askingAlarm,
+                    onEnd = onUnlock,
+                )
+            }
             if (!typing && !askingAlarm && hits.isNotEmpty()) {
                 KeywordCards(
                     hits, kwOpen,
@@ -803,7 +850,7 @@ private fun LockPage(
                         onEdit = { panel = Panel.SHORTCUTS },
                         onAdd = { panel = if (panel == Panel.ADD_SHORTCUT) Panel.NONE else Panel.ADD_SHORTCUT },
                     )
-                    UnlockHint(locked, onUnlock)
+                    UnlockHint(locked || practicing, onUnlock)
                 }
             }
         }

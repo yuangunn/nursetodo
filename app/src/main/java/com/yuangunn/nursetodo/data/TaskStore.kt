@@ -32,6 +32,37 @@ object TaskStore {
     /** 데이터가 바뀔 때마다 호출 — 잠금화면 카드와 위젯을 갱신합니다. */
     var onChanged: (() -> Unit)? = null
 
+    private fun changed() {
+        if (!practicing) onChanged?.invoke()
+    }
+
+    /**
+     * 잠금화면 체험(처음 안내) 동안 바꾸기 전 데이터. 체험 중엔 예시 데이터를 메모리에만 두고 파일에 쓰지 않으며
+     * 잠금화면 카드·위젯·알람도 갱신하지 않습니다 — 체험 중 앱이 죽어도 저장 파일은 그대로입니다.
+     */
+    private var practiceBackup: Pair<Snapshot, List<Alarm>>? = null
+    val practicing: Boolean get() = practiceBackup != null
+
+    fun beginPractice(settings: Settings, pockets: List<Pocket>) {
+        if (practiceBackup == null) practiceBackup = snapshot() to _alarms.value
+        _tasks.value = emptyList()
+        _pockets.value = pockets
+        _alarms.value = emptyList()
+        _settings.value = settings
+    }
+
+    /** 체험을 끝내고 체험 전 데이터로. 체험 동안 시각이 지난 알람은 이미 울렸으니 빼고 저장합니다. */
+    fun endPractice() {
+        val (snap, alarms) = practiceBackup ?: return
+        practiceBackup = null
+        _tasks.value = snap.tasks
+        _pockets.value = snap.pockets
+        _settings.value = snap.settings
+        _alarms.value = alarms.filter { it.at > System.currentTimeMillis() }
+        save()
+        onChanged?.invoke()
+    }
+
     fun init(context: Context) {
         if (::file.isInitialized) return
         file = File(context.filesDir, "nursetodo.json")
@@ -178,7 +209,7 @@ object TaskStore {
         _pockets.value = snap.pockets
         _settings.value = snap.settings
         save()
-        onChanged?.invoke()
+        changed()
     }
 
     /**
@@ -208,7 +239,7 @@ object TaskStore {
         val unmuted = s.routineMuted
         _settings.value = s.copy(presetApplied = shift, presetLoaded = preset.id, dutyShift = shift, routineMuted = false)
         save()
-        onChanged?.invoke()
+        changed()
         return cleared to unmuted
     }
 
@@ -299,16 +330,17 @@ object TaskStore {
     fun updateSettings(transform: (Settings) -> Settings) {
         _settings.value = transform(_settings.value)
         save()
-        onChanged?.invoke()
+        changed()
     }
 
     private fun commit(list: List<Task>) {
         _tasks.value = list
         save()
-        onChanged?.invoke()
+        changed()
     }
 
     private fun save() {
+        if (practicing) return
         val root = JSONObject()
         root.put("tasks", JSONArray().apply { _tasks.value.forEach { put(it.toJson()) } })
         root.put("settings", _settings.value.toJson())

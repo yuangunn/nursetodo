@@ -127,6 +127,7 @@ import com.yuangunn.nursetodo.lock.KeywordAlert
 import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.Setup
 import com.yuangunn.nursetodo.lock.Recorder
+import com.yuangunn.nursetodo.lock.Practice
 import com.yuangunn.nursetodo.lock.Shortcuts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -385,6 +386,9 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
             NavRow("새 할 일 위치", if (s.newOnTop) "맨 위" else "맨 아래", icon = { icon(Icons.Outlined.Add) }) { onSheet("newOnTop") }
         }
         Group("기타", foot = "데이터는 이 폰에만 저장돼요. 인터넷 권한이 없어 밖으로 나가지 않아요.") {
+            NavRow("잠금화면 체험", "예시로 체크·알림·키워드 알림을 직접 해 봐요. 저장되지 않아요", chevron = false, icon = { icon(Icons.Outlined.Lock) }) {
+                context.startActivity(Practice.intent(context))
+            }
             NavRow("처음 안내 다시 보기", "쓸 기능과 권한을 차례로 다시 골라요", chevron = false, icon = { icon(Icons.Outlined.PlayArrow) }) {
                 TaskStore.updateSettings { it.copy(onboarded = false) }
             }

@@ -79,7 +79,10 @@ object Alarms {
 
     private fun requestCode(id: Long): Int = 1000 + (id % 100_000).toInt()
 
-    private fun schedule(context: Context, alarm: Alarm) = setClock(context, alarm.at, fireIntent(context, alarm.id))
+    // 잠금화면 체험에서 맞춘 알람은 목록에만(울리지 않음)
+    private fun schedule(context: Context, alarm: Alarm) {
+        if (!TaskStore.practicing) setClock(context, alarm.at, fireIntent(context, alarm.id))
+    }
 
     /**
      * 시계 앱 방식으로 [at] 에 [operation]. 상태바 ⏰ 를 누르면 할 일 화면이 열립니다.
