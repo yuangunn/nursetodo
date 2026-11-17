@@ -10,6 +10,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.Shadows.shadowOf
+import android.content.pm.PackageManager
 
 /** 녹음 파일 이름 ↔ 시작 시각, 목록 순서(새것 먼저, 녹음 중인 것·다른 파일 뺌), 걸린 시간 글, 기본 버튼 목록. */
 @RunWith(RobolectricTestRunner::class)
@@ -50,6 +52,10 @@ class RecorderTest {
 
     @Test
     fun recordIsBuiltInButNotDefault() {
+        // 마이크 없는 기기는 녹음 버튼 없음(마이크는 필수 기능이 아님)
+        shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_MICROPHONE, false)
+        assertTrue(Shortcuts.builtIns(context).none { it.id == Shortcut.RECORD })
+        shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_MICROPHONE, true)
         assertTrue(Shortcuts.builtIns(context).any { it.id == Shortcut.RECORD })
         assertEquals("녹음", Shortcuts.name(context, Shortcut(Shortcut.RECORD)))
         assertTrue(com.yuangunn.nursetodo.data.Settings().shortcuts.none { it.id == Shortcut.RECORD })

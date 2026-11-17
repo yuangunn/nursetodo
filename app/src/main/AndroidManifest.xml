@@ -19,6 +19,8 @@
     <!-- 할 일 화면 '녹음' 바로가기: 누르는 동안만 마이크 서비스, 파일은 앱 안에만 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- RECORD_AUDIO 는 마이크를 필수 기능으로 만들어 마이크 없는 기기를 Play 지원에서 뺍니다. 녹음은 선택 기능이라 필수가 아님 -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- 할 일 화면 바로가기로 고를 수 있게 런처에 보이는 앱 목록을 읽습니다 -->
     <queries>

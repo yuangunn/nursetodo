@@ -27,7 +27,8 @@ object Shortcuts {
         Shortcut.CALENDAR -> "캘린더"
         // 플래시가 없는 기기면 없는 버튼으로 봄(목록·화면에서 빠짐)
         Shortcut.TORCH -> "손전등".takeIf { Torch.available(context) }
-        Shortcut.RECORD -> "녹음"
+        // 마이크가 없는 기기(일부 태블릿·TV)는 없는 버튼으로 봄
+        Shortcut.RECORD -> "녹음".takeIf { context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE) }
         else -> component(s)?.let { c ->
             runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
         }
