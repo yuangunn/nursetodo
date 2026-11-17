@@ -192,6 +192,7 @@ data class Preset(val id: Long, val name: String, val start: Int?, val items: Li
                     "07:00 정규라운딩, 혈당측정, V/S CHECK",
                     "09:00 정규라운딩",
                     "11:00 정규라운딩",
+                    "12:00 혈당측정",
                     "13:00 정규라운딩, I/O Check",
                 ) to listOf("루틴 차팅", "시계열", "처치물품fee", "퇴원간호기록 작성", "퇴원환자 지참약 챙기기", "수술전처치표 작성")
                 ),
