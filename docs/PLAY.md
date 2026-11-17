@@ -13,7 +13,7 @@
 | AAB(알림판) | `~/ttaak-play/nursetodo-v<버전>-noti.aab` (`./gradlew bundleNotiRelease -Pplay` 로 만듦) | 저장소 |
 | 앱 아이콘 512×512, 그래픽 이미지 1024×500 | [`docs/play/icon-512.png`](play/icon-512.png), [`docs/play/feature-1024x500.png`](play/feature-1024x500.png) | 저장소 |
 | 휴대전화 스크린샷 5장(1240×2400: 할 일 화면·오늘·교대 프리셋·계산기·포켓북) | [`docs/play/screen-1.png`](play/screen-1.png) ~ [`screen-5.png`](play/screen-5.png) | 저장소 |
-| 포그라운드 서비스 시연 영상 3개 | `~/ttaak-play/video/lockpage-demo.mp4`(specialUse: 화면 켜면 할 일 화면 → 체크 → 밀어서 잠금 해제), `alarm-demo.mp4`(mediaPlayback: 1분 알람 → 꺼진 화면에서 알람 화면 → 끄기), v2.9.0 부터 녹음 영상(microphone: 잠금화면 '녹음' 누름 → 빨간 버튼·상단바 알림 → 다시 눌러 멈춤 → 설정 › 녹음에서 듣기). 유튜브에 **일부 공개**로 올려 링크 | 계정 주인이 올림 |
+| 포그라운드 서비스 시연 영상 3개 | `~/ttaak-play/video/lockpage-demo.mp4`(specialUse: 화면 켜면 할 일 화면 → 체크 → 밀어서 잠금 해제), `alarm-demo.mp4`(mediaPlayback: 1분 알람 → 꺼진 화면에서 알람 화면 → 끄기), `record-demo.mp4`(microphone, v2.10.1 부터: 잠금화면 '녹음' → 빨간 버튼 · 잠금을 풀고 홈으로 가도 이어서 녹음 → 상단바 '녹음 중' 알림의 '멈춤' → 설정 › 녹음에서 듣기. 브라우저 업로드 한도 때문에 `avconvert --preset Preset1280x720` 로 줄인 `record-demo-720.mp4` 를 올림). 유튜브에 **일부 공개**로 올려 링크 | 계정 주인이 올림 |
 | 개인정보처리방침 주소 | https://github.com/yuangunn/nursetodo/blob/main/PRIVACY.md | 저장소 |
 
 ## 1. 개발자 계정 (한 번)
@@ -39,7 +39,7 @@
 | 정부 앱 / 금융 기능 / 건강 | 아니요 / 없음 / 해당 없음 |
 | 전체 화면 인텐트 | **알람·전화가 핵심 기능인 앱이 아님**(할 일 앱). 쓰는 곳: 사용자가 맞춘 '몇 분 뒤' 알람이 울릴 때 잠금화면 위에 알람 화면(끄기 버튼)을 띄움 |
 | 정확한 알람(`SCHEDULE_EXACT_ALARM`) | 사용자가 맞춘 '몇 분 뒤'·'몇 시에' 알람(투약·항암 주입 종료 등)과 교대 프리셋의 근무 루틴 알림을 제시간에 울림. 사용자가 '알람 및 리마인더'를 허용해야 함 |
-| 포그라운드 서비스 | `specialUse`(LockPageService): 화면이 켜질 때 잠금화면 위에 오늘 할 일 화면을 띄우려고 화면 켜짐 신호를 받는 상시 서비스. `mediaPlayback`(AlarmRingService): 알람음 재생(최대 10분). `microphone`(RecordService, v2.9.0): 사용자가 잠금화면 '녹음'을 누른 동안만 음성 녹음, 다시 누르거나 알림 '멈춤'으로 끝냄. 시연 영상 링크(준비물) |
+| 포그라운드 서비스 | `specialUse`(LockPageService): 화면이 켜질 때 잠금화면 위에 오늘 할 일 화면을 띄우려고 화면 켜짐 신호를 받는 상시 서비스. `mediaPlayback`(AlarmRingService): 알람음 재생(최대 10분). `microphone`(RecordService, v2.10.1 첫 출시): 작업 '백그라운드 오디오 입력' — 사용자가 잠금화면 '녹음'을 누른 동안만 음성 녹음, 다시 누르거나 알림 '멈춤'으로 끝냄. 마이크는 `uses-feature required=false`(아니면 마이크 없는 기기 13대가 지원에서 빠짐). 시연 영상 링크(준비물) |
 
 - 전체 화면 인텐트를 '알람 앱'이라고 답하면 `USE_EXACT_ALARM` 처럼 핵심 기능이 아니라는 이유로 거절될 수 있습니다. 할 일 앱이라고 답하면 구글이 이 권한을 기본으로 주지 않을 뿐이고, 앱의 설정 › 알람에 '알람 화면이 꺼져 있어요 → 허용' 줄이 뜹니다. 허용 전에는 알람이 소리와 알림으로만 울립니다.
 - `USE_EXACT_ALARM`(설치 때 자동 허용)은 Play 정책상 알람·캘린더가 핵심 기능인 앱만 쓸 수 있어서 v1.6.1 에서 뺐습니다. 안드로이드 14+ 는 새로 깔면 '알람 및 리마인더'가 꺼져 있어, 앱이 오늘 탭 안내와 알람 입력 칸에서 허용을 받습니다. 허용 전에 맞춘 알람은 늦게 울릴 수 있고, 허용하면 제시간으로 다시 맞춥니다.
