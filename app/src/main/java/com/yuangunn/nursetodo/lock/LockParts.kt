@@ -111,6 +111,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.yuangunn.nursetodo.R
@@ -1163,11 +1164,33 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
     }
     val context = LocalContext.current
     val rows = shortcutRows(items, style, slots)
-    // 손전등 버튼은 켜져 있는 동안 강조색으로 채움(빠른 설정에서 켜고 꺼도 따라감)
+    // 켜진 버튼: 손전등은 강조색(빠른 설정에서 켜고 꺼도 따라감), 녹음은 빨강 바탕에 ■ 와 걸린 시간
     val accent = LocalLockAccent.current
     val torchOn by Torch.on.collectAsState()
     LaunchedEffect(Unit) { Torch.watch(context) }
-    val lit = { sc: Shortcut -> sc.id == Shortcut.TORCH && torchOn }
+    val recSince by Recorder.since.collectAsState()
+    val now by produceState(System.currentTimeMillis(), recSince) {
+        while (recSince != null) {
+            value = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val recording = { sc: Shortcut -> sc.id == Shortcut.RECORD && recSince != null }
+    val lit = { sc: Shortcut -> (sc.id == Shortcut.TORCH && torchOn) || recording(sc) }
+    val fill = { sc: Shortcut -> if (recording(sc)) Lk.Badge else if (lit(sc)) accent else Lk.Cover }
+    val ink = { sc: Shortcut -> if (lit(sc) && !recording(sc)) Lk.OnAccent else Lk.Text }
+    val label = { sc: Shortcut, name: String -> recSince?.takeIf { recording(sc) }?.let { Recorder.elapsed(now - it) } ?: name }
+    val state = { sc: Shortcut ->
+        when (sc.id) {
+            Shortcut.TORCH -> if (torchOn) "켜짐" else "꺼짐"
+            Shortcut.RECORD -> if (recSince != null) "녹음 중, 누르면 멈춤" else null
+            else -> null
+        }
+    }
+    val icon = @Composable { sc: Shortcut, size: Dp ->
+        if (recording(sc)) Icon(painterResource(R.drawable.ic_stop), contentDescription = null, tint = Lk.Text, modifier = Modifier.size(size))
+        else ShortcutIcon(sc, size, ink(sc))
+    }
     val plus = @Composable { modifier: Modifier ->
         // 빈 칸: 옅은 테두리 안 '+'만, 눌러서 바로 넣기
         Press(
@@ -1190,9 +1213,9 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
                         } else {
                             val name = remember(sc) { Shortcuts.name(context, sc) }
                             RoundButton(
-                                if (lit(sc)) "$name 켜짐" else name, { onTap(sc) }, onLongClick = edit,
-                                color = if (lit(sc)) accent else Lk.Cover,
-                            ) { ShortcutIcon(sc, 20.dp, if (lit(sc)) Lk.OnAccent else Lk.Text) }
+                                state(sc)?.let { "$name $it" } ?: name, { onTap(sc) }, onLongClick = edit,
+                                color = fill(sc),
+                            ) { icon(sc, 20.dp) }
                         }
                     }
                 }
@@ -1215,16 +1238,16 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
                         Modifier
                             .weight(1f)
                             .height(44.dp)
-                            .semantics { if (sc.id == Shortcut.TORCH) stateDescription = if (lit(sc)) "켜짐" else "꺼짐" },
+                            .semantics { state(sc)?.let { stateDescription = it } },
                         shape = Pill,
-                        color = if (lit(sc)) accent else Lk.Cover,
+                        color = fill(sc),
                         border = Lk.Edge,
                         onLongClick = edit,
                         onLongClickLabel = "바로가기 편집",
                     ) {
                         Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            ShortcutIcon(sc, 16.dp, if (lit(sc)) Lk.OnAccent else Lk.Text)
-                            Text(name, style = Lk.Caption, fontWeight = Lk.Strong, color = if (lit(sc)) Lk.OnAccent else Lk.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            icon(sc, 16.dp)
+                            Text(label(sc, name), style = Lk.Caption, fontWeight = Lk.Strong, color = ink(sc), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }

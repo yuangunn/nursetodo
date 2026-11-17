@@ -472,6 +472,7 @@ data class Shortcut(val id: String, val name: String = "") {
         const val ADD = "add"
         const val CALENDAR = "calendar"
         const val TORCH = "torch"
+        const val RECORD = "record"
         const val MAX = 9
         fun app(component: String) = Shortcut("app:$component")
     }

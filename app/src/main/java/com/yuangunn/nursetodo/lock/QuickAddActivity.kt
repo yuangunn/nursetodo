@@ -389,6 +389,12 @@ private fun LockPage(
             }
             Shortcut.ADD -> adding = true
             Shortcut.CALENDAR -> onOpen(MainActivity.calendarIntent(context))
+            Shortcut.RECORD -> when {
+                Recorder.since.value != null -> Recorder.stop(context)
+                Recorder.allowed(context) -> Recorder.start(context)
+                // 권한 창은 잠금 위에 못 띄워 잠금을 풀고 앱에서 묻고, 허용하면 바로 녹음
+                else -> onOpen(MainActivity.micIntent(context))
+            }
             Shortcut.TORCH -> if (!Torch.toggle(context)) {
                 Toast.makeText(context, "손전등을 켤 수 없어요. 다른 앱이 카메라를 쓰는 중일 수 있어요.", Toast.LENGTH_SHORT).show()
             }

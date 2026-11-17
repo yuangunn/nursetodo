@@ -60,11 +60,13 @@ import com.yuangunn.nursetodo.lock.ShortcutGrid
 import com.yuangunn.nursetodo.data.shortcutSlots
 import androidx.compose.runtime.mutableStateOf
 import com.yuangunn.nursetodo.lock.NotiListener
+import com.yuangunn.nursetodo.lock.Recorder
+import android.content.Intent
 import com.yuangunn.nursetodo.lock.Setup
 
 /**
  * 처음 설치한 사람을 위한 안내(설정 › 처음 안내 다시 보기로 다시 볼 수 있음):
- * 소개 → 쓸 기능 고르기(근무 루틴·키워드 알림) → 권한을 하나씩(알림 · 다른 앱 위에 표시 · 알람 및 리마인더 · 알림 접근) →
+ * 소개 → 쓸 기능 고르기(근무 루틴·키워드 알림) → 권한을 하나씩(알림 · 다른 앱 위에 표시 · 알람 및 리마인더 · 알림 접근 · 마이크) →
  * 알림 볼 앱 고르기(알림판) → 마무리. 어느 단계든 건너뛸 수 있고, 끝내거나 건너뛰면 [com.yuangunn.nursetodo.data.Settings.onboarded].
  */
 @Composable
@@ -198,6 +200,13 @@ private fun Permissions(noti: Boolean) {
         if (!granted) Setup.openAppNotificationSettings(context)
         tick++
     }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        // 두 번 거절하면 다시 묻지 않아 앱 정보에서 켜야 함
+        if (!granted && (context as? android.app.Activity)?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == false) {
+            context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null)))
+        }
+        tick++
+    }
     val items = remember(tick) {
         buildList {
             add(Perm("알림", "알람과 근무 루틴 알림이 울리고, 할 일 화면이 늘 켜져 있으려면 필요해요.", Setup.notificationsAllowed(context)) {
@@ -214,6 +223,9 @@ private fun Permissions(noti: Boolean) {
                     Setup.openNotiAccess(context)
                 })
             }
+            add(Perm("마이크", "잠금화면 '녹음' 버튼을 한 번 누르면 바로 녹음돼요. 녹음은 이 폰 안에만 저장돼요.", Recorder.allowed(context)) {
+                askMic.launch(Manifest.permission.RECORD_AUDIO)
+            })
         }
     }
     Title("권한을 차례로 허용해 주세요", "버튼을 누르면 설정 화면이 열려요. 켜고 돌아오면 다음 줄로 넘어가요.")
