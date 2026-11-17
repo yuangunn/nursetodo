@@ -135,6 +135,9 @@ object KeywordAlert {
         post(context, Hit(sbn.key, sbn.packageName, app, hit, title, text, System.currentTimeMillis(), open), silent = false)
     }
 
+    /** 잠금화면 체험: 실제 키워드 팝업과 똑같이 진동하며 띄웁니다(열기 없음). */
+    fun practice(context: Context, h: Hit) = post(context, h, silent = false)
+
     /** 할 일 화면에서 '확인'·'할 일로 추가'를 되돌릴 때 같은 팝업을 소리·진동 없이 다시 둡니다. */
     fun restore(context: Context, h: Hit) = post(context, h, silent = true)
 

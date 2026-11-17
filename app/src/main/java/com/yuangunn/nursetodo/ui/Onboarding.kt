@@ -63,11 +63,12 @@ import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.Recorder
 import android.content.Intent
 import com.yuangunn.nursetodo.lock.Setup
+import com.yuangunn.nursetodo.lock.Practice
 
 /**
  * 처음 설치한 사람을 위한 안내(설정 › 처음 안내 다시 보기로 다시 볼 수 있음):
  * 소개 → 쓸 기능 고르기(근무 루틴·키워드 알림) → 권한을 하나씩(알림 · 다른 앱 위에 표시 · 알람 및 리마인더 · 알림 접근 · 마이크) →
- * 알림 볼 앱 고르기(알림판) → 마무리. 어느 단계든 건너뛸 수 있고, 끝내거나 건너뛰면 [com.yuangunn.nursetodo.data.Settings.onboarded].
+ * 알림 볼 앱 고르기(알림판) → 바로가기 → 잠금화면 체험 → 마무리. 어느 단계든 건너뛸 수 있고, 끝내거나 건너뛰면 [com.yuangunn.nursetodo.data.Settings.onboarded].
  */
 @Composable
 fun Onboarding() {
@@ -75,7 +76,7 @@ fun Onboarding() {
     val settings by TaskStore.settings.collectAsStateWithLifecycle()
     val noti = remember { NotiListener.available(context) }
     // 알림판이 아니면 '알림 볼 앱' 단계는 없습니다.
-    val steps = if (noti) 6 else 5
+    val steps = if (noti) 7 else 6
     var step by rememberSaveable { mutableIntStateOf(0) }
     val finish = { TaskStore.updateSettings { it.copy(onboarded = true) } }
     BackHandler(enabled = step > 0) { step-- }
@@ -115,6 +116,7 @@ fun Onboarding() {
                 2 -> Permissions(noti)
                 3 -> NotiApps()
                 4 -> ShortcutSetup()
+                5 -> TryLock(noti)
                 else -> Ready()
             }
         }
@@ -330,6 +332,23 @@ private fun NotiApps() {
             modifier = Modifier.fillMaxWidth(),
         )
     }
+}
+
+/** 잠금화면 체험: 예시 데이터로 할 일 화면을 띄워 단계별로 직접 해 봄([Practice]). 끝나면 이 화면으로 돌아옴. */
+@Composable
+private fun TryLock(noti: Boolean) {
+    val context = LocalContext.current
+    Title("잠금화면을 미리 써 보세요", "예시 할 일과 근무로 실제 잠금화면을 직접 다뤄 봐요. 위에 뜨는 안내를 따라 하면 다음으로 넘어가요.")
+    Bullet("근무 받기 · 체크", "교대를 받고, 시간별 할 일과 이번 근무 할 일을 체크해요.")
+    Bullet("할 일 · 메뉴 · 끝낸 일", "할 일을 끝내고 적고, 글씨를 눌러 메뉴를 열고, 끝낸 일을 봐요.")
+    if (noti) Bullet("알림 · 키워드 알림", "다른 앱 알림을 지우고, 키워드 알림이 진동과 붉은 카드로 오는 것을 봐요.")
+    Bullet("포켓북 · 바로가기 · 잠금 해제", "체크리스트를 넘겨 보고, 알람을 맞추고, 위로 밀어 끝내요.")
+    FillButton("체험 시작", { context.startActivity(Practice.intent(context)) }, Modifier.fillMaxWidth())
+    Text(
+        "체험에서 바꾼 것은 저장되지 않아요. 설정 › 기타 › 잠금화면 체험에서 다시 할 수 있어요.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
