@@ -52,6 +52,7 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.NurseTodoApp
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.PresetShare
+import com.yuangunn.nursetodo.lock.Recorder
 import com.yuangunn.nursetodo.data.TaskStore
 import android.widget.Toast
 import kotlinx.coroutines.launch
@@ -67,6 +68,23 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             sharedText.value = intent.getStringExtra(Intent.EXTRA_TEXT)
         }
+    }
+
+    /** 잠금화면 '녹음'에서 권한이 없어 넘어왔을 때: 허용하면 바로 녹음을 시작합니다. */
+    private val askMic =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                Recorder.start(this)
+                Toast.makeText(this, "녹음을 시작했어요. 잠금화면 '녹음'을 다시 누르면 멈춰요.", Toast.LENGTH_LONG).show()
+            } else if (!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+                // 다시 묻지 않음: 앱 정보에서 직접 켜야 함
+                Toast.makeText(this, "앱 정보 › 권한 › 마이크를 허용해 주세요", Toast.LENGTH_LONG).show()
+                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", packageName, null)))
+            }
+        }
+
+    private fun takeMic(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_ASK_MIC, false) && !Recorder.allowed(this)) askMic.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private val askNotifications =
@@ -86,6 +104,7 @@ class MainActivity : ComponentActivity() {
         }
         requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
         takeShared(intent)
+        if (savedInstanceState == null) takeMic(intent)
         setContent {
             val settings by TaskStore.settings.collectAsStateWithLifecycle()
             // 앱 테마를 시스템과 다르게 고르면 상태바·내비게이션 바 글씨 색도 앱 테마에 맞춥니다.
@@ -119,17 +138,26 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         requestedTab.intValue = intent.getIntExtra(EXTRA_TAB, -1)
         takeShared(intent)
+        takeMic(intent)
     }
 
     companion object {
         private const val EXTRA_TAB = "tab"
+        private const val EXTRA_ASK_MIC = "askMic"
 
-        // 탭: 0 오늘, 1 포켓북, 2 캘린더, 3 계산기, 4 설정
+        // 탭: 0 오늘, 1 포켓북, 2 캘린더, 3 계산기, 4 설정, 5 설정 › 녹음
         fun calcIntent(context: Context): Intent = tabIntent(context, 3)
 
         fun calendarIntent(context: Context): Intent = tabIntent(context, 2)
 
         fun settingsIntent(context: Context): Intent = tabIntent(context, 4)
+
+        fun recordingsIntent(context: Context): Intent = tabIntent(context, TAB_RECORDINGS)
+
+        /** 마이크를 묻고(허용하면 바로 녹음) 녹음 목록을 엽니다. */
+        fun micIntent(context: Context): Intent = recordingsIntent(context).putExtra(EXTRA_ASK_MIC, true)
+
+        private const val TAB_RECORDINGS = 5
 
         private fun tabIntent(context: Context, tab: Int) = Intent(context, MainActivity::class.java)
             .putExtra(EXTRA_TAB, tab)
@@ -148,10 +176,13 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     // 설정 첫 화면으로: 설정 탭을 누르거나(다른 탭에서 와도) 잠금화면 설정 버튼으로 열 때 하나씩 늘림(하위 화면이 남아 있지 않게)
     var settingsHome by rememberSaveable { mutableIntStateOf(0) }
+    // 설정 › 녹음으로: 녹음 알림·잠금화면 '녹음'(권한 묻기)에서 열 때 하나씩 늘림
+    var recordings by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(requestedTab) {
         if (requestedTab >= 0) {
-            tab = requestedTab
+            tab = requestedTab.coerceAtMost(4)
             if (requestedTab == 4) settingsHome++
+            if (requestedTab == 5) recordings++
             onTabShown()
         }
     }
@@ -224,7 +255,7 @@ private fun Root(requestedTab: Int, onTabShown: () -> Unit) {
                     1 -> PocketScreen()
                     2 -> CalendarScreen(onEdit = { editing = it }, onDelete = delete, onClearDone = clearDone)
                     3 -> CalcScreen()
-                    else -> SettingsScreen(settingsHome)
+                    else -> SettingsScreen(settingsHome, recordings)
                 }
             }
         }

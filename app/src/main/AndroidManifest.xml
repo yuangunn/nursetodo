@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- 알람이 울리는 동안 알람음을 직접 재생하는 서비스 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 할 일 화면 '녹음' 바로가기: 누르는 동안만 마이크 서비스, 파일은 앱 안에만 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- 할 일 화면 바로가기로 고를 수 있게 런처에 보이는 앱 목록을 읽습니다 -->
     <queries>
@@ -92,6 +95,22 @@
             android:name=".lock.AlarmRingService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <service
+            android:name=".lock.RecordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- 녹음 보내기: 녹음 폴더만 받는 앱에 읽기 권한으로 내줌 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <receiver
             android:name=".lock.LockActionReceiver"

@@ -126,6 +126,7 @@ import com.yuangunn.nursetodo.lock.AlarmSound
 import com.yuangunn.nursetodo.lock.KeywordAlert
 import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.Setup
+import com.yuangunn.nursetodo.lock.Recorder
 import com.yuangunn.nursetodo.lock.Shortcuts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -155,6 +156,7 @@ private enum class SettingsPage(val title: String) {
     KEYWORD("키워드 알림"),
     ALARM("알람"),
     CALC("간호계산기"),
+    RECORD("녹음"),
     LOOK("테마·강조색"),
 }
 
@@ -167,7 +169,7 @@ private val AlarmModes = listOf("소리+진동", "소리만", "진동만")
  * 말투는 안내가 ~요, 안전 문구가 ~하세요.
  */
 @Composable
-fun SettingsScreen(home: Int = 0) {
+fun SettingsScreen(home: Int = 0, recordings: Int = 0) {
     val s by TaskStore.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var sheet by remember { mutableStateOf("") }
@@ -178,6 +180,12 @@ fun SettingsScreen(home: Int = 0) {
     if (home != seenHome[0]) {
         seenHome[0] = home
         page = null
+    }
+    // [recordings] 가 늘면 녹음 화면으로(녹음 알림·잠금화면 '녹음'에서 열 때). 다른 탭에서 열면 늘어난 뒤에 처음 그리므로 0 부터 셈
+    val seenRecordings = rememberSaveable { intArrayOf(0) }
+    if (recordings != seenRecordings[0]) {
+        seenRecordings[0] = recordings
+        page = SettingsPage.RECORD
     }
     BackHandler(enabled = page != null) { page = null }
     // 라이트는 칸 색 바탕 위에 흰 묶음, 다크는 검정 바탕 위에 #1C1C1E 묶음
@@ -217,6 +225,7 @@ fun SettingsScreen(home: Int = 0) {
                     SettingsPage.CALC -> Group("", foot = "기관·펌프 기준으로 정하세요. 넘으면 계산 결과가 주황으로 바뀌어요.") {
                         ValueRow("주입속도 상한", "${s.rateLimit} cc/hr") { sheet = "rate" }
                     }
+                    SettingsPage.RECORD -> RecordingsScreen()
                     SettingsPage.LOOK -> {
                         Group("", foot = "잠금화면은 늘 어두워요. 다크로 두면 잠금을 풀 때 눈부시지 않아요.") {
                             ValueRow("테마", listOf("시스템 따라감", "라이트", "다크")[s.theme]) { sheet = "theme" }
@@ -362,6 +371,9 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
                 icon = { res(R.drawable.ic_alarm) },
             ) { open(SettingsPage.ALARM) }
             NavRow("간호계산기", "항암 주입속도 상한 ${s.rateLimit} cc/hr", icon = { res(R.drawable.ic_calc) }) { open(SettingsPage.CALC) }
+            val recSince by Recorder.since.collectAsStateWithLifecycle()
+            val recCount = remember(recSince) { Recorder.list(context).size }
+            NavRow("녹음", if (recSince != null) "녹음 중" else if (recCount == 0) "없음" else "${recCount}개 · 이 폰에만 저장", icon = { res(R.drawable.ic_mic) }) { open(SettingsPage.RECORD) }
         }
         Group("화면") {
             val accent = (if (s.isDark()) AccentDark else AccentLight)[s.accent.coerceIn(AccentNames.indices)]
