@@ -62,12 +62,13 @@ class ShortcutPanelTest {
 
     @Test
     fun removeAddAndShape() {
+        // 빼면 그 칸만 비고(다른 자리는 그대로), 넣으면 첫 빈 칸
         rule.onNodeWithContentDescription("알람 빼기").performClick()
         rule.waitForIdle()
-        assertEquals(listOf(Shortcut.CALC, Shortcut.CALENDAR), ids())
+        assertEquals(listOf(Shortcut.CALC, Shortcut.EMPTY, Shortcut.CALENDAR), ids())
         rule.onNodeWithContentDescription("할 일 추가 넣기").performClick()
         rule.waitForIdle()
-        assertEquals(listOf(Shortcut.CALC, Shortcut.CALENDAR, Shortcut.ADD), ids())
+        assertEquals(listOf(Shortcut.CALC, Shortcut.ADD, Shortcut.CALENDAR), ids())
         rule.onNodeWithText("아이콘만").performClick()
         rule.waitForIdle()
         assertEquals(2, TaskStore.settings.value.shortcutStyle)

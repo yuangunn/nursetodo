@@ -115,9 +115,12 @@ data class Settings(
     val alarmMode: Int = 0,
     /** 폰이 무음·진동 모드여도 소리로 울리기. 끄면 그땐 진동만 합니다. */
     val alarmAlwaysSound: Boolean = true,
-    /** 할 일 화면 아래 바로가기 (최대 [Shortcut.MAX]개 저장, 보이는 건 [shortcutStyle] 칸 수만큼). */
-    val shortcuts: List<Shortcut> = listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.TORCH)),
-    /** 바로가기 모양: 0 한 줄 3칸 × 2줄(6칸), 1 한 줄 2칸 × 3줄(6칸), 2 아이콘만 5개씩(8칸). 빈 칸은 '+'(누르면 바로 넣기). */
+    /**
+     * 할 일 화면 아래 바로가기 칸: i 번째가 위 줄 왼쪽부터 읽는 차례의 i 번 칸, [Shortcut.EMPTY] 는 빈 칸('+').
+     * 보이는 건 [shortcutSlots] 칸까지(칸이 적은 모양으로 바꾸면 뒤쪽은 저장만). 처음엔 아랫줄에 간호계산기 · 알람 · 손전등.
+     */
+    val shortcuts: List<Shortcut> = List(3) { Shortcut(Shortcut.EMPTY) } + listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.TORCH)),
+    /** 바로가기 모양: 0 한 줄 3칸 × 2줄(6칸), 1 한 줄 2칸 × 3줄(6칸), 2 아이콘만 4개씩 × 2줄(8칸). 빈 칸은 '+'(누르면 바로 넣기). */
     val shortcutStyle: Int = 0,
     /** 할 일 화면 '할 일 추가' 버튼: 0 카드 아래 넓은 줄, 1 카드 안 오른쪽 아래 작은 메모 버튼. 바로가기에 [Shortcut.ADD] 가 보이면 둘 다 숨김. */
     val addButton: Int = 0,
@@ -480,6 +483,8 @@ data class Shortcut(val id: String, val name: String = "") {
         const val CALENDAR = "calendar"
         const val TORCH = "torch"
         const val RECORD = "record"
+        /** 빈 칸(자리만 차지). */
+        const val EMPTY = ""
         const val MAX = 9
         fun app(component: String) = Shortcut("app:$component")
     }
@@ -492,6 +497,44 @@ fun Settings.cardTextSp(): Float = cardSp.coerceIn(CardSpRange).toFloat()
 
 /** 할 일 화면에 보이는 바로가기 칸 수. */
 fun Settings.shortcutSlots(): Int = listOf(6, 6, 8)[shortcutStyle.coerceIn(0, 2)]
+
+/** 한 줄 칸 수. */
+fun Settings.shortcutPerRow(): Int = listOf(3, 2, 4)[shortcutStyle.coerceIn(0, 2)]
+
+val Shortcut.isEmpty: Boolean get() = id == Shortcut.EMPTY
+
+/** 보이는 칸마다 바로가기(빈 칸은 null), 위 줄 왼쪽부터 읽는 차례. */
+fun Settings.shortcutCells(): List<Shortcut?> = List(shortcutSlots()) { i -> shortcuts.getOrNull(i)?.takeUnless { it.isEmpty } }
+
+/** 빈 칸을 뺀 바로가기들(칸 차례, 칸이 모자라 안 보이는 것 포함). */
+fun List<Shortcut>.items(): List<Shortcut> = filterNot { it.isEmpty }
+
+/** [i] 번 칸을 [sc] 로(null 이면 빈 칸). 모자란 칸은 빈 칸으로 채우고 끝의 빈 칸은 잘라 냅니다. */
+fun List<Shortcut>.withCell(i: Int, sc: Shortcut?): List<Shortcut> {
+    val l = toMutableList()
+    while (l.size <= i) l.add(Shortcut(Shortcut.EMPTY))
+    l[i] = sc ?: Shortcut(Shortcut.EMPTY)
+    return l.dropLastWhile { it.isEmpty }
+}
+
+/** 두 칸을 맞바꿈(빈 칸으로 옮기면 그 칸으로 감). 잠금화면에서 길게 눌러 끌기. */
+fun List<Shortcut>.swapCells(i: Int, j: Int): List<Shortcut> {
+    val a = getOrNull(i)?.takeUnless { it.isEmpty }
+    val b = getOrNull(j)?.takeUnless { it.isEmpty }
+    return withCell(i, b).withCell(j, a)
+}
+
+/** 빈 칸 자리는 두고 바로가기 차례만 [order] 로(편집 목록에서 끌어 순서 바꾸기). */
+fun List<Shortcut>.reorderItems(order: List<Shortcut>): List<Shortcut> {
+    val next = order.iterator()
+    return map { if (it.isEmpty || !next.hasNext()) it else next.next() }
+}
+
+/** 보이는 칸([slots]) 중 첫 빈 칸에 넣기. 빈 칸이 없으면 뒤에 저장만(모양을 바꾸면 보임). */
+fun List<Shortcut>.addShortcut(sc: Shortcut, slots: Int): List<Shortcut> {
+    val at = (0 until slots).firstOrNull { getOrNull(it)?.isEmpty != false } ?: maxOf(size, slots)
+    return if (at >= Shortcut.MAX) this else withCell(at, sc)
+}
 
 object Day {
     fun today(): Long = LocalDate.now().toEpochDay()

@@ -177,8 +177,8 @@ internal fun PracticeCoach(signals: PracticeSignals, pocketPage: Int, noti: Bool
             }
             add(Step("포켓북", "'포켓북' 탭으로 넘기면 라운딩 체크리스트를 보고 체크해요.") { _, b, _ -> b.page == pocketPage })
             add(
-                if (hasAlarm) Step("알람 · 바로가기", "아래 '알람'을 눌러 몇 분 뒤 알람을 맞춰 보세요. 바로가기를 길게 누르면 넣고 빼고 순서를 바꿔요.") { a, b, _ -> b.alarms > a.alarms || b.shortcutPanel }
-                else Step("바로가기", "아래 바로가기를 길게 눌러 보세요. 넣고 빼고 순서를 바꿔요. 빈 칸 '+'로 모바일 EMR 같은 앱도 넣어요.") { _, b, _ -> b.shortcutPanel },
+                if (hasAlarm) Step("알람 · 바로가기", "아래 '알람'을 눌러 몇 분 뒤 알람을 맞춰 보세요. 바로가기를 길게 눌러 끌면 자리가 바뀌어요.") { a, b, _ -> b.alarms > a.alarms || b.shortcutPanel }
+                else Step("바로가기", "아래 바로가기를 길게 눌러 보세요. 끌어 놓으면 자리가 바뀌고, 그냥 떼면 편집이 열려요. 빈 칸 '+'로 모바일 EMR 같은 앱도 넣어요.") { _, b, _ -> b.shortcutPanel },
             )
             add(Step("잠금 해제", "다 했어요! 화면을 위로 밀면 잠금이 풀려요. 밀어서 체험을 끝내 보세요. 체험에서 바꾼 것은 저장되지 않아요.") { _, _, _ -> false })
         }

@@ -130,6 +130,8 @@ import com.yuangunn.nursetodo.data.PocketKind
 import com.yuangunn.nursetodo.data.PocketNode
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
+import com.yuangunn.nursetodo.data.swapCells
+import com.yuangunn.nursetodo.data.shortcutCells
 import com.yuangunn.nursetodo.data.Task
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.doneCount
@@ -390,12 +392,14 @@ private fun LockPage(
     }
     // 키보드를 쓰는 동안엔 키워드 카드·알람 줄·바로가기·안내를 접어 자리를 만듭니다.
     val typing = adding || editingId != null
-    // 지워진 앱은 빼고 고른 모양의 칸 수까지
+    // 칸마다 바로가기(위 줄 왼쪽부터). 지워진 앱·플래시 없는 손전등은 빈 칸으로
     val shortcuts = remember(settings.shortcuts, settings.shortcutStyle) {
-        settings.shortcuts.filter { Shortcuts.defaultName(context, it) != null }.take(settings.shortcutSlots())
+        settings.shortcutCells().map { it?.takeIf { sc -> Shortcuts.defaultName(context, sc) != null } }
     }
+    // '+'로 넣을 칸
+    var addAt by remember { mutableIntStateOf(-1) }
     // 추가 버튼은 한 군데만: 바로가기에 '할 일 추가'가 있으면 아래 버튼은 숨기고, 적는 동안엔 카드 안 버튼도 숨깁니다.
-    val addInShortcuts = shortcuts.any { it.id == Shortcut.ADD }
+    val addInShortcuts = shortcuts.any { it?.id == Shortcut.ADD }
     // 할 일이 없으면 '할 일' 페이지의 카드를 그리지 않음(설정, 끝낸 일만 있어도). 카드 안 추가 버튼·알림 세로 줄은 둘 자리가 없어
     // 카드 아래 추가 버튼·위 줄 알림 버튼으로 옮김.
     val hideTodo = settings.hideEmptyTodo && todo.isEmpty()
@@ -636,7 +640,7 @@ private fun LockPage(
                     ),
                     pocketPage = PAGE_POCKET,
                     noti = NotiListener.available(context),
-                    hasAlarm = shortcuts.any { it.id == Shortcut.ALARM },
+                    hasAlarm = shortcuts.any { it?.id == Shortcut.ALARM },
                     show = !typing && !askingAlarm,
                     onEnd = onUnlock,
                 )
@@ -774,7 +778,7 @@ private fun LockPage(
                     ShortcutPanel(settings, onClose = closePanel)
                 }
                 Reveal(panel == Panel.ADD_SHORTCUT, enter = enter, exit = exit) {
-                    AddShortcutPanel(settings, onClose = closePanel)
+                    AddShortcutPanel(settings, addAt, onClose = closePanel)
                 }
                 Reveal(panel == Panel.HANDOFF && handoff != null && page == PAGE_DUTY, enter = enter, exit = exit) {
                     handoff?.let { h ->
@@ -847,9 +851,15 @@ private fun LockPage(
                 }
                 if (!typing) {
                     ShortcutGrid(
-                        shortcuts, settings.shortcutStyle, settings.shortcutSlots(), onShortcut,
+                        shortcuts, settings.shortcutStyle,
+                        onTap = { _, sc -> onShortcut(sc) },
                         onEdit = { panel = Panel.SHORTCUTS },
-                        onAdd = { panel = if (panel == Panel.ADD_SHORTCUT) Panel.NONE else Panel.ADD_SHORTCUT },
+                        onAdd = { i ->
+                            addAt = i
+                            panel = if (panel == Panel.ADD_SHORTCUT) Panel.NONE else Panel.ADD_SHORTCUT
+                        },
+                        // 길게 눌러 끌어 놓은 칸과 자리 바꾸기(빈 칸이면 옮김)
+                        onMove = { from, to -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts.swapCells(from, to)) } },
                     )
                     UnlockHint(locked || practicing, onUnlock)
                 }

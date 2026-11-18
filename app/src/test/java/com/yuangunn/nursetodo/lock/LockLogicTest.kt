@@ -3,6 +3,14 @@ package com.yuangunn.nursetodo.lock
 import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Shortcut
+import com.yuangunn.nursetodo.data.shortcutPerRow
+import com.yuangunn.nursetodo.data.shortcutSlots
+import com.yuangunn.nursetodo.data.addShortcut
+import com.yuangunn.nursetodo.data.reorderItems
+import com.yuangunn.nursetodo.data.swapCells
+import com.yuangunn.nursetodo.data.withCell
+import com.yuangunn.nursetodo.data.shortcutCells
+import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Task
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -37,22 +45,30 @@ class LockLogicTest {
     }
 
     @Test
-    fun shortcutRowsFillFromBottomWithPlus() {
+    fun shortcutCellsKeepPositions() {
+        val e = Shortcut(Shortcut.EMPTY)
         val a = Shortcut("calc")
-        val b = Shortcut("calendar")
-        val c = Shortcut("alarm")
+        val b = Shortcut("alarm")
+        val c = Shortcut("torch")
         val d = Shortcut("app:x/y")
-        // 기본 3개는 아랫줄, 윗줄은 '+' 3칸
-        assertEquals(listOf(listOf(null, null, null), listOf(a, b, c)), shortcutRows(listOf(a, b, c), 0, 6))
-        // 넣은 것은 윗줄 왼쪽부터
-        assertEquals(listOf(listOf(d, null, null), listOf(a, b, c)), shortcutRows(listOf(a, b, c, d), 0, 6))
-        // 한 줄 2칸 × 3줄
-        assertEquals(listOf(listOf(null, null), listOf(c, null), listOf(a, b)), shortcutRows(listOf(a, b, c), 1, 6))
-        // 아이콘만은 '+' 하나만, 칸이 다 차면 없음
-        assertEquals(listOf(listOf(a, b, c, null)), shortcutRows(listOf(a, b, c), 2, 8))
-        assertEquals(listOf(listOf(d, d, d), listOf(a, a, a, a, a)), shortcutRows(List(5) { a } + List(3) { d }, 2, 8))
-        // 칸보다 많으면 칸까지만
-        assertEquals(6, shortcutRows(List(9) { a }, 0, 6).flatten().size)
+        // 기본: 윗줄 빈 칸 3, 아랫줄 간호계산기 · 알람 · 손전등 (위 줄 왼쪽부터 1 2 3 / 4 5 6)
+        val s = Settings()
+        assertEquals(listOf(null, null, null, a, b, c), s.shortcutCells())
+        // '+' 2번 칸에 넣으면 그 칸
+        val put = s.shortcuts.withCell(1, d)
+        assertEquals(listOf(null, d, null, a, b, c), s.copy(shortcuts = put).shortcutCells())
+        // 끌어 놓기: 바로가기끼리는 맞바꿈, 빈 칸이면 옮김
+        assertEquals(listOf(e, d, e, c, b, a), put.swapCells(3, 5))
+        assertEquals(listOf(a, d, e, e, b, c), put.swapCells(3, 0))
+        // 빼면 그 칸만 비고 다른 자리는 그대로, 끝의 빈 칸은 저장하지 않음
+        assertEquals(listOf(e, d, e, a, b), put.withCell(5, null))
+        // 편집 목록에서 순서를 바꾸면 빈 칸 자리는 두고 바로가기 차례만
+        assertEquals(listOf(e, c, e, d, a, b), put.reorderItems(listOf(c, d, a, b)))
+        // 넣기: 보이는 칸 중 첫 빈 칸, 다 찼으면 뒤에 저장만
+        assertEquals(listOf(d, e, e, a, b, c), s.shortcuts.addShortcut(d, 6))
+        assertEquals(listOf(a, b, c, a, b, c, d), (List(2) { listOf(a, b, c) }.flatten()).addShortcut(d, 6))
+        // 아이콘만은 한 줄 4개 × 2줄
+        assertEquals(8 to 4, s.copy(shortcutStyle = 2).let { it.shortcutSlots() to it.shortcutPerRow() })
     }
 
     @Test
