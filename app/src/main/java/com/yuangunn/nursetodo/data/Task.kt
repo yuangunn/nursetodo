@@ -371,6 +371,8 @@ fun presetRows(items: List<String>): List<Pair<String, List<String>>> {
  * 근무 페이지 맨 위에 보일 것. [loaded] 는 지금 목록의 근무(안 받았으면 앞 근무가 그대로 남음).
  * [target] 을 [shift] 근무로 받을 차례면 [received] 가 false: 교대 1시간 전부터 다음 근무, 시작 시각이 지나면 [late].
  * 받은 근무 뒤로 근무 시작 시각이 두 번 지나면(다음 근무도 끝남) 지금 시각에 맞는 근무를 시작할지 묻고([stale] = 끝난 근무 이름과 끝난 시각).
+ * 이때 다음 근무가 [early] 안에 시작하면 지금 근무 대신 그 근무를 묻습니다 — 며칠 안 쓴 폰을 교대 직전에 켜면 지금 근무를 받자마자
+ * 다음 근무를 또 받으라고 해서 두 번 받아야 했음.
  */
 data class DutyHead(
     val loaded: Preset?,
@@ -391,8 +393,13 @@ fun Settings.dutyHead(now: LocalDateTime, early: Long = 60 * 60_000L): DutyHead?
     val n1 = presets.nextShift(toLocal(presetApplied)) ?: return DutyHead(loaded, loaded, presetApplied, dutyShift == presetApplied)
     val n2 = presets.nextShift(toLocal(n1)) ?: n1
     return when {
-        nowMs >= n2 && current != null && current.second != presetApplied ->
-            DutyHead(loaded, current.first, current.second, received = false, stale = (presets.forShift(n1)?.name ?: "") to n2)
+        nowMs >= n2 && current != null && current.second != presetApplied -> {
+            val stale = (presets.forShift(n1)?.name ?: "") to n2
+            val next = presets.nextShift(now)
+            val soon = next?.takeIf { nowMs >= it - early }?.let { at -> presets.forShift(at)?.let { it to at } }
+            val (target, at) = soon ?: current
+            DutyHead(loaded, target, at, received = false, stale = stale)
+        }
         nowMs >= n1 - early -> presets.forShift(n1)?.let { DutyHead(loaded, it, n1, received = dutyShift == n1 && presetApplied == n1, late = nowMs >= n1) }
             ?: DutyHead(loaded, loaded, presetApplied, dutyShift == presetApplied)
         else -> DutyHead(loaded, loaded, presetApplied, received = dutyShift == presetApplied)

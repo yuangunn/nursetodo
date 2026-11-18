@@ -570,8 +570,9 @@ private fun LockPage(
             dutyBottom.scrollTo(0)
         }
     }
+    // 며칠 안 써서 근무를 건너뛴 뒤(stale)엔 지난 근무 미체크를 가져올지 묻지 않고 지움(10초 되돌리기 토스트)
     val receive: (DutyHead) -> Unit = { h ->
-        if (h.shift != settings.presetApplied && pendingDuty.isNotEmpty()) {
+        if (h.stale == null && h.shift != settings.presetApplied && pendingDuty.isNotEmpty()) {
             handoff = h
             panel = Panel.HANDOFF
         } else {
@@ -1634,7 +1635,15 @@ private fun DutyHeader(head: DutyHead?, s: Settings, now: Long, missed: Int, nex
                     style = Lk.Caption,
                     color = Lk.Muted,
                 )
-                if (head.stale != null) Text("지금 시각에 맞는 $name 근무를 시작할까요?", style = Lk.Body15, fontWeight = Lk.Strong, color = Lk.Text)
+                if (head.stale != null) {
+                    // 다음 근무가 곧 시작하면 그 근무(시작 전)를 바로 시작
+                    Text(
+                        if (head.shift > now) "곧 시작하는 $name 근무(${hhmm(head.shift)})를 시작할까요?" else "지금 시각에 맞는 $name 근무를 시작할까요?",
+                        style = Lk.Body15,
+                        fontWeight = Lk.Strong,
+                        color = Lk.Text,
+                    )
+                }
                 PillButton(if (head.stale != null) "$name 근무 시작" else "$name 근무 교대 받았습니다", { onReceive(head) }, Modifier.fillMaxWidth(), filled = true)
                 Column {
                     Text(
@@ -1646,7 +1655,13 @@ private fun DutyHeader(head: DutyHead?, s: Settings, now: Long, missed: Int, nex
                         style = Lk.Caption,
                         color = Lk.Muted,
                     )
-                    if (switching && pending > 0) Text("미체크 ${pending}개는 가져올지 고를 수 있어요.", style = Lk.Caption, color = Lk.Muted)
+                    if (switching && pending > 0) {
+                        Text(
+                            if (head.stale != null) "지난 근무 미체크 ${pending}개는 지워져요. 시작한 뒤 되돌릴 수 있어요." else "미체크 ${pending}개는 가져올지 고를 수 있어요.",
+                            style = Lk.Caption,
+                            color = Lk.Muted,
+                        )
+                    }
                 }
             }
             divider()
