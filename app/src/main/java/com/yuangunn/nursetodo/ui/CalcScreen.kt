@@ -67,7 +67,8 @@ private const val DEFAULT_PRIMING = "20"
 private fun hhmm(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 
 /**
- * 항암약물 주입속도(cc/hr) 계산기. 입력 칸은 모두 같은 폭이고 숫자 오른쪽 끝을 한 세로줄에 맞춥니다.
+ * 항암약물 주입속도(cc/hr) 계산기. 키보드가 떠도 입력 칸과 결과가 한 화면에 보이게 세 줄로: Base | 항암, Priming(포함·제외),
+ * 투여시간 시간 | 분(칸 사이 8). 숫자는 칸 오른쪽 끝에 맞춥니다.
  * 투여시간은 시간·분 두 칸(1시간 30분을 그대로). 결과가 설정의 상한을 넘으면 주황으로 바꾸고 확인 문구를 보이며,
  * 아니면 지금 시작할 때 끝나는 시각과 알람 맞추기. 용량은 기기에 저장하지 않습니다(공용 폰에서 이전 환자 값이 남지 않게).
  */
@@ -136,13 +137,15 @@ private fun InfusionCalc(clear: Int) {
         }
     }
     Column {
-        Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            NumField("Base fluid", base, "cc") { base = it }
-            NumField("항암 fluid", chemo, "cc") { chemo = it }
+        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 이름이 있는 칸은 테두리 위에 이름 자리가 있어 아래로 맞춥니다.
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumField("Base fluid", base, "cc", Modifier.weight(1f)) { base = it }
+                NumField("항암 fluid", chemo, "cc", Modifier.weight(1f)) { chemo = it }
+            }
             NumField("Priming", priming, "cc", enabled = withPriming, trailing = {
                 InFieldChoice(listOf("포함", "제외"), if (withPriming) 0 else 1) { withPriming = it == 0 }
             }) { priming = it }
-            // 이름이 있는 칸은 테두리 위에 이름 자리가 있어 아래로 맞춥니다.
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumField("투여시간", hours, "시간", Modifier.weight(1f)) { hours = it }
                 NumField("", minutes, "분", Modifier.weight(1f), last = true) { minutes = it }
@@ -150,7 +153,7 @@ private fun InfusionCalc(clear: Int) {
         }
         Column(
             Modifier
-                .padding(top = 16.dp)
+                .padding(top = 12.dp)
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.large)
                 .padding(16.dp),
