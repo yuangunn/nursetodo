@@ -12,7 +12,7 @@
 | 테스터 12명 이상의 구글 계정 이메일(넉넉히 15명쯤) | 비공개 테스트 → 테스터 목록 | 계정 주인 |
 | AAB(알림판) | `~/ttaak-play/nursetodo-v<버전>-noti.aab` (`./gradlew bundleNotiRelease -Pplay` 로 만듦) | 저장소 |
 | 앱 아이콘 512×512, 그래픽 이미지 1024×500 | [`docs/play/icon-512.png`](play/icon-512.png), [`docs/play/feature-1024x500.png`](play/feature-1024x500.png) | 저장소 |
-| 휴대전화 스크린샷 5장(1240×2400: 할 일 화면·오늘·교대 프리셋·계산기·포켓북) | [`docs/play/screen-1.png`](play/screen-1.png) ~ [`screen-5.png`](play/screen-5.png) | 저장소 |
+| 휴대전화 스크린샷 7장(1440×2560, v2.11: 할 일 화면·근무 루틴·키워드 알림·바로가기와 녹음·포켓북·계산기·잠금화면 체험). 에뮬레이터 1080×2400 에서 예시 데이터(환자·병원 이름 없음)로 찍고 남색 바탕 위에 제목·한 줄 설명을 얹음. 만드는 스크립트와 원본은 저장소 밖 `~/ttaak-play/store-2.11/`(`make.py`, `raw/`) | [`docs/play/screen-1.png`](play/screen-1.png) ~ [`screen-7.png`](play/screen-7.png) | 저장소 |
 | 포그라운드 서비스 시연 영상 3개 | `~/ttaak-play/video/lockpage-demo.mp4`(specialUse: 화면 켜면 할 일 화면 → 체크 → 밀어서 잠금 해제), `alarm-demo.mp4`(mediaPlayback: 1분 알람 → 꺼진 화면에서 알람 화면 → 끄기), `record-demo.mp4`(microphone, v2.10.1 부터: 잠금화면 '녹음' → 빨간 버튼 · 잠금을 풀고 홈으로 가도 이어서 녹음 → 상단바 '녹음 중' 알림의 '멈춤' → 설정 › 녹음에서 듣기. 브라우저 업로드 한도 때문에 `avconvert --preset Preset1280x720` 로 줄인 `record-demo-720.mp4` 를 올림). 유튜브에 **일부 공개**로 올려 링크 | 계정 주인이 올림 |
 | 개인정보처리방침 주소 | https://github.com/yuangunn/nursetodo/blob/main/PRIVACY.md | 저장소 |
 
