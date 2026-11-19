@@ -6,8 +6,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.text.KeyboardActions
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
@@ -81,7 +79,7 @@ private val Pill = RoundedCornerShape(50)
 
 /**
  * 사용기한 계산기: 물품마다 정해진 기간(시간·일·주·개월)을 넣으면 시작한 날(개봉·부착·조제 등, 기본 오늘)부터 '○까지'를 바로 계산합니다.
- * 기간 칸이 맨 위이고 비어 있으면 열자마자 커서. 자주 쓰는 기한은 칩(누르면 채움, 길게 누르면 빼기, '+ 저장'으로 이름 붙여 넣기).
+ * 자주 쓰는 기한은 칩(누르면 채움, 길게 누르면 빼기, '+ 저장'으로 이름 붙여 넣기)이라 열어도 키보드를 띄우지 않고, 기간 칸을 눌러야 숫자 키보드.
  * 결과 아래 접힌 옵션: 제조사 유효기간(더 빠른 날로), 시작한 날을 1일째로 세기(기관마다 달라 저장, 설명은 지금 값으로 두 경우를 계산해 보여 줌).
  * 결과는 남은 날, 적어 붙일 라벨 줄, 기한 날의 할 일로 넣기. 적은 값은 기기에 저장하지 않습니다(공용 폰).
  */
@@ -102,10 +100,7 @@ internal fun ExpiryCalc(clear: Int) {
     var removing by remember { mutableStateOf<ExpiryPreset?>(null) }
     var seen by rememberSaveable { mutableIntStateOf(clear) }
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
-    val amountFocus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    // 사용기한을 열면 기간이 비었을 때 바로 숫자를 칠 수 있게
-    LaunchedEffect(Unit) { if (amount.isEmpty()) amountFocus.requestFocus() }
     LaunchedEffect(clear) {
         if (clear != seen) {
             seen = clear
@@ -116,7 +111,7 @@ internal fun ExpiryCalc(clear: Int) {
             unit = Expiry.DAYS
             name = ""
             maker = null
-            amountFocus.requestFocus()
+            focusManager.clearFocus()
         }
     }
     // 값을 고치면 '할 일에 넣음' 표시는 지웁니다.
@@ -138,7 +133,7 @@ internal fun ExpiryCalc(clear: Int) {
             }
             PresetChip("+ 저장", on = false, enabled = n != null, onClick = { saving = true })
         }
-        // 기간이 먼저: 비어 있으면 열자마자 이 칸에 커서(숫자 키보드)
+        // 칩에 없는 기간만 직접(누르면 숫자 키보드)
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = amount,
@@ -154,8 +149,7 @@ internal fun ExpiryCalc(clear: Int) {
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 modifier = Modifier
                     .width(96.dp)
-                    .heightIn(min = 48.dp)
-                    .focusRequester(amountFocus),
+                    .heightIn(min = 48.dp),
             )
             // 옆 기간 칸(OutlinedTextField 테두리 56)과 높이를 같게
             Segmented(Expiry.UNITS, unit, Modifier.weight(1f), height = 56.dp) {

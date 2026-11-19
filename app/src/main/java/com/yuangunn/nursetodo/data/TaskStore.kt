@@ -447,6 +447,8 @@ object TaskStore {
         put("shortcuts", JSONArray().apply { shortcuts.forEach { put(JSONObject().put("id", it.id).put("name", it.name)) } })
         put("notiApps", JSONArray(notiApps.sorted()))
         put("shortcutStyle", shortcutStyle)
+        // 2: 칸 자리대로(빈 칸 포함, 위 줄부터). 없으면 옛 방식(빈 칸 없이 아래 줄부터 채움)이라 읽을 때 옮김
+        put("shortcutLayout", 2)
         put("addButton", addButton)
         put("presetMode", presetMode)
         put("presets", JSONArray().apply { presets.forEach { put(it.toJson()) } })
@@ -508,7 +510,8 @@ object TaskStore {
             alarmMode = optInt("alarmMode", d.alarmMode).coerceIn(0, 2),
             alarmAlwaysSound = optBoolean("alarmAlwaysSound", d.alarmAlwaysSound),
             shortcuts = optJSONArray("shortcuts")?.let { a ->
-                (0 until a.length()).map { a.getJSONObject(it) }.map { Shortcut(it.getString("id"), it.optString("name")) }
+                val list = (0 until a.length()).map { a.getJSONObject(it) }.map { Shortcut(it.getString("id"), it.optString("name")) }
+                if (optInt("shortcutLayout", 1) >= 2) list else legacyShortcutCells(list, optInt("shortcutStyle", d.shortcutStyle).coerceIn(0, 2))
             } ?: d.shortcuts,
             shortcutStyle = optInt("shortcutStyle", d.shortcutStyle).coerceIn(0, 2),
             addButton = optInt("addButton", d.addButton).coerceIn(0, 1),
@@ -541,4 +544,15 @@ object TaskStore {
             hideEmptyTodo = optBoolean("hideEmptyTodo", d.hideEmptyTodo),
         )
     }
+}
+
+/**
+ * v2.10 까지의 바로가기(빈 칸 없이, 아래 줄부터 채움: 목록 처음이 맨 아래 줄 왼쪽)를 지금 보이는 자리 그대로 칸 목록으로.
+ * 아이콘만(옛 한 줄 5개)은 순서 그대로.
+ */
+internal fun legacyShortcutCells(list: List<Shortcut>, style: Int): List<Shortcut> {
+    if (style == 2) return list
+    val shown = list.take(6)
+    val rows = (shown + List(6 - shown.size) { null }).chunked(if (style == 1) 2 else 3).reversed()
+    return (rows.flatten().map { it ?: Shortcut(Shortcut.EMPTY) } + list.drop(6)).dropLastWhile { it.isEmpty }
 }

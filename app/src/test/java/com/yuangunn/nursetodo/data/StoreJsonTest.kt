@@ -23,8 +23,25 @@ class StoreJsonTest {
     fun shortcutsRoundTrip() = with(TaskStore) {
         val s = Settings(shortcuts = listOf(Shortcut(Shortcut.ALARM), Shortcut.app("com.example/.Main").copy(name = "EMR")))
         assertEquals(s.shortcuts, s.toJson().toSettings().shortcuts)
-        // 저장된 적 없으면 기본: 간호계산기·알람·손전등
-        assertEquals(listOf(Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.TORCH)), JSONObject("{}").toSettings().shortcuts)
+        // 빈 칸도 자리대로 저장
+        val gaps = Settings(shortcuts = listOf(Shortcut(Shortcut.EMPTY), Shortcut(Shortcut.ALARM)))
+        assertEquals(gaps.shortcuts, gaps.toJson().toSettings().shortcuts)
+        // 저장된 적 없으면 기본: 윗줄 빈 칸, 아랫줄 간호계산기·알람·손전등
+        val e = Shortcut(Shortcut.EMPTY)
+        assertEquals(listOf(e, e, e, Shortcut(Shortcut.CALC), Shortcut(Shortcut.ALARM), Shortcut(Shortcut.TORCH)), JSONObject("{}").toSettings().shortcuts)
+        // v2.10 까지(빈 칸 없이 아래 줄부터 채움)는 보이던 자리 그대로 옮김: [계산기, 캘린더, 알람, EMR] → 윗줄 EMR, 아랫줄 셋
+        val old = JSONObject().put("shortcutStyle", 0).put("shortcuts", org.json.JSONArray().apply {
+            listOf(Shortcut.CALC, Shortcut.CALENDAR, Shortcut.ALARM, "app:x/y").forEach { put(JSONObject().put("id", it).put("name", "")) }
+        })
+        assertEquals(
+            listOf(Shortcut("app:x/y"), e, e, Shortcut(Shortcut.CALC), Shortcut(Shortcut.CALENDAR), Shortcut(Shortcut.ALARM)),
+            old.toSettings().shortcuts,
+        )
+        // 한 줄 2칸이던 것: [a, b, c] → 셋째 줄 a b, 둘째 줄 c
+        val old2 = JSONObject().put("shortcutStyle", 1).put("shortcuts", org.json.JSONArray().apply {
+            listOf("a", "b", "c").forEach { put(JSONObject().put("id", it).put("name", "")) }
+        })
+        assertEquals(listOf(e, e, Shortcut("c"), e, Shortcut("a"), Shortcut("b")), old2.toSettings().shortcuts)
         // 할 일이 없으면 카드 숨기기: 기본 켬, 끈 값은 그대로
         assertEquals(true, JSONObject("{}").toSettings().hideEmptyTodo)
         assertEquals(false, Settings(hideEmptyTodo = false).toJson().toSettings().hideEmptyTodo)

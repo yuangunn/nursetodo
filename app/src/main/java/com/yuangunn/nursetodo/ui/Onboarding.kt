@@ -58,6 +58,11 @@ import com.yuangunn.nursetodo.R
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.lock.ShortcutGrid
 import com.yuangunn.nursetodo.data.shortcutSlots
+import com.yuangunn.nursetodo.data.Preset
+import com.yuangunn.nursetodo.data.swapCells
+import com.yuangunn.nursetodo.data.withCell
+import com.yuangunn.nursetodo.data.items
+import com.yuangunn.nursetodo.data.shortcutCells
 import androidx.compose.runtime.mutableStateOf
 import com.yuangunn.nursetodo.lock.NotiListener
 import com.yuangunn.nursetodo.lock.Recorder
@@ -183,6 +188,22 @@ private fun Features(preset: Boolean, keyword: Boolean, noti: Boolean) {
         SwitchSetRow("근무 루틴(교대 프리셋)", preset, "잠금화면 '근무' 페이지에서 교대를 받으면 그 근무 할 일로 바뀌어요. 근무별 할 일은 설정 › 교대 프리셋에서 고쳐요.") { v ->
             TaskStore.updateSettings { it.copy(presetMode = v) }
         }
+        if (preset) {
+            // 근무 체크리스트를 예시로 채울지: 켜면 비어 있는 Day·Evening·Night 에 예시를, 끄면 손대지 않은 예시만 다시 비움
+            val presets = TaskStore.settings.collectAsStateWithLifecycle().value.presets
+            val filled = presets.any { p -> p.items.isNotEmpty() && p.items == Preset.exampleItems(p.name) }
+            SwitchSetRow("근무 할 일 예시로 채우기", filled, "Day·Evening·Night에 시간별 할 일과 이번 근무 할 일 예시를 넣어요. 비워 두고 직접 써도 돼요. 설정 › 교대 프리셋에서 고쳐요.") { v ->
+                val list = presets.map { p ->
+                    val ex = Preset.exampleItems(p.name)
+                    when {
+                        v && p.items.isEmpty() && ex != null -> p.copy(items = ex)
+                        !v && p.items.isNotEmpty() && p.items == ex -> p.copy(items = emptyList(), quiet = emptySet())
+                        else -> p
+                    }
+                }
+                TaskStore.savePresets(list, changed = TaskStore.settings.value.presetLoaded)
+            }
+        }
         if (noti) {
             SwitchSetRow("키워드 알림", keyword, "고른 앱 알림에 키워드가 있으면 진동하고 잠금화면 맨 위에 남겨요. " + if (preset) "근무 루틴을 쓰면 교대를 받은 폰에서 그 근무 동안만 울려요." else "근무 루틴을 안 쓰면 늘 울려요.") { v ->
                 TaskStore.updateSettings { it.copy(keywordOn = v) }
@@ -266,12 +287,12 @@ private class Perm(val title: String, val body: String, val done: Boolean, val o
 /** 알림판: 할 일 화면에 보일 알림 앱과 키워드를 찾을 앱·키워드. 알림 접근을 아직 안 했으면 그것부터. */
 /**
  * 바로가기: 모양(한 줄 3칸 · 2칸 · 아이콘만)과 칸을 잠금화면과 같은 모습으로 보여 주고, 빈 칸 '+'를 누르면 앱을 고릅니다
- * (모바일 EMR·내선 전화처럼 근무 중 자주 여는 앱). 넣은 버튼을 누르면 뺍니다.
+ * (모바일 EMR·내선 전화처럼 근무 중 자주 여는 앱, 누른 칸에 들어감). 넣은 버튼을 누르면 빼고, 길게 눌러 끌면 자리를 바꿉니다.
  */
 @Composable
 private fun ShortcutSetup() {
     val s by TaskStore.settings.collectAsStateWithLifecycle()
-    var picking by remember { mutableStateOf(false) }
+    var pickAt by remember { mutableIntStateOf(-1) }
     Title("잠금화면 바로가기", "할 일 화면 아래에 둘 버튼이에요. 빈 칸 '+'를 눌러 모바일 EMR·내선 전화처럼 근무 중 자주 여는 앱을 넣어요.")
     Segmented(listOf("한 줄 3칸", "한 줄 2칸", "아이콘만"), s.shortcutStyle.coerceIn(0, 2)) { i -> TaskStore.updateSettings { it.copy(shortcutStyle = i) } }
     // 잠금화면과 같은 모습(어두운 바탕)으로 미리 보기. 모서리는 안쪽 알약(반지름 22)과 같은 중심: 22 + 여백 12
@@ -283,22 +304,23 @@ private fun ShortcutSetup() {
             .padding(12.dp),
     ) {
         ShortcutGrid(
-            s.shortcuts, s.shortcutStyle, s.shortcutSlots(),
-            onTap = { sc -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts - sc) } },
+            s.shortcutCells(), s.shortcutStyle,
+            onTap = { i, _ -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts.withCell(i, null)) } },
             onEdit = {},
-            onAdd = { picking = true },
+            onAdd = { i -> pickAt = i },
+            onMove = { from, to -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts.swapCells(from, to)) } },
         )
     }
     Text(
-        "넣은 버튼을 누르면 빠져요. 이름·순서는 나중에 설정 › 바로가기에서 바꾸고, 잠금화면에서 바로가기를 길게 눌러도 돼요.",
+        "넣은 버튼을 누르면 빠지고, 길게 눌러 끌면 자리가 바뀌어요. 이름은 나중에 설정 › 바로가기에서 바꿔요.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    if (picking) {
+    if (pickAt >= 0) {
         ShortcutPickerDialog(
-            s.shortcuts.map { it.id }.toSet(),
-            onPick = { sc -> TaskStore.updateSettings { it.copy(shortcuts = (it.shortcuts.take(it.shortcutSlots()) + sc) + it.shortcuts.drop(it.shortcutSlots())) } },
-            onDismiss = { picking = false },
+            s.shortcuts.items().map { it.id }.toSet(),
+            onPick = { sc -> TaskStore.updateSettings { it.copy(shortcuts = it.shortcuts.withCell(pickAt, sc)) } },
+            onDismiss = { pickAt = -1 },
         )
     }
 }

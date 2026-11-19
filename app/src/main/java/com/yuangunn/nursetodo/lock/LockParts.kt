@@ -112,6 +112,23 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.yuangunn.nursetodo.R
@@ -120,6 +137,12 @@ import com.yuangunn.nursetodo.data.Day
 import com.yuangunn.nursetodo.data.Fmt
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.Shortcut
+import com.yuangunn.nursetodo.data.isEmpty
+import com.yuangunn.nursetodo.data.shortcutCells
+import com.yuangunn.nursetodo.data.reorderItems
+import com.yuangunn.nursetodo.data.addShortcut
+import com.yuangunn.nursetodo.data.withCell
+import com.yuangunn.nursetodo.data.items
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.shortcutSlots
 import java.time.Instant
@@ -583,9 +606,11 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val save = { list: List<Shortcut> -> TaskStore.updateSettings { it.copy(shortcuts = list) } }
     val slots = settings.shortcutSlots()
-    val list = settings.shortcuts
-    val full = list.size >= slots
-    PanelFrame("바로가기 편집", "길게 눌러 끌면 순서가 바뀌어요. 버튼 이름은 앱 › 설정 › 바로가기에서 바꿔요.", onClose, closeLabel = "완료") {
+    // 칸 목록(빈 칸 포함)과 그중 바로가기. 끌어 순서를 바꾸면 빈 칸 자리는 그대로 두고 바로가기 차례만 바뀜
+    val all = settings.shortcuts
+    val list = all.items()
+    val full = settings.shortcutCells().none { it == null }
+    PanelFrame("바로가기 편집", "길게 눌러 끌면 순서가 바뀌어요. 아래 바로가기를 길게 눌러 끌어도 자리를 바꿔요.", onClose, closeLabel = "완료") {
         Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("3개씩", "2개씩", "아이콘만").forEachIndexed { i, name ->
                 val on = settings.shortcutStyle == i
@@ -600,7 +625,7 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
                 ) { Text(name, style = Lk.Caption, fontWeight = if (on) Lk.Strong else null, color = Lk.Text) }
             }
         }
-        SectionLabel("보이는 바로가기 ${list.size.coerceAtMost(slots)}/$slots")
+        SectionLabel("보이는 바로가기 ${settings.shortcutCells().count { it != null }}/$slots")
         // 길게 눌러 끌기: 줄 높이(48)만큼 움직이면 이웃과 자리를 바꿉니다.
         var order by remember { mutableStateOf<List<Shortcut>?>(null) }
         var dragIndex by remember { mutableIntStateOf(-1) }
@@ -640,7 +665,7 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 },
                                 onDragEnd = {
-                                    order?.let(save)
+                                    order?.let { save(all.reorderItems(it)) }
                                     order = null
                                     dragIndex = -1
                                 },
@@ -658,16 +683,17 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
                 ) {
                     Icon(Icons.Default.Menu, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp))
                     Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { ShortcutIcon(sc, 20.dp) }
+                    // 칸이 적은 모양으로 바꾸면 뒤쪽 칸은 저장만 되고 안 보입니다.
+                    val hidden = all.indexOf(sc) >= slots
                     Text(
-                        // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
-                        if (i >= slots) "$name · 칸이 모자라 안 보여요" else name,
+                        if (hidden) "$name · 칸이 모자라 안 보여요" else name,
                         style = Lk.Body15,
-                        color = if (i >= slots) Lk.Muted else Lk.Text,
+                        color = if (hidden) Lk.Muted else Lk.Text,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    Press({ save(list - sc) }, Modifier.size(40.dp).semantics { contentDescription = "$name 빼기" }) {
+                    Press({ save(all.withCell(all.indexOf(sc), null)) }, Modifier.size(40.dp).semantics { contentDescription = "$name 빼기" }) {
                         Icon(Icons.Default.Close, contentDescription = null, tint = Lk.Text, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -692,7 +718,7 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
             ) {
                 Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { ShortcutIcon(sc, 20.dp) }
                 Text(name, style = Lk.Body15, color = if (full) Lk.Muted else Lk.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Press({ save(list + sc) }, Modifier.size(40.dp).semantics { contentDescription = "$name 넣기" }, enabled = !full) {
+                Press({ save(all.addShortcut(sc, slots)) }, Modifier.size(40.dp).semantics { contentDescription = "$name 넣기" }, enabled = !full) {
                     Icon(Icons.Default.Add, contentDescription = null, tint = if (full) Lk.Muted else Lk.Text, modifier = Modifier.size(20.dp))
                 }
             }
@@ -718,26 +744,26 @@ internal fun ShortcutPanel(settings: Settings, onClose: () -> Unit) {
 
 /**
  * 바로가기 넣기(빈 칸 '+'로 열림, 카드 자리): 넣을 수 있는 기본 버튼과 폰의 앱을 바로 보여 주고 누르면 넣고 닫습니다.
- * 넣은 것은 다음 빈 칸(아래 줄부터)에 들어갑니다.
+ * 넣은 것은 누른 '+' 칸([at])에 들어갑니다.
  */
 @Composable
-internal fun AddShortcutPanel(settings: Settings, onClose: () -> Unit) {
+internal fun AddShortcutPanel(settings: Settings, at: Int, onClose: () -> Unit) {
     val context = LocalContext.current
     val list = settings.shortcuts
-    val present = list.map { it.id }.toSet()
+    val present = list.items().map { it.id }.toSet()
     val apps = remember { Shortcuts.installedApps(context) }
     val choices = remember(present) {
         Shortcuts.builtIns(context).filter { it.id !in present }
             .map { it to Shortcuts.name(context, it) } + apps.filter { it.first.id !in present }
     }
-    // 칸이 적은 모양에서 뒤에 저장만 된 것이 있으면 보이는 칸 바로 뒤에 넣어 바로 보이게
     val slots = settings.shortcutSlots()
     PanelFrame("바로가기 넣기", "모바일 EMR·내선 전화처럼 자주 여는 앱을 넣어요. 빼거나 순서를 바꾸려면 바로가기를 길게 눌러요.", onClose) {
         choices.forEach { (sc, name) ->
             Press(
                 {
-                    val at = list.size.coerceAtMost(slots)
-                    TaskStore.updateSettings { it.copy(shortcuts = list.take(at) + sc + list.drop(at)) }
+                    // 누른 칸이 그새 찼으면 첫 빈 칸에
+                    val free = at in 0 until slots && list.getOrNull(at)?.isEmpty != false
+                    TaskStore.updateSettings { it.copy(shortcuts = if (free) list.withCell(at, sc) else list.addShortcut(sc, slots)) }
                     onClose()
                 },
                 Modifier
@@ -1132,38 +1158,26 @@ internal fun CloseWhenImeHides(onClose: () -> Unit) {
 }
 
 /**
- * 바로가기 칸 배치: 아래 줄부터 채우고(목록의 처음이 맨 아래 줄 왼쪽) 남는 칸은 null('+').
- * 한 줄 3칸·2칸은 [slots] 만큼 칸을 다 그리고, 아이콘만은 바로가기 뒤에 '+' 하나만(칸이 남을 때).
- */
-internal fun shortcutRows(items: List<Shortcut>, style: Int, slots: Int): List<List<Shortcut?>> {
-    val shown = items.take(slots)
-    val cells: List<Shortcut?> = if (style == 2) {
-        shown + if (shown.size < slots) listOf(null) else emptyList()
-    } else {
-        shown + List(slots - shown.size) { null }
-    }
-    val perRow = when (style) {
-        1 -> 2
-        2 -> 5
-        else -> 3
-    }
-    return cells.chunked(perRow).reversed()
-}
-
-/**
- * 아래 바로가기(높이 44): [style] 0 한 줄 3칸, 1 한 줄 2칸(아이콘 16 + 이름 13/18 600), 2 아이콘만(44 원, 사이 16, 가운데).
- * 아래 줄부터 채우고 빈 칸은 '+'([onAdd]: 바로 앱 고르기, 모바일 EMR·내선 전화처럼 자주 여는 앱을 잠금화면에서 넣음).
- * 길게 누르면 [onEdit](카드 자리에 편집 패널).
+ * 아래 바로가기 칸: 위 줄 왼쪽부터 읽는 차례(1 2 3 / 4 5 6), [cells] 의 i 번째가 i 번 칸이고 null 은 빈 칸('+', [onAdd] 로 그 칸에 바로 넣기).
+ * [style] 0 한 줄 3칸 · 1 한 줄 2칸은 높이 44 알약(아이콘 16 + 이름 13/18 600), 2 아이콘만은 한 줄 4개 × 2줄 지름 48 원 —
+ * 앱은 앱 아이콘을 원 크기 그대로(검은 바탕으로 감싸지 않음), 기본 버튼은 검은 원 안에 아이콘.
+ * 길게 눌러 끌면 놓은 칸과 자리를 바꾸고([onMove], 빈 칸이면 그리로 옮김), 움직이지 않고 떼면 [onEdit](카드 자리에 편집 패널).
  */
 @Composable
-internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: (Shortcut) -> Unit, onEdit: () -> Unit, onAdd: () -> Unit) {
+internal fun ShortcutGrid(
+    cells: List<Shortcut?>,
+    style: Int,
+    onTap: (Int, Shortcut) -> Unit,
+    onEdit: () -> Unit,
+    onAdd: (Int) -> Unit,
+    onMove: (Int, Int) -> Unit,
+) {
     val haptics = LocalHapticFeedback.current
-    val edit = {
-        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-        onEdit()
-    }
     val context = LocalContext.current
-    val rows = shortcutRows(items, style, slots)
+    val tap by rememberUpdatedState(onTap)
+    val edit by rememberUpdatedState(onEdit)
+    val add by rememberUpdatedState(onAdd)
+    val move by rememberUpdatedState(onMove)
     // 켜진 버튼: 손전등은 강조색(빠른 설정에서 켜고 꺼도 따라감), 녹음은 빨강 바탕에 ■ 와 걸린 시간
     val accent = LocalLockAccent.current
     val torchOn by Torch.on.collectAsState()
@@ -1187,35 +1201,120 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
             else -> null
         }
     }
-    val icon = @Composable { sc: Shortcut, size: Dp ->
+    val glyph = @Composable { sc: Shortcut, size: Dp ->
         if (recording(sc)) Icon(painterResource(R.drawable.ic_stop), contentDescription = null, tint = Lk.Text, modifier = Modifier.size(size))
         else ShortcutIcon(sc, size, ink(sc))
     }
-    val plus = @Composable { modifier: Modifier ->
-        // 빈 칸: 옅은 테두리 안 '+'만, 눌러서 바로 넣기
-        Press(
-            onAdd,
-            modifier.semantics { contentDescription = "바로가기 넣기" },
-            shape = if (style == 2) CircleShape else Pill,
-            color = Lk.Cover,
-            border = Lk.Edge,
-            onLongClick = edit,
-            onLongClickLabel = "바로가기 편집",
-        ) { Icon(Icons.Default.Add, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp)) }
+
+    // 끌기: 칸 자리(창 기준)를 끌기 전에 기억해 두고 손가락이 있는 칸을 찾음
+    val bounds = remember { mutableStateMapOf<Int, Rect>() }
+    var dragFrom by remember { mutableIntStateOf(-1) }
+    var dragAt by remember { mutableStateOf(Offset.Zero) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var pressed by remember { mutableIntStateOf(-1) }
+    val hit = { from: Int, p: Offset -> bounds.entries.firstOrNull { (k, r) -> k != from && r.contains(p) }?.key ?: -1 }
+    val target = if (dragFrom < 0) -1 else hit(dragFrom, dragAt + dragOffset)
+    LaunchedEffect(target) { if (target >= 0) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    val slop = LocalViewConfiguration.current.touchSlop
+
+    val gestures = { i: Int, sc: Shortcut? ->
+        Modifier.pointerInput(i, sc) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                pressed = i
+                val long = awaitLongPressOrCancellation(down.id)
+                pressed = -1
+                if (long == null) {
+                    // 길게 누르기 전에 뗌 = 누르기. 움직였으면(위로 밀어 잠금 해제 등) 아무것도 안 함
+                    val up = currentEvent.changes.firstOrNull { it.id == down.id }
+                    if (up != null && up.changedToUp() && !up.isConsumed && (up.position - down.position).getDistance() < slop) {
+                        up.consume()
+                        if (sc != null) tap(i, sc) else add(i)
+                    }
+                    return@awaitEachGesture
+                }
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                long.consume()
+                if (sc == null) {
+                    // 빈 칸은 끌 것이 없어 길게 누르면 편집
+                    waitForUpOrCancellation()
+                    edit()
+                    return@awaitEachGesture
+                }
+                dragFrom = i
+                dragAt = (bounds[i]?.topLeft ?: Offset.Zero) + long.position
+                dragOffset = Offset.Zero
+                var moved = false
+                val released = drag(long.id) { change ->
+                    dragOffset += change.positionChange()
+                    if (dragOffset.getDistance() > slop) moved = true
+                    change.consume()
+                }
+                val to = hit(i, dragAt + dragOffset)
+                dragFrom = -1
+                dragOffset = Offset.Zero
+                when {
+                    !released -> Unit
+                    !moved -> edit()
+                    to >= 0 -> move(i, to)
+                }
+            }
+        }
     }
+    val a11y = { i: Int, sc: Shortcut?, name: String ->
+        Modifier.semantics(mergeDescendants = true) {
+            role = Role.Button
+            contentDescription = if (sc == null) "바로가기 넣기" else name
+            if (sc != null) state(sc)?.let { stateDescription = it }
+            onClick { if (sc != null) tap(i, sc) else add(i); true }
+            customActions = listOf(CustomAccessibilityAction("바로가기 편집") { edit(); true })
+        }
+    }
+    // 칸 하나: 기억할 자리 · 끄는 동안 손가락을 따라감(조금 크게) · 놓을 칸은 강조색 테두리
+    val place = { i: Int ->
+        Modifier
+            .onGloballyPositioned { if (dragFrom < 0) bounds[i] = it.boundsInRoot() }
+            .zIndex(if (i == dragFrom) 1f else 0f)
+            .graphicsLayer {
+                val s = when (i) {
+                    dragFrom -> 1.08f
+                    pressed -> 0.96f
+                    else -> 1f
+                }
+                scaleX = s
+                scaleY = s
+                if (i == dragFrom) {
+                    translationX = dragOffset.x
+                    translationY = dragOffset.y
+                }
+            }
+    }
+    val edge = { i: Int -> if (i == target) BorderStroke(2.dp, accent) else Lk.Edge }
+
+    val perRow = listOf(3, 2, 4)[style.coerceIn(0, 2)]
     if (style == 2) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            rows.forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    row.forEach { sc ->
-                        if (sc == null) {
-                            plus(Modifier.size(44.dp))
-                        } else {
-                            val name = remember(sc) { Shortcuts.name(context, sc) }
-                            RoundButton(
-                                state(sc)?.let { "$name $it" } ?: name, { onTap(sc) }, onLongClick = edit,
-                                color = fill(sc),
-                            ) { icon(sc, 20.dp) }
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            cells.withIndex().chunked(perRow).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    row.forEach { (i, sc) ->
+                        val name = remember(sc) { sc?.let { Shortcuts.name(context, it) }.orEmpty() }
+                        val appIcon = remember(sc?.id) { sc?.let { Shortcuts.icon(context, it) } }
+                        Box(
+                            place(i)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .then(if (appIcon == null) Modifier.background(if (sc == null) Lk.Cover else fill(sc), CircleShape) else Modifier)
+                                .border(if (appIcon == null || i == target) edge(i) else BorderStroke(0.dp, Color.Transparent), CircleShape)
+                                .then(a11y(i, sc, name))
+                                .then(gestures(i, sc)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            when {
+                                sc == null -> Icon(Icons.Default.Add, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(20.dp))
+                                // 앱은 앱 아이콘을 원 크기 그대로
+                                appIcon != null -> Image(appIcon, contentDescription = null, modifier = Modifier.size(48.dp).clip(CircleShape))
+                                else -> glyph(sc, 22.dp)
+                            }
                         }
                     }
                 }
@@ -1223,31 +1322,29 @@ internal fun ShortcutGrid(items: List<Shortcut>, style: Int, slots: Int, onTap: 
         }
         return
     }
-    val perRow = if (style == 1) 2 else 3
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { row ->
+        cells.withIndex().chunked(perRow).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { sc ->
-                    if (sc == null) {
-                        plus(Modifier.weight(1f).height(44.dp))
-                        return@forEach
-                    }
-                    val name = remember(sc) { Shortcuts.name(context, sc) }
-                    Press(
-                        { onTap(sc) },
-                        Modifier
+                row.forEach { (i, sc) ->
+                    val name = remember(sc) { sc?.let { Shortcuts.name(context, it) }.orEmpty() }
+                    Box(
+                        place(i)
                             .weight(1f)
                             .height(44.dp)
-                            .semantics { state(sc)?.let { stateDescription = it } },
-                        shape = Pill,
-                        color = fill(sc),
-                        border = Lk.Edge,
-                        onLongClick = edit,
-                        onLongClickLabel = "바로가기 편집",
+                            .clip(Pill)
+                            .background(if (sc == null) Lk.Cover else fill(sc), Pill)
+                            .border(edge(i), Pill)
+                            .then(a11y(i, sc, name))
+                            .then(gestures(i, sc)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            icon(sc, 16.dp)
-                            Text(label(sc, name), style = Lk.Caption, fontWeight = Lk.Strong, color = ink(sc), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (sc == null) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = Lk.Muted, modifier = Modifier.size(18.dp))
+                        } else {
+                            Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                glyph(sc, 16.dp)
+                                Text(label(sc, name), style = Lk.Caption, fontWeight = Lk.Strong, color = ink(sc), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }

@@ -60,6 +60,26 @@ class ShiftTest {
     }
 
     @Test
+    fun staleStartsTheShiftAboutToBeginOnce() {
+        TaskStore.receive(presets[0], ms(at(7)), carry = false)
+        val s = { TaskStore.settings.value }
+        // 며칠 안 쓴 뒤 교대 한 시간 안(14:30)에 켜면 지금 Day 가 아니라 곧 시작하는 Evening 하나만 받음
+        val soon = s().dutyHead(at(14, 30, plusDays = 3))!!
+        assertEquals("Evening", soon.target.name)
+        assertEquals(ms(at(15, plusDays = 3)), soon.shift)
+        assertTrue(soon.stale != null)
+        TaskStore.receive(soon.target, soon.shift, carry = false)
+        assertTrue(s().dutyHead(at(14, 31, plusDays = 3))!!.received)
+        assertTrue(s().dutyHead(at(16, plusDays = 3))!!.received)
+        // 교대 직전이 아니면 지금 시각의 근무(10시 → Day)
+        TaskStore.receive(presets[0], ms(at(7)), carry = false)
+        assertEquals(DutyHead(presets[0], presets[0], ms(at(7, plusDays = 3)), received = false, stale = "Evening" to ms(at(23))), s().dutyHead(at(10, plusDays = 3)))
+        // 새벽(06:30)엔 거의 끝난 Night 대신 07:00 Day
+        TaskStore.receive(presets[2], ms(at(23)), carry = false)
+        assertEquals(ms(at(7, plusDays = 3)), s().dutyHead(at(6, 30, plusDays = 3))!!.shift)
+    }
+
+    @Test
     fun receivingCarriesOrDropsUnchecked() {
         evening()
         TaskStore.toggle(TaskStore.tasks.value.first { it.title == "15:00 인계" }.id)

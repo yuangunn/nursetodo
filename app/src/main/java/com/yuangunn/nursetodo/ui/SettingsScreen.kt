@@ -113,6 +113,12 @@ import com.yuangunn.nursetodo.data.Preset
 import com.yuangunn.nursetodo.data.Settings
 import com.yuangunn.nursetodo.data.PresetShare
 import com.yuangunn.nursetodo.data.Shortcut
+import com.yuangunn.nursetodo.data.isEmpty
+import com.yuangunn.nursetodo.data.reorderItems
+import com.yuangunn.nursetodo.data.addShortcut
+import com.yuangunn.nursetodo.data.withCell
+import com.yuangunn.nursetodo.data.items
+import com.yuangunn.nursetodo.data.shortcutCells
 import com.yuangunn.nursetodo.data.TaskStore
 import com.yuangunn.nursetodo.data.currentShift
 import com.yuangunn.nursetodo.data.isSubLine
@@ -209,7 +215,7 @@ fun SettingsScreen(home: Int = 0, recordings: Int = 0) {
             SettingsSub(p.title, onBack = { page = null }) {
                 when (p) {
                     SettingsPage.LOCK -> LockSettings(s) { sheet = it }
-                    SettingsPage.SHORTCUTS -> Group("보이는 바로가기", count = "${s.shortcuts.size}/${s.shortcutSlots()}", foot = "길게 눌러 끌면 순서가 바뀌고, 누르면 버튼 이름을 바꿔요(비우면 앱 이름).") {
+                    SettingsPage.SHORTCUTS -> Group("보이는 바로가기", count = "${s.shortcutCells().count { it != null }}/${s.shortcutSlots()}", foot = "위 줄 왼쪽부터의 차례예요. 길게 눌러 끌면 순서가 바뀌고, 누르면 버튼 이름을 바꿔요(비우면 앱 이름). 잠금화면에서 바로가기를 길게 눌러 끌면 원하는 칸으로 옮겨요.") {
                         ShortcutSettings(s) { sheet = "shape" }
                     }
                     SettingsPage.NOTI -> NotiSettings(s)
@@ -324,7 +330,7 @@ private fun SettingsHome(s: Settings, open: (SettingsPage) -> Unit, onSheet: (St
         Text("설정", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
         Group("잠금화면") {
             NavRow("잠금화면", lockSummary(s), icon = { icon(Icons.Outlined.Lock) }) { open(SettingsPage.LOCK) }
-            NavRow("바로가기", remember(s.shortcuts) { s.shortcuts.joinToString(" · ") { Shortcuts.name(context, it) }.ifEmpty { "없음" } }, icon = { icon(Icons.AutoMirrored.Outlined.List) }) {
+            NavRow("바로가기", remember(s.shortcuts) { s.shortcuts.items().joinToString(" · ") { Shortcuts.name(context, it) }.ifEmpty { "없음" } }, icon = { icon(Icons.AutoMirrored.Outlined.List) }) {
                 open(SettingsPage.SHORTCUTS)
             }
             if (notiAvailable) {
@@ -860,7 +866,10 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
     var dragIndex by remember { mutableStateOf(-1) }
     var dragY by remember { mutableFloatStateOf(0f) }
     val rowPx = with(LocalDensity.current) { 48.dp.toPx() }
-    val shown = order ?: s.shortcuts
+    // 칸 목록(빈 칸 포함)과 그중 바로가기. 끌어 순서를 바꾸면 빈 칸 자리는 그대로 두고 바로가기 차례만 바뀜
+    val all = s.shortcuts
+    val items = all.items()
+    val shown = order ?: items
     shown.forEachIndexed { i, sc ->
         // 줄을 바로가기 id 로 묶어, 끄는 중 자리가 바뀌어도 같은 줄(손가락 처리 포함)이 따라 움직이게 합니다.
         // 위치로만 그리면 자리가 바뀌는 순간 그 칸의 pointerInput 키가 달라져 끌기가 취소됩니다.
@@ -876,8 +885,8 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                order = s.shortcuts
-                                dragIndex = s.shortcuts.indexOf(sc)
+                                order = items
+                                dragIndex = items.indexOf(sc)
                                 dragY = 0f
                             },
                             onDrag = { change, amount ->
@@ -895,7 +904,7 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             },
                             onDragEnd = {
-                                order?.let(save)
+                                order?.let { save(all.reorderItems(it)) }
                                 order = null
                                 dragIndex = -1
                             },
@@ -905,21 +914,21 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
                             },
                         )
                     }
-                    .clickable { renaming = i },
+                    .clickable { renaming = all.indexOf(sc) },
             ) {
                 RemovableRow(
-                    // 칸이 적은 모양으로 바꾸면 뒤쪽은 저장만 되고 안 보입니다.
-                    if (i >= slots) "$name (칸이 모자라 안 보여요)" else name,
-                    onRemove = { save(s.shortcuts.filterIndexed { j, _ -> j != i }) },
+                    // 칸이 적은 모양으로 바꾸면 뒤쪽 칸은 저장만 되고 안 보입니다.
+                    if (all.indexOf(sc) >= slots) "$name (칸이 모자라 안 보여요)" else name,
+                    onRemove = { save(all.withCell(all.indexOf(sc), null)) },
                     leading = { ShortcutIcon(sc) },
                 )
             }
         }
     }
-    if (s.shortcuts.size < slots) AddRow("바로가기 추가") { picking = true } else SetRow("${slots}칸이 다 찼어요", "빼거나 모양을 바꾸면 더 넣을 수 있어요.")
+    if (s.shortcutCells().any { it == null }) AddRow("바로가기 추가") { picking = true } else SetRow("${slots}칸이 다 찼어요", "빼거나 모양을 바꾸면 더 넣을 수 있어요.")
 
     renaming?.let { i ->
-        val sc = s.shortcuts.getOrNull(i) ?: return@let
+        val sc = s.shortcuts.getOrNull(i)?.takeUnless { it.isEmpty } ?: return@let
         var text by remember(i) { mutableStateOf(sc.name) }
         AlertDialog(
             onDismissRequest = { renaming = null },
@@ -944,7 +953,7 @@ private fun ShortcutSettings(s: Settings, onShape: () -> Unit) {
     }
 
     if (picking) {
-        ShortcutPickerDialog(s.shortcuts.map { it.id }.toSet(), onPick = { sc -> save(s.shortcuts + sc) }, onDismiss = { picking = false })
+        ShortcutPickerDialog(s.shortcuts.items().map { it.id }.toSet(), onPick = { sc -> save(s.shortcuts.addShortcut(sc, slots)) }, onDismiss = { picking = false })
     }
 }
 
